@@ -1,0 +1,23 @@
+{
+ "about": "An invented morning of work: seconds from its start, then the app, the window title and the address as Windows shows them, before normalization; null for a window that is no context.",
+ "contexts": [
+  [0, "Code.exe", "● changelog.md - verdi - Visual Studio Code", null],
+  [300, "vivaldi.exe", "Banca Rossi - Conto - Vivaldi", "https://www.bancarossi.it/conto"],
+  [420, "OUTLOOK.EXE", "Posta in arrivo - Outlook", null],
+  [480, null, null, null],
+  [500, "vivaldi.exe", "Banca Rossi - Conto - Vivaldi", "https://www.bancarossi.it/conto"],
+  [620, "OUTLOOK.EXE", "Posta in arrivo - Outlook", null],
+  [2000, "Figma.exe", "Icone - Figma", null],
+  [2100, "Code.exe", "changelog.md - verdi - Visual Studio Code", null],
+  [2130, "Code.exe", "README.md - verdi - Visual Studio Code", null],
+  [2142, "Code.exe", "changelog.md - verdi - Visual Studio Code", null],
+  [2500, "vivaldi.exe", "Meteo - Vivaldi", "https://www.meteo.it"],
+  [2800, "Figma.exe", "Icone - Figma", null],
+  [4000, "vivaldi.exe", "Banca Rossi - Conto - Vivaldi", "https://www.bancarossi.it/conto"],
+  [4100, "Code.exe", "changelog.md - verdi - Visual Studio Code", null],
+  [4250, null, null, null],
+  [4300, "Code.exe", "changelog.md - verdi - Visual Studio Code", null],
+  [4500, "vivaldi.exe", "Offerte treni - Vivaldi", "https://www.trenitalia.com/offerte?da=Milano"],
+  [4700, "OUTLOOK.EXE", "Posta in arrivo - Outlook", null]
+ ]
+}

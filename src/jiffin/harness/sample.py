@@ -42,6 +42,7 @@ BUDGETS = (0.1, 0.13, 0.2)
 # The prototype's reminders are one sentence, "quando … ricordami di …": the condition is the
 # part before "ricordami", the "Quando" box of the app.
 _CONDITION = re.compile(r"^\s*((?:quando|se)\b.*?)[\s,]+ricordami\b", re.IGNORECASE | re.DOTALL)
+_ACTION = re.compile(r"\bricordami\s+(?:di\s+)?(.*)$", re.IGNORECASE | re.DOTALL)
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,6 +120,22 @@ def load(path: Path) -> Sample:
             for row in data["contexts"]
         ),
     )
+
+
+def reminders(path: Path) -> list[tuple[str, str]]:
+    """The sample's reminders as the app keeps them, in order of number: the "Quando" and the
+    "Ricordami di" box."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as error:
+        raise HarnessError(f"the sample cannot be read: {error.strerror}: pass --sample") from None
+    found = []
+    for reminder in sorted(data["reminders"], key=lambda reminder: reminder["n"]):
+        action = _ACTION.search(reminder["text"])
+        if action is None:
+            raise HarnessError("a reminder of the sample has nothing after 'ricordami'")
+        found.append((_condition(reminder["text"]), action.group(1).strip()))
+    return found
 
 
 def score(sample: Sample, model: Model) -> Scores:
