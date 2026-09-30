@@ -9,18 +9,22 @@ from pathlib import Path
 
 from jiffin.core.clock import SystemClock
 from jiffin.core.model import ModelError
-from jiffin.harness import day as days
+from jiffin.core.records import Revision
 from jiffin.harness import (
+    capture,
     engine,
+    fixtures,
     folders,
     labels,
     monitor,
     page,
+    replay,
     report,
     sample,
     snapshot,
     statements,
 )
+from jiffin.harness import day as days
 from jiffin.harness.errors import HarnessError
 
 log = logging.getLogger(__name__)
@@ -131,7 +135,50 @@ def parser() -> argparse.ArgumentParser:
     label.add_argument(
         "--no-browser", action="store_true", help="print the page's address without opening it"
     )
+    label.add_argument(
+        "--reminders",
+        type=_integers,
+        metavar="N[,N...]",
+        help="also the pairs of the invented reminders that replay --reminders adds",
+    )
     label.set_defaults(command=_label)
+
+    again = commands.add_parser(
+        "replay",
+        parents=[common, copy_options, day_options, engine_options],
+        help="the day again through core: at other thresholds, with more reminders, or judged "
+        "by this checkout's engine",
+    )
+    again.add_argument(
+        "--threshold",
+        type=_decimals,
+        metavar="T[,T...]",
+        help="thresholds to replay at, from the scores the log keeps: no engine",
+    )
+    again.add_argument(
+        "--engine", action="store_true", help="judge the day again with this checkout's engine"
+    )
+    again.add_argument(
+        "--reminders",
+        type=_integers,
+        metavar="N[,N...]",
+        help="active reminders to reach with invented ones, judged by the engine",
+    )
+    again.set_defaults(command=_replay)
+
+    convert = commands.add_parser(
+        "convert",
+        parents=[common, engine_options],
+        help="the prototype's capture of a day into a copy of the log, judged by the engine",
+    )
+    convert.add_argument("capture", type=Path, help="a contesti-<day>.jsonl of the prototype")
+    convert.add_argument(
+        "--sample",
+        type=Path,
+        default=folders.SAMPLE,
+        help="whose reminders the prototype judged (default: %(default)s)",
+    )
+    convert.set_defaults(command=_convert)
 
     measure_day = commands.add_parser(
         "report",
@@ -207,7 +254,10 @@ def _label(options: argparse.Namespace) -> None:
     copy = options.copy or snapshot.latest(data)
     day = days.select(snapshot.read(copy), options.day, SystemClock())
     path = labels.path_for(data, day.day)
-    labelled = labels.prepare(days.pairs(day), path, day.day)
+    pairs = days.pairs(day)
+    if options.reminders:
+        pairs |= _invented_pairs(day, max(options.reminders))
+    labelled = labels.prepare(pairs, path, day.day)
     log.info(
         "%d pairs in %s: Claude labelled %d, the owner %d",
         len(labelled.pairs),
@@ -230,7 +280,79 @@ def _report(options: argparse.Namespace) -> None:
     used = report.machine(monitor_path) if options.monitor or monitor_path.exists() else None
     print(report.markdown(days.summarize(day, final), labelled, used))
     source = f"Dalla copia {copy.name}"
-    log.info("the page is %s", report.page(day, final, clock, source, data))
+    path = data / f"report-{day.day.isoformat()}.html"
+    log.info("the page is %s", report.page(day, final, clock, source, path))
+
+
+def _replay(options: argparse.Namespace) -> None:
+    data = folders.data_folder(options.data)
+    copy = options.copy or snapshot.latest(data)
+    whole = snapshot.read(copy)
+    clock = SystemClock()
+    day = days.select(whole, options.day, clock)
+    labels_path = labels.path_for(data, day.day)
+    final = labels.load(labels_path).final() if labels_path.exists() else {}
+    rows: list[tuple[str, str, days.Day]] = [("as recorded", "", day)]
+    thresholds = options.threshold or ([] if options.engine or options.reminders else [None])
+    for threshold in thresholds:
+        at = day.evaluations[0].threshold if threshold is None else threshold
+        again = replay.Replay(whole, day, threshold=at)
+        rows.append((f"threshold {at:g}", f"threshold-{at:g}", again.run()))
+    if options.engine or options.reminders:
+        with engine.running(options.models) as model:
+            if options.engine:
+                again = replay.Replay(whole, day, model, rewrite=True)
+                rows.append(("this engine", "engine", again.run()))
+            real = days.summarize(day, {}).reminders
+            for level in options.reminders or []:
+                extra = fixtures.reminders(_extra(level, real))
+                again = replay.Replay(whole, day, model, rewrite=True, extra=extra)
+                rows.append((f"{level} reminders", f"reminders-{level}", again.run()))
+    print(report.replays([(name, replayed) for name, _, replayed in rows], final))
+    if not final:
+        log.info("no labels for %s yet: run label", day.day)
+    for name, slug, replayed in rows[1:]:
+        path = data / f"replay-{day.day.isoformat()}-{slug}.html"
+        report.page(replayed, final, clock, f"Rigiocata: {name}", path)
+    log.info("the pages are in %s", data)
+
+
+def _convert(options: argparse.Namespace) -> None:
+    data = folders.data_folder(options.data)
+    day = capture.read(options.capture)
+    first = SystemClock().local(day.observations[0].at)
+    copy = data / f"log-{first:%Y%m%d}-capture.db"
+    reminders = sample.reminders(options.sample)
+    with engine.running(options.models) as model:
+        capture.convert(day, reminders, model, copy)
+    converted = snapshot.read(copy)
+    contexts = {evaluation.context for evaluation in converted.evaluations}
+    log.info(
+        "%s: %d evaluations of %d contexts, %d alerts",
+        copy,
+        len(converted.evaluations),
+        len(contexts),
+        len(converted.alerts),
+    )
+
+
+def _invented_pairs(day: days.Day, level: int) -> dict[str, days.Pair]:
+    """The pairs the invented reminders that reach `level` would have in the day's contexts."""
+    real = days.summarize(day, {}).reminders
+    contexts = dict.fromkeys(e.context for e in day.evaluations if not e.failed)
+    pairs = {}
+    for number, (condition, action) in enumerate(fixtures.reminders(_extra(level, real)), 1):
+        revision = Revision(-number, -number, 1, condition, action)
+        for context in contexts:
+            pair = days.Pair(context, revision)
+            pairs[pair.key] = pair
+    return pairs
+
+
+def _extra(level: int, real: int) -> int:
+    if level < real:
+        raise HarnessError(f"the day has {real} reminders already, more than {level}")
+    return level - real
 
 
 def _latest_labels(folder: Path) -> Path:
@@ -238,6 +360,20 @@ def _latest_labels(folder: Path) -> Path:
     if not found:
         raise HarnessError(f"there are no labels in {folder}: run label first")
     return found[-1]
+
+
+def _integers(text: str) -> list[int]:
+    try:
+        return [int(part) for part in text.split(",")]
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not whole numbers: {text}") from None
+
+
+def _decimals(text: str) -> list[float]:
+    try:
+        return [float(part) for part in text.split(",")]
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not numbers: {text}") from None
 
 
 if __name__ == "__main__":

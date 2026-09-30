@@ -5,7 +5,7 @@ the data folder.
 """
 
 import csv
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -113,9 +113,41 @@ def markdown(summary: days.Summary, labels: Labels | None, used: Machine | None)
     return "\n".join(lines)
 
 
-def page(
-    day: days.Day, labels: Mapping[str, bool], clock: Clock, source: str, folder: Path
-) -> Path:
+def replays(rows: Sequence[tuple[str, days.Day]], labels: Mapping[str, bool]) -> str:
+    """One line per replay of a day, numbers only, with the day as recorded first."""
+    lines = [
+        f"## Replays of {rows[0][1].day.isoformat()}",
+        "",
+        (
+            "| Replay | reminders | threshold | evaluations | failed | alerts shown "
+            "| false alarms | missed reminders | alerts not labelled | delay p95 |"
+        ),
+        "|---|---|---|---|---|---|---|---|---|---|",
+    ]
+    for name, day in rows:
+        summary = days.summarize(day, labels)
+        thresholds = sorted({evaluation.threshold for evaluation in day.evaluations})
+        missed = sum(summary.missed.values())
+        p95 = days.delay(summary, 95)
+        cells = [
+            name,
+            str(summary.reminders),
+            ", ".join(f"{threshold:g}" for threshold in thresholds),
+            str(summary.evaluations),
+            str(summary.failed),
+            str(summary.shown),
+            str(summary.false_alarms) if labels else "no labels",
+            f"{missed / summary.relevant:.0%} ({missed} of {summary.relevant})"
+            if labels and summary.relevant
+            else "no labels",
+            str(summary.unlabelled_alerts),
+            "" if p95 is None else f"{p95:.1f} s",
+        ]
+        lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines)
+
+
+def page(day: days.Day, labels: Mapping[str, bool], clock: Clock, source: str, path: Path) -> Path:
     evaluations = {evaluation.id: evaluation for evaluation in day.evaluations}
     alerts = [
         {
@@ -145,7 +177,6 @@ def page(
         }
         for pair in days.missed(day, labels)
     ]
-    path = folder / f"report-{day.day.isoformat()}.html"
     return render.page(
         "report.html", path, day=day.day.isoformat(), source=source, alerts=alerts, missed=missed
     )

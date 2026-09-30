@@ -63,10 +63,16 @@ class Reminders:
         clock: Clock,
         on_alerts: Callable[[AlertsView], None],
         saved: Snapshot | None = None,
+        *,
+        threshold: float = THRESHOLD,
     ) -> None:
-        """Start from what `store` saved, or from nothing."""
+        """Start from what `store` saved, or from nothing.
+
+        Only the harness judges at another threshold, to choose the next one (ADR-0013).
+        """
         saved = saved or Snapshot()
         self._model = model
+        self._threshold = threshold
         self._clock = clock
         self._on_alerts = on_alerts
         self._debounce = Debounce()
@@ -240,13 +246,22 @@ class Reminders:
             now = self._clock.now()
             self._records.append(
                 Evaluation(
-                    evaluation_id, now, context, context_since, THRESHOLD, None, (), failed=True
+                    evaluation_id,
+                    now,
+                    context,
+                    context_since,
+                    self._threshold,
+                    None,
+                    (),
+                    failed=True,
                 )
             )
             return
         now = self._clock.now()
         self._records.append(
-            Evaluation(evaluation_id, now, context, context_since, THRESHOLD, build, candidates)
+            Evaluation(
+                evaluation_id, now, context, context_since, self._threshold, build, candidates
+            )
         )
         for reminder, candidate in zip(judged, candidates, strict=True):
             if reminder.snoozed_until is not None and reminder.snoozed_until <= now:
@@ -296,7 +311,7 @@ class Reminders:
         return scores, set(missing)
 
     def _outcome(self, reminder: Reminder, context: Context, d: float, now: int) -> Outcome:
-        if d < THRESHOLD:
+        if d < self._threshold:
             return Outcome.BELOW_THRESHOLD
         if (reminder.id, context) in self._silences:
             return Outcome.SILENCED

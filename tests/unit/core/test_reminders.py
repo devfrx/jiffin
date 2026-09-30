@@ -268,6 +268,19 @@ def test_the_threshold_is_reached_from_its_value_up() -> None:
     assert scene.outcomes() == [Outcome.ALERT, Outcome.BELOW_THRESHOLD]
 
 
+def test_the_harness_may_judge_at_another_threshold() -> None:
+    model, clock = FakeModel(), SimulatedClock(START)
+    reminders = Reminders(model, clock, lambda view: None, threshold=0.5)
+    reminders.create("quando apro Figma", "esportare le icone")
+    model.says(FIGMA, "quando apro Figma", 0.6)
+    reminders.observe(Observation(clock.now(), FIGMA))
+    clock.advance(DEBOUNCE_MS)
+    reminders.poll()
+    [evaluation] = [r for r in reminders.take_records() if isinstance(r, Evaluation)]
+    assert evaluation.threshold == 0.5
+    assert [candidate.outcome for candidate in evaluation.candidates] == [Outcome.ALERT]
+
+
 def test_pairs_already_judged_come_from_the_cache() -> None:
     scene = Scene()
     scene.create("quando apro Figma")

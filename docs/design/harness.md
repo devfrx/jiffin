@@ -62,6 +62,7 @@ use:
 ```mermaid
 flowchart LR
     S[snapshot] --> C[(log-time.db)]
+    X[the prototype's capture] -->|convert| C
     C --> T[statements: a page]
     C --> L[label: labels-day.json]
     L -->|Claude labels every pair| L
@@ -69,7 +70,10 @@ flowchart LR
     C --> R[report: numbers, and a page]
     L --> R
     M[monitor-day.csv] --> R
+    C --> P[replay: other thresholds, more reminders, another engine]
+    L --> P
     R --> F[forget: the copies go]
+    P --> F
 ```
 
 - **`snapshot`** copies the database through SQLite's backup API from a
@@ -121,6 +125,73 @@ The summary, numbers only, compares the day with the thresholds of
 
 The CPU the browsers spend on accessibility cannot be told apart in the
 monitor's rows: the benchmark in [context.md](context.md) measures it.
+
+### `replay`
+
+A day of a copy goes through `core` again, on simulated time, with one thing
+changed; each replay is a line of the summary under the day as recorded, and a
+page `replay-<day>-<what>.html`.
+
+| Option | What changes | The engine |
+|---|---|---|
+| `--threshold 0.9,1.2` | the threshold | none: the scores the log keeps |
+| `--engine` | the scores and the statements, from this checkout's engine | the app's, started as `sample` starts it |
+| `--reminders 20,40,80` | invented reminders from `tests/fixtures/reminders.json`, from the start of the day, up to each number of active reminders | the same |
+
+With none of them, the day is replayed at its own threshold: the line must
+match the day as recorded, and a test checks that it does, alert by alert.
+
+```mermaid
+sequenceDiagram
+    participant L as the copy of the log
+    participant T as the replay's timeline
+    participant C as core, on simulated time
+    participant O as the owner, as recorded
+
+    L->>C: the state when the day began: reminders, silences, last alerts
+    L->>T: each evaluated context, when it came to the foreground
+    L->>T: reminders created, edited and completed, when they were
+    loop in order of time
+        T->>C: the next command, or poll at the next deadline
+        C-->>T: evaluations and alerts
+        T->>O: an alert on screen
+        O-->>T: the answer the log has for it, after as long; or none, and it vanishes after 10 s
+    end
+```
+
+- **The contexts**: every evaluation gives back its context at the time it
+  came to the foreground. A context evaluated twice in a row was left in
+  between, so a moment with no context separates the two; a context judged
+  again while it stayed (a snooze that ended) comes back once.
+- **The scores**: without an engine, d comes from the log by context and
+  statement, and an evaluation the log recorded as failed fails again. A pair
+  the day never judged has no score, so its evaluation fails, as with the
+  engine down: the summary counts them.
+- **The owner**: an alert the log also had, by reminder, context and time, gets
+  the same answer after as long on screen; any other alert goes unanswered. A
+  snooze's length is not in the log: it is the one of 15 minutes, an hour or
+  "domani" whose end falls between the reminder's last judgement as snoozed and
+  its first as free.
+- **The reminders**: those created before the day start as they were; the
+  others are created, edited and completed when the log says, an edit when the
+  context of the new text's first evaluation came to the foreground.
+- **Labels**: the day's labels serve every replay, since they are keyed by
+  texts. The invented reminders need theirs: `label --reminders 80` adds their
+  pairs with the day's contexts to the file for Claude.
+
+### `convert`
+
+The prototype's capture of a day, `contesti-<day>.jsonl`, becomes a copy of the
+log, `log-<day>-capture.db`: its contexts under the app's rules (a window that
+may be private is no context, typing in the bar gives no address, an address
+counts only in the browsers), through `core` with the reminders of the sample,
+judged by the engine, with nobody answering.
+
+The captured day of 2026-09-28 gives 116 evaluations of 36 contexts, converted
+and replayed alike. Ticket [#11](https://github.com/devfrx/jiffin/issues/11)
+counted 37: the 37th was a Vivaldi window whose privacy the capture could not
+tell, which the app ignores since
+[#41](https://github.com/devfrx/jiffin/issues/41).
 
 ## `monitor`
 

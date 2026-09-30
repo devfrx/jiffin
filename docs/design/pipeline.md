@@ -42,7 +42,7 @@ reminder alone.
 Checked in this order; the first that applies is recorded with the evaluation:
 
 1. **below threshold**: d < `THRESHOLD` (0.97, a constant tied to the engine's
-   model and prompts);
+   model and prompts; only the harness replays a day at another);
 2. **silenced**: "Non qui" was answered in this exact context;
 3. **snoozed**: its snooze has not ended;
 4. **held back**: it alerted less than an hour ago, and no snooze has ended
