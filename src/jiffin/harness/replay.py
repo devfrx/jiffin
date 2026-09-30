@@ -229,7 +229,9 @@ class Replay:
         self._seen = observations(day.evaluations)
         self._begin = self._seen[0].at - 1
         self._until = max(evaluation.at for evaluation in day.evaluations)
-        self._clock = SimulatedClock(self._begin, SystemClock().local(self._begin).tzinfo or UTC)
+        self._zone = SystemClock().local(self._begin).tzinfo or UTC
+        self._calendar = SimulatedClock(self._begin, self._zone)
+        """For local days and hours only: it never moves."""
         self._ids: dict[int, int] = {}
         """The replay's ids of the reminders the day created, by the log's ids."""
         self._recorded = {
@@ -241,10 +243,13 @@ class Replay:
         alert twice in one stable context, before and after a snooze."""
 
     def run(self) -> Day:
+        """The day replayed; each run starts over."""
+        self._ids = {}
+        clock = SimulatedClock(self._begin, self._zone)
         start = self._start()
-        model = self._model or Recorded(self._log, self._day, self._clock)
-        core = Reminders(model, self._clock, lambda view: None, start, threshold=self._threshold)
-        timeline = Timeline(core, self._clock, self._answer if self._answers else passive)
+        model = self._model or Recorded(self._log, self._day, clock)
+        core = Reminders(model, clock, lambda view: None, start, threshold=self._threshold)
+        timeline = Timeline(core, clock, self._answer if self._answers else passive)
         for condition, action in self._extra:
             timeline.at(self._begin, new_reminder(condition, action))
         for when, command in self._commands():
@@ -401,12 +406,12 @@ class Replay:
             (at for at, outcome in judged if outcome is not Outcome.SNOOZED and at > low),
             default=math.inf,
         )
-        local = self._clock.local(answered)
+        local = self._calendar.local(answered)
         day = local.date() + timedelta(days=int(local.time() >= DAY_STARTS_AT))
         ends = (
             (Snooze.QUARTER_HOUR, answered + 15 * MINUTE_MS),
             (Snooze.HOUR, answered + HOUR_MS),
-            (Snooze.TOMORROW, self._clock.instant(day, TOMORROW_AT)),
+            (Snooze.TOMORROW, self._calendar.instant(day, TOMORROW_AT)),
         )
         return next((kind for kind, end in ends if low < end <= high), Snooze.HOUR)
 

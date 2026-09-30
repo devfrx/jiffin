@@ -286,3 +286,9 @@ def test_label_adds_the_pairs_of_the_invented_reminders(data: Path) -> None:
     conditions = {pair["condition"] for pair in labelled.pairs}
     assert {condition for condition, _ in fixtures.reminders(2)} <= conditions
     assert fixtures.reminders(3)[2][0] not in conditions  # 4 of the day and 2 invented make 6
+
+
+def test_a_replay_runs_again_from_the_start(recorded: tuple[Log, days.Day]) -> None:
+    log, day = recorded
+    again = replay.Replay(log, day)
+    assert signature(again.run()) == signature(again.run())
