@@ -1,5 +1,6 @@
 """The engine process: JSON-RPC 2.0 on stdio, one request at a time, in order (ADR-0011)."""
 
+import io
 import logging
 import os
 import sys
@@ -175,6 +176,12 @@ def take_stdout() -> IO[bytes]:
 
 def main() -> None:
     """Serve the app on stdin and stdout until stdin closes."""
+    # The app reads stderr as UTF-8, prints included (ADR-0011): on a pipe Python would use the
+    # code page. This comes first: once descriptor 1 has moved, a stream that was seekable
+    # asks the new one for its position, and a pipe cannot say.
+    for stream in (sys.stdout, sys.stderr):
+        if isinstance(stream, io.TextIOWrapper):
+            stream.reconfigure(encoding="utf-8", errors="backslashreplace")
     responses = take_stdout()
     logging.basicConfig(
         stream=sys.stderr, level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"

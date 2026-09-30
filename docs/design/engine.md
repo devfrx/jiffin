@@ -7,7 +7,9 @@ how it rewrites a condition ([ADR-0006](../adr/0006-judge-rizzo-flow-q4.md),
 `engine/`: `server.py` speaks the protocol, `prompts.py` writes the prompts,
 `backend_llama.py` scores and generates, and `llama_cpp.py` binds llama.cpp.
 The last three derive from Rizzo Flow at commit `b9ba007e`
-([NOTICE](../../NOTICE)).
+([NOTICE](../../NOTICE)). The app's side is `client/`: `supervisor.py` is the
+model port and the restarts, `process.py` one engine process with its pipes,
+and `job.py` its Job Object.
 
 ## The process
 
@@ -17,7 +19,7 @@ sequenceDiagram
     participant E as engine process
     participant L as llama.cpp on the GPU
 
-    A->>E: start it, with stdin, stdout and stderr piped
+    A->>E: start it in a Job Object, with stdin, stdout and stderr piped
     Note over E: keeps the real stdout for the protocol and points descriptor 1 at stderr
     A->>E: initialize(protocol, model path, settings)
     E->>L: load the model with direct I/O, create one context
@@ -51,6 +53,50 @@ What each failure answers, besides the protocol's own errors:
 | llama.cpp logged "out of memory" while loading | −32004 GPU out of memory |
 | a question longer than the context per question; a rewrite prompt that leaves no room for 64 tokens; a statement that does not end within 64 tokens | −32005 text too long |
 | anything else | −32603 internal error, with the exception in the detail |
+
+## Supervision
+
+What the app does when the engine fails. The worker thread owns the
+supervisor, and the tray shows its state.
+
+```mermaid
+stateDiagram-v2
+    state failed <<choice>>
+    [*] --> Off
+    Off --> Starting : start
+    Starting --> Ready : initialize answers
+    Starting --> Stopped : initialize refuses the model, the GPU memory or the protocol
+    Starting --> failed : it fails
+    Ready --> failed : it fails
+    failed --> Restarting : first, second or third failure within an hour
+    failed --> Stopped : fourth failure within an hour
+    Restarting --> Starting : 1 s, 10 s or 60 s later
+    Stopped --> Starting : start, from Riprova
+```
+
+- **It fails** when its process exits, its output ends or cannot be read, a
+  request gets no answer in time (`initialize` 120 s, `judge` 15 s, `rewrite`
+  30 s), or it cannot be started at all. The supervisor kills it, the pending
+  call fails, and its last 50 lines of stderr go to the app log.
+- **An error answer is not a failure**: that call fails, and the engine goes
+  on. At `initialize` the model, the GPU memory and the protocol version stop
+  the engine, since starting it again cannot mend them; any other error counts
+  as a failure.
+- **While it is down**, calls fail at once, and `build` still gives the last
+  engine's build, so cached scores keep working.
+- **Time:** the restart waits on the app's clock. The worker calls `poll` at
+  the supervisor's deadline, and when the stdout thread reports that the
+  output ended while the engine was idle.
+- **The Job Object** kills the engine when the app closes it, or when the app
+  dies. A process joins a job only if its parent was in the job when it was
+  created, and in a checkout uv's `python.exe` is a launcher that starts the
+  real interpreter as its child: so the engine is created suspended, put in
+  its job, and only then resumed.
+- **Closing**, from any state, leads back to Off: it sends `shutdown`, then
+  closes stdin, and an engine that does not answer, or does not exit, within
+  10 s is killed.
+- **Stderr** is UTF-8, whatever the code page. It holds no titles, addresses or
+  reminder texts: the engine's messages name files, sizes and ids.
 
 ## One `judge`
 
