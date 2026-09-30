@@ -1,0 +1,63 @@
+# Local hooks run through uv, so every tool version comes from uv.lock (ADR-0016).
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run --locked ruff check --fix --force-exclude
+        language: unsupported
+        types_or: [python, pyi]
+        require_serial: true
+      - id: ruff-format
+        name: ruff format
+        entry: uv run --locked ruff format --force-exclude
+        language: unsupported
+        types_or: [python, pyi]
+        require_serial: true
+      - id: mypy
+        name: mypy
+        entry: uv run --locked mypy
+        language: unsupported
+        types_or: [python, pyi, toml]
+        pass_filenames: false
+      - id: lint-imports
+        name: import-linter
+        entry: uv run --locked lint-imports
+        language: unsupported
+        types_or: [python, pyi, toml]
+        pass_filenames: false
+      # Writes .qmltypes and qmldir for the types registered from Python, which qmllint reads.
+      # Its input is the [tool.pyside6-project] table of pyproject.toml.
+      - id: pyside6-project-build
+        name: pyside6-project build
+        entry: uv run --locked pyside6-project build
+        language: unsupported
+        files: \.qml$
+        pass_filenames: false
+      # Never `pyside6-project qmllint`: it ignores errors and always exits with 0.
+      - id: qmllint
+        name: qmllint
+        entry: uv run --locked pyside6-qmllint --max-warnings 0
+        language: unsupported
+        files: \.qml$
+      # qmlformat has no check mode: pre-commit fails when it rewrites a file.
+      - id: qmlformat
+        name: qmlformat
+        entry: uv run --locked pyside6-qmlformat -i
+        language: unsupported
+        files: \.qml$
+      - id: uv-lock
+        name: uv lock --check
+        entry: uv lock --check
+        language: unsupported
+        files: ^(pyproject\.toml|uv\.lock)$
+        pass_filenames: false

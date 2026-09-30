@@ -1,0 +1,149 @@
+[project]
+name = "jiffin"
+version = "0.1.0"
+description = "Contextual reminders for Windows 11, judged by a local language model"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.13"
+dependencies = [
+    "pydantic>=2.13.5",
+    "pyside6-essentials>=6.11.2",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.21,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "coverage>=7.16.2",
+    "import-linter>=2.15",
+    "mypy>=2.3.1",
+    "pre-commit>=4.6.2",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "pytest-qt>=4.5.0",
+    # Pinned exactly: Ruff's minor releases are the ones that may break (ADR-0016).
+    "ruff==0.16.9",
+]
+harness = [
+    "psutil>=7.2.2",
+]
+
+[tool.uv]
+# uv's builds ship a SQLite without the WAL-reset bug; the python.org ones do not (ADR-0013).
+python-preference = "only-managed"
+# The harness is checked by the same hooks as the app, so its group is always installed.
+default-groups = ["dev", "harness"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.mypy]
+strict = true
+plugins = ["pydantic.mypy"]
+files = ["src", "tests"]
+
+[tool.pytest]
+strict = true
+testpaths = ["tests"]
+addopts = ["--import-mode=importlib", "-m", "not integration"]
+markers = ["integration: needs the real model and the GPU; run with `uv run pytest -m integration`"]
+qt_api = "pyside6"
+
+[tool.coverage.run]
+source_pkgs = ["jiffin"]
+# Measures the engine child process; pytest-cov 7 no longer does it on its own.
+patch = ["subprocess"]
+
+# The boundaries of ADR-0012 and ADR-0017; a new rule there becomes a contract here.
+[tool.importlinter]
+root_package = "jiffin"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Only ui and app import PySide6"
+type = "forbidden"
+source_modules = [
+    "jiffin.core",
+    "jiffin.protocol",
+    "jiffin.engine",
+    "jiffin.client",
+    "jiffin.platform",
+    "jiffin.store",
+    "jiffin.harness",
+]
+forbidden_modules = ["PySide6"]
+
+[[tool.importlinter.contracts]]
+name = "core imports nothing else from jiffin"
+type = "forbidden"
+source_modules = ["jiffin.core"]
+forbidden_modules = [
+    "jiffin.protocol",
+    "jiffin.engine",
+    "jiffin.client",
+    "jiffin.platform",
+    "jiffin.store",
+    "jiffin.ui",
+    "jiffin.app",
+    "jiffin.harness",
+]
+
+[[tool.importlinter.contracts]]
+name = "protocol imports nothing else from jiffin"
+type = "forbidden"
+source_modules = ["jiffin.protocol"]
+forbidden_modules = [
+    "jiffin.core",
+    "jiffin.engine",
+    "jiffin.client",
+    "jiffin.platform",
+    "jiffin.store",
+    "jiffin.ui",
+    "jiffin.app",
+    "jiffin.harness",
+]
+
+[[tool.importlinter.contracts]]
+name = "engine imports only protocol from jiffin"
+type = "forbidden"
+source_modules = ["jiffin.engine"]
+forbidden_modules = [
+    "jiffin.core",
+    "jiffin.client",
+    "jiffin.platform",
+    "jiffin.store",
+    "jiffin.ui",
+    "jiffin.app",
+    "jiffin.harness",
+]
+
+[[tool.importlinter.contracts]]
+name = "Nothing imports engine"
+type = "protected"
+protected_modules = ["jiffin.engine"]
+allowed_importers = []
+
+[[tool.importlinter.contracts]]
+name = "ui imports none of engine, client, platform and store"
+type = "forbidden"
+source_modules = ["jiffin.ui"]
+forbidden_modules = ["jiffin.engine", "jiffin.client", "jiffin.platform", "jiffin.store"]
+
+[[tool.importlinter.contracts]]
+name = "The adapters do not import each other"
+type = "independence"
+modules = ["jiffin.client", "jiffin.platform", "jiffin.store"]
+
+[[tool.importlinter.contracts]]
+name = "harness imports neither ui nor platform"
+type = "forbidden"
+source_modules = ["jiffin.harness"]
+forbidden_modules = ["jiffin.ui", "jiffin.platform"]
+
+[[tool.importlinter.contracts]]
+name = "Nothing imports harness"
+type = "protected"
+protected_modules = ["jiffin.harness"]
+allowed_importers = []

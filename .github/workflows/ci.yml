@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          # Pinned like everything else: upgrades are deliberate (ADR-0016).
+          version: "0.12.21"
+      - run: uv sync --locked
+      - run: uv run pre-commit run --all-files --show-diff-on-failure
+      - run: uv run pytest --cov --cov-report=term-missing
+      # The floor covers only the pure logic; the rest is measured, not gated.
+      - run: uv run coverage report --include="src/jiffin/core/*,src/jiffin/protocol/*" --fail-under=90
