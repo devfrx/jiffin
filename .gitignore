@@ -18,6 +18,9 @@ wheels/
 htmlcov/
 coverage.xml
 
+# The llama.cpp runtime, fetched by scripts/fetch_llama_cpp.py (ADR-0011)
+/runtimes/
+
 # Personal data and models never enter the repository (ADR-0017)
 *.db
 *.db-shm

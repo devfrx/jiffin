@@ -25,6 +25,7 @@ uv sync                               # Python 3.13 and all dependencies
 uv run pre-commit install             # run the quality gates on every commit
 uv run pre-commit run --all-files     # run them on the whole repository
 uv run pytest                         # unit tests
+uv run scripts/fetch_llama_cpp.py     # llama.cpp for the engine, about 575 MB, once
 uv run pytest -m integration          # tests that need the model and the GPU
 ```
 
