@@ -279,6 +279,30 @@ def test_whatever_else_prints_goes_to_stderr_not_to_the_protocol() -> None:
     assert {b"from print", b"from the C runtime", b"from Win32"} <= set(stray)
 
 
+LOUD_ENGINE = """
+import logging
+
+from jiffin.engine import server
+
+class Loud(server.Engine):
+    def __init__(self) -> None:
+        super().__init__()
+        logging.getLogger("jiffin.engine").warning("il modello di Niccolò")
+        print("una stampa: è così", flush=True)
+
+server.Engine = Loud
+server.main()
+"""
+
+
+def test_the_engine_writes_its_stderr_in_utf8_whatever_the_code_page() -> None:
+    finished = subprocess.run(
+        [sys.executable, "-c", LOUD_ENGINE], input=b"", capture_output=True, check=True, timeout=60
+    )
+    assert "il modello di Niccolò".encode() in finished.stderr
+    assert "una stampa: è così".encode() in finished.stderr
+
+
 def next_line(stream: io.BytesIO | IO[bytes]) -> bytes:
     line = read_line(stream)
     assert line is not None
