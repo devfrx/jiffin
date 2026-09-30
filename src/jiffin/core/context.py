@@ -3,7 +3,8 @@
 import re
 from dataclasses import dataclass
 
-_BROWSER_SUFFIXES = (" - Vivaldi", " - Google Chrome", " - Brave")
+BROWSER_SUFFIXES = {"vivaldi": " - Vivaldi", "chrome": " - Google Chrome", "brave": " - Brave"}
+"""The suffix each supported browser adds to the titles of its tab windows, by app."""
 _COUNTER = re.compile(r"^\(\d+\+?\) ")
 _MARKER_AT_START = re.compile(r"^[●*]\s*")
 _MARKER_AT_END = re.compile(r"\s*[●*]$")
@@ -45,7 +46,7 @@ def _app(app: str) -> str:
 
 def _title(title: str) -> str:
     title = title.strip()
-    for suffix in _BROWSER_SUFFIXES:
+    for suffix in BROWSER_SUFFIXES.values():
         title = title.removesuffix(suffix)
     title = _COUNTER.sub("", title)
     title = _MARKER_AT_START.sub("", title)
