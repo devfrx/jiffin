@@ -1,4 +1,5 @@
 from collections.abc import Mapping
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta, timezone, tzinfo
 
 import pytest
@@ -13,12 +14,15 @@ from jiffin.core.records import (
     Answer,
     CacheEntry,
     Evaluation,
+    LastIds,
     Outcome,
     Record,
     Reminder,
     ReminderDeleted,
+    Revision,
     Silence,
     SilencesCleared,
+    Snapshot,
 )
 from jiffin.core.reminders import HOUR_MS, MINUTE_MS, THRESHOLD, Reminders, Snooze
 
@@ -66,12 +70,16 @@ class Scene:
     """One `Reminders` with the clock, the model and the interface around it."""
 
     def __init__(
-        self, model: FakeModel | None = None, start: int = START, zone: tzinfo = UTC
+        self,
+        model: FakeModel | None = None,
+        start: int = START,
+        zone: tzinfo = UTC,
+        saved: Snapshot | None = None,
     ) -> None:
         self.model = model or FakeModel()
         self.clock = SimulatedClock(start, zone)
         self.views: list[AlertsView] = []
-        self.reminders = Reminders(self.model, self.clock, self.views.append)
+        self.reminders = Reminders(self.model, self.clock, self.views.append, saved)
         self.records: list[Record] = []
 
     def create(self, condition: str, action: str = "esportare le icone") -> Reminder:
@@ -187,6 +195,38 @@ def test_commands_about_what_is_gone_do_nothing() -> None:
     scene.reminders.delete(reminder.id)
     assert scene.reminders.take_records() == []
     assert scene.reminders.deadline is None
+
+
+def test_reminders_go_on_from_what_was_saved() -> None:
+    revision = Revision(
+        7, 3, 1, "quando apro Figma", "esportare le icone", english("quando apro Figma"), BUILD
+    )
+    unseen = Alert(5, 3, revision, 4, FIGMA, 4.0, START, START, START + 10_000)
+    saved = Snapshot(
+        reminders=(Reminder(3, START, revision),),
+        silences=(Silence(3, BANK),),
+        cache=(CacheEntry(FIGMA, 7, BUILD, 4.0, START),),
+        last_alerts=((3, START),),
+        unseen=(unseen,),
+        last_ids=LastIds(reminder=3, revision=7, evaluation=4, alert=5),
+    )
+    scene = Scene(saved=saved)
+    scene.wait(0)
+    assert scene.view.unseen == (unseen,)
+    scene.stay(FIGMA)
+    assert (scene.model.calls, scene.outcomes()) == ([], [Outcome.HELD_BACK])
+    assert scene.saved(Evaluation)[-1].id == 5
+    scene.model.says(BANK, "quando apro Figma")
+    scene.stay(BANK, HOUR_MS)
+    assert scene.outcomes() == [Outcome.SILENCED]
+    created = scene.create("se sono sul sito della banca")
+    assert (created.id, created.revision.id) == (4, 8)
+
+
+def test_a_saved_snooze_still_ends_on_time() -> None:
+    snoozed = replace(Scene().create("quando apro Figma"), snoozed_until=START + HOUR_MS)
+    scene = Scene(saved=Snapshot(reminders=(snoozed,)))
+    assert scene.reminders.deadline == START + HOUR_MS
 
 
 # Judging

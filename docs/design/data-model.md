@@ -1,0 +1,115 @@
+# Data model
+
+The SQLite schema of `jiffin.store`
+([ADR-0013](../adr/0013-sqlite-storage.md)): one file,
+`%LOCALAPPDATA%\Jiffin\jiffin.db`, `STRICT` tables, times in UTC
+milliseconds. The source of truth is `store/migrations/`; this diagram follows
+the latest migration.
+
+```mermaid
+erDiagram
+    reminder ||--|{ revision : "versions of its text"
+    reminder ||--o{ silence : "Non qui"
+    context ||--o{ silence : "silenced in"
+    engine_build |o--o{ revision : "wrote the statement"
+    revision ||--o{ candidate : "judged as"
+    evaluation ||--o{ candidate : "judged"
+    context ||--o{ evaluation : "evaluated"
+    engine_build |o--o{ evaluation : "judged with"
+    revision ||--o{ alert : "alerted"
+    evaluation |o--o{ alert : "raised"
+    context ||--o{ alert : "shown in"
+    context ||--o{ judgement : "cached in"
+    revision ||--o{ judgement : "cached for"
+    engine_build ||--o{ judgement : "cached from"
+
+    reminder {
+        int id PK
+        int created_at
+        int completed_at "null while active"
+        int snoozed_until "null unless snoozed"
+    }
+    revision {
+        int id PK
+        int reminder FK "cascade"
+        int number "unique per reminder"
+        text condition "Quando"
+        text action "Ricordami di"
+        text statement "null until the engine answers"
+        int statement_build FK
+    }
+    context {
+        int id PK
+        text app
+        text title
+        text address "null outside the browsers"
+    }
+    engine_build {
+        int id PK
+        int protocol
+        text engine_version
+        text llama_cpp_build
+        text model_sha256
+        int judge_prompt
+        int rewrite_prompt
+    }
+    evaluation {
+        int id PK
+        int at "when the decision came"
+        int context FK
+        int context_since
+        text outcome "ok or error"
+        real threshold
+        int engine_build FK "null when nothing was judged"
+    }
+    candidate {
+        int evaluation PK "cascade"
+        int revision PK "cascade"
+        real d
+        int from_cache
+        text outcome
+    }
+    alert {
+        int id PK
+        int revision FK "cascade"
+        int evaluation FK "set null when it expires"
+        int context FK
+        real d
+        int created_at
+        int shown_at
+        int vanished_at
+        int seen_at
+        text answer "fatto, utile, rimanda, non_qui"
+        int answered_at
+    }
+    silence {
+        int reminder PK "cascade"
+        int context PK
+    }
+    judgement {
+        int context PK
+        int revision PK "cascade"
+        int engine_build PK
+        real d
+        int last_used
+    }
+    setting {
+        text key PK
+        text value "JSON"
+    }
+```
+
+## Keeping and deleting
+
+- **Cleanup**, at startup and daily, in one transaction
+  ([ADR-0014](../adr/0014-feedback-data-retention.md)): evaluations older than
+  30 days, with their candidates; unanswered alerts older than 30 days; cache
+  entries unused for 30 days; contexts no row uses any more. Then
+  `PRAGMA optimize` and a `TRUNCATE` checkpoint.
+- **Deleting a reminder** cascades to its revisions, and through them to its
+  candidates, alerts and cache entries, and to its silences. Then the
+  evaluations it leaves without candidates and the unused contexts go, and a
+  `TRUNCATE` checkpoint follows, so that nothing about it stays in the WAL.
+- A context is one row whatever its address: `context_identity` indexes the
+  address with a missing one counted as a single value.
+- Engine builds are kept: they are not personal data.
