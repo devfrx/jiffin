@@ -8,6 +8,7 @@ import logging
 import sqlite3
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, assert_never
 
@@ -15,9 +16,12 @@ from jiffin.core.context import Context
 from jiffin.core.model import EngineBuild
 from jiffin.core.records import (
     Alert,
+    Answer,
     CacheEntry,
+    Candidate,
     Evaluation,
     LastIds,
+    Outcome,
     Record,
     Reminder,
     ReminderDeleted,
@@ -39,6 +43,21 @@ type Json = None | bool | int | float | str | list[Json] | dict[str, Json]
 _CURRENT = (
     "revision.number = (SELECT max(number) FROM revision AS r WHERE r.reminder = revision.reminder)"
 )
+
+
+@dataclass(frozen=True, slots=True)
+class Log:
+    """Everything the database holds about judging, for the harness (ADR-0017)."""
+
+    reminders: tuple[Reminder, ...]
+    """With their current revision."""
+    revisions: dict[int, Revision]
+    """Every revision by id, the old ones too."""
+    evaluations: tuple[Evaluation, ...]
+    """The oldest first, with their candidates."""
+    alerts: tuple[Alert, ...]
+    """The oldest first. An alert whose evaluation has expired is left out."""
+    silences: tuple[Silence, ...]
 
 
 class Store:
@@ -99,14 +118,7 @@ class Store:
                     WHERE {_CURRENT} ORDER BY reminder.id"""
                 )
             )
-            silences = tuple(
-                Silence(row[0], Context(*row[1:]))
-                for row in self._db.execute(
-                    """SELECT reminder, app, title, address
-                    FROM silence JOIN context ON context.id = silence.context
-                    ORDER BY reminder, context.id"""
-                )
-            )
+            silences = self._silences()
             cache = tuple(
                 CacheEntry(Context(*row[:3]), row[3], builds[row[4]], row[5], row[6])
                 for row in self._db.execute(
@@ -127,6 +139,75 @@ class Store:
             return Snapshot(
                 reminders, silences, cache, last_alerts, self._unseen(builds), self._last_ids()
             )
+
+    def log(self) -> Log:
+        """The whole history the database keeps: the harness reads it from a copy."""
+        with self._transaction():
+            builds = self._builds()
+            revisions = {
+                row[0]: self._revision(row, builds)
+                for row in self._db.execute(
+                    """SELECT id, reminder, number, condition, action, statement, statement_build
+                    FROM revision ORDER BY id"""
+                )
+            }
+            reminders = tuple(
+                Reminder(row[0], row[1], revisions[row[4]], row[2], row[3])
+                for row in self._db.execute(
+                    f"""SELECT reminder.id, created_at, completed_at, snoozed_until, revision.id
+                    FROM reminder JOIN revision ON revision.reminder = reminder.id
+                    WHERE {_CURRENT} ORDER BY reminder.id"""
+                )
+            )
+            candidates: dict[int, list[Candidate]] = {}
+            for row in self._db.execute(
+                """SELECT evaluation, revision, d, from_cache, outcome FROM candidate
+                ORDER BY evaluation, revision"""
+            ):
+                candidates.setdefault(row[0], []).append(
+                    Candidate(row[1], row[2], bool(row[3]), Outcome(row[4]))
+                )
+            evaluations = tuple(
+                Evaluation(
+                    row[0],
+                    row[1],
+                    Context(*row[2:5]),
+                    row[5],
+                    row[7],
+                    None if row[8] is None else builds[row[8]],
+                    tuple(candidates.get(row[0], ())),
+                    failed=row[6] == "error",
+                )
+                for row in self._db.execute(
+                    """SELECT evaluation.id, at, app, title, address, context_since, outcome,
+                        threshold, engine_build
+                    FROM evaluation JOIN context ON context.id = evaluation.context
+                    ORDER BY at, evaluation.id"""
+                )
+            )
+            alerts = tuple(
+                Alert(
+                    row[0],
+                    revisions[row[1]].reminder_id,
+                    revisions[row[1]],
+                    row[2],
+                    Context(*row[3:6]),
+                    d=row[6],
+                    created_at=row[7],
+                    shown_at=row[8],
+                    vanished_at=row[9],
+                    seen_at=row[10],
+                    answer=None if row[11] is None else Answer(row[11]),
+                    answered_at=row[12],
+                )
+                for row in self._db.execute(
+                    """SELECT alert.id, revision, evaluation, app, title, address, d, created_at,
+                        shown_at, vanished_at, seen_at, answer, answered_at
+                    FROM alert JOIN context ON context.id = alert.context
+                    WHERE evaluation IS NOT NULL ORDER BY created_at, alert.id"""
+                )
+            )
+            return Log(reminders, revisions, evaluations, alerts, self._silences())
 
     def cleanup(self, now: int) -> None:
         """Delete what the retention rules of ADR-0014 no longer keep, at startup and daily."""
@@ -319,6 +400,16 @@ class Store:
                 FROM engine_build"""
             )
         }
+
+    def _silences(self) -> tuple[Silence, ...]:
+        return tuple(
+            Silence(row[0], Context(*row[1:]))
+            for row in self._db.execute(
+                """SELECT reminder, app, title, address
+                FROM silence JOIN context ON context.id = silence.context
+                ORDER BY reminder, context.id"""
+            )
+        )
 
     @staticmethod
     def _revision(row: Sequence[Any], builds: Mapping[int, EngineBuild]) -> Revision:

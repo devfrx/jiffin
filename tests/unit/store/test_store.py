@@ -202,3 +202,31 @@ def test_logs_hold_ids_and_numbers_only(store: Store, caplog: pytest.LogCaptureF
     assert caplog.messages
     for text in ("Rossi", "Banca", "bancarossi", "Figma", "quando"):
         assert text not in caplog.text
+
+
+def test_the_log_holds_every_evaluation_alert_and_revision(store: Store) -> None:
+    figma, bank = reminder(1), reminder(2, "se sono sul sito della banca")
+    revised = Revision(11, 1, 2, "quando disegno icone", "esportarle", "The user draws.", BUILD)
+    edited = replace(figma, revision=revised)
+    first = evaluation(1, NOW, FIGMA, figma, bank)
+    failed = Evaluation(2, NOW + 60_000, BANK, NOW + 40_000, 0.97, None, (), failed=True)
+    later = evaluation(3, NOW + 120_000, FIGMA, edited)
+    answered = replace(
+        alert(1, figma, first), shown_at=NOW, answer=Answer.USEFUL, answered_at=NOW + 5_000
+    )
+    store.save([figma, bank, first, failed, answered, edited, later, Silence(2, FIGMA)])
+    log = store.log()
+    assert log.reminders == (edited, bank)
+    assert log.revisions == {10: figma.revision, 11: revised, 20: bank.revision}
+    assert log.evaluations == (first, failed, later)
+    assert log.alerts == (answered,)
+    assert log.silences == (Silence(2, FIGMA),)
+
+
+def test_the_log_leaves_out_alerts_whose_evaluation_expired(store: Store) -> None:
+    figma = reminder(1)
+    old = evaluation(1, NOW - RETENTION_MS - 1, FIGMA, figma)
+    answered = replace(alert(1, figma, old), answer=Answer.DONE, answered_at=old.at)
+    store.save([figma, old, answered])
+    store.cleanup(NOW)
+    assert store.log().alerts == ()

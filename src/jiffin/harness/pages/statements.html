@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Affermazioni Jiffin</title>
+<link rel="icon" href="data:,">
+<style>
+{% include "page.css" %}
+</style>
+</head>
+<body>
+<main>
+  <h1>Le affermazioni dei promemoria</h1>
+  <p>Dalla copia {{ copy }}. Per ogni promemoria, la condizione come l'hai scritta e l'affermazione in inglese che il modello giudica. Controlla che dicano la stessa cosa.</p>
+  <table>
+    <thead><tr><th>#</th><th>Stato</th><th>Quando</th><th>Ricordami di</th><th>Affermazione</th><th>Scritta da</th></tr></thead>
+    <tbody>
+    {% for row in rows %}
+      <tr>
+        <td class="number">{{ row.number }}</td>
+        <td class="muted">{{ row.state }}</td>
+        <td>{{ row.condition }}</td>
+        <td>{{ row.action }}</td>
+        <td>{% if row.statement %}{{ row.statement }}{% else %}<span class="no">non ancora scritta</span>{% endif %}</td>
+        <td class="muted">{{ row.build }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</main>
+</body>
+</html>

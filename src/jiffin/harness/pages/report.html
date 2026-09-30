@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Giornata Jiffin {{ day }}</title>
+<link rel="icon" href="data:,">
+<style>
+{% include "page.css" %}
+</style>
+</head>
+<body>
+<main>
+  <h1>Giornata del {{ day }}</h1>
+  <p>{{ source }}. I numeri sono nel riassunto; qui ci sono i testi, per capirli.</p>
+
+  <h2>Avvisi mostrati ({{ alerts | length }})</h2>
+  <table>
+    <thead><tr><th>Ora</th><th>Contesto</th><th>Promemoria</th><th>d</th><th>Etichetta</th><th>Risposta</th><th>Ritardo</th></tr></thead>
+    <tbody>
+    {% for alert in alerts %}
+      <tr>
+        <td class="number">{{ alert.time }}</td>
+        <td>{{ alert.app }} · {{ alert.title }}{% if alert.address %}<div class="address">{{ alert.address }}</div>{% endif %}</td>
+        <td>{{ alert.condition }} <span class="muted">→ {{ alert.action }}</span></td>
+        <td class="number">{{ alert.d }}</td>
+        <td>{% if alert.label is none %}<span class="muted">—</span>{% elif alert.label %}<span class="yes">giusto</span>{% else %}<span class="no">falso allarme</span>{% endif %}</td>
+        <td class="muted">{{ alert.answer }}</td>
+        <td class="number">{{ alert.delay }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Promemoria persi ({{ missed | length }})</h2>
+  <p>Coppie pertinenti che non sono mai arrivate sullo schermo, con il motivo e il d più alto della giornata.</p>
+  <table>
+    <thead><tr><th>Contesto</th><th>Promemoria</th><th>Perché</th><th>d più alto</th></tr></thead>
+    <tbody>
+    {% for pair in missed %}
+      <tr>
+        <td>{{ pair.app }} · {{ pair.title }}{% if pair.address %}<div class="address">{{ pair.address }}</div>{% endif %}</td>
+        <td>{{ pair.condition }} <span class="muted">→ {{ pair.action }}</span></td>
+        <td>{{ pair.why }}</td>
+        <td class="number">{{ pair.d }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</main>
+</body>
+</html>
