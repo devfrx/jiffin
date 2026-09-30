@@ -107,6 +107,15 @@ wheels = [
 ]
 
 [[package]]
+name = "comtypes"
+version = "1.4.17"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/0e/ff/c7836bd0d78fc615281016f154f514e9d523d7cb9ab9e8b4d344adc5f5e7/comtypes-1.4.17.tar.gz", hash = "sha256:3d9c1e92ad8daf7600d371e76ee16161a627a5fb70c3144f6e52e78af6034363", size = 262743, upload-time = "2026-09-21T08:08:07.687Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/89/9c/d0bc1fb69ad22a04bdc01dd9b5613a2ebc4d02ba1ec24b02127dc93791ba/comtypes-1.4.17-py3-none-any.whl", hash = "sha256:4e0a221dde2c589b82977bed802efd71cd5eb67a380347b732e02735e597f586", size = 298743, upload-time = "2026-09-21T08:08:06.461Z" },
+]
+
+[[package]]
 name = "coverage"
 version = "7.16.2"
 source = { registry = "https://pypi.org/simple" }
@@ -311,6 +320,7 @@ name = "jiffin"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "comtypes" },
     { name = "jinja2" },
     { name = "pydantic" },
     { name = "pyside6-essentials" },
@@ -326,6 +336,7 @@ dev = [
     { name = "pytest-cov" },
     { name = "pytest-qt" },
     { name = "ruff" },
+    { name = "types-psutil" },
 ]
 harness = [
     { name = "psutil" },
@@ -333,6 +344,7 @@ harness = [
 
 [package.metadata]
 requires-dist = [
+    { name = "comtypes", specifier = ">=1.4.17" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "pydantic", specifier = ">=2.13.5" },
     { name = "pyside6-essentials", specifier = ">=6.11.2" },
@@ -348,6 +360,7 @@ dev = [
     { name = "pytest-cov", specifier = ">=7.1.0" },
     { name = "pytest-qt", specifier = ">=4.5.0" },
     { name = "ruff", specifier = "==0.16.9" },
+    { name = "types-psutil", specifier = ">=7.2.2.20260906" },
 ]
 harness = [{ name = "psutil", specifier = ">=7.2.2" }]
 
@@ -903,6 +916,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/56/05/79ed0697515d4fc7435459e4ed4c4a3b5621a55b7c91d0f3f2cc3d617aa0/shiboken6-6.11.2-cp310-abi3-manylinux_2_39_aarch64.whl", hash = "sha256:4bbbd6fa4d7cff5ec5e12bc4c10e1d845fa30c89457ecb13cc64f7bddb77f6f9", size = 270668, upload-time = "2026-08-18T06:37:15.025Z" },
     { url = "https://files.pythonhosted.org/packages/ce/6b/fee1b4814317e4664e318644c9c007676c65a71e5b2b9d3ac4121a94dc0a/shiboken6-6.11.2-cp310-abi3-win_amd64.whl", hash = "sha256:6ab0eba1c904455df621f9a6df3ca2bb896bab8670572d2bc4e37804ae91f19a", size = 1226578, upload-time = "2026-08-18T06:37:18.002Z" },
     { url = "https://files.pythonhosted.org/packages/4d/b5/80c4e5aafeb8ac777cf5a1becfe87ac7197c35051df00b5f7819787e09d5/shiboken6-6.11.2-cp310-abi3-win_arm64.whl", hash = "sha256:97c49432488df958f0308736f3d15b6915d8826fc380af17bb4b9ec5c4a5e81b", size = 1784669, upload-time = "2026-08-18T06:37:21.046Z" },
+]
+
+[[package]]
+name = "types-psutil"
+version = "7.2.2.20260906"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/97/0a/f48b9b0ab5ba8599fd117309e345152bf82c756c72be2ff0f635780c2792/types_psutil-7.2.2.20260906.tar.gz", hash = "sha256:93abf22cf9a62b915f724e433bde702995ac274865425fd4a76d1d9b5828da1a", size = 27396, upload-time = "2026-09-06T06:35:24.499Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/eb/8d/81a86107486e1c23f5ca21bea1e9e5b18a50754242e7a0b82f41f9ae8384/types_psutil-7.2.2.20260906-py3-none-any.whl", hash = "sha256:db00baf7f96c3f63421c4d3d68d373923094a0dfddf13e922c5c5fbc42488159", size = 33383, upload-time = "2026-09-06T06:35:23.575Z" },
 ]
 
 [[package]]

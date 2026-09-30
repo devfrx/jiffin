@@ -6,6 +6,7 @@ readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.13"
 dependencies = [
+    "comtypes>=1.4.17",
     "jinja2>=3.1.6",
     "pydantic>=2.13.5",
     "pyside6-essentials>=6.11.2",
@@ -26,6 +27,7 @@ dev = [
     "pytest-qt>=4.5.0",
     # Pinned exactly: Ruff's minor releases are the ones that may break (ADR-0016).
     "ruff==0.16.9",
+    "types-psutil>=7.2.2.20260906",
 ]
 harness = [
     "psutil>=7.2.2",
@@ -45,11 +47,19 @@ strict = true
 plugins = ["pydantic.mypy"]
 files = ["src", "tests", "scripts"]
 
+[[tool.mypy.overrides]]
+# comtypes ships no types, and builds its COM interfaces at run time.
+module = ["comtypes", "comtypes.*"]
+ignore_missing_imports = true
+
 [tool.pytest]
 strict = true
 testpaths = ["tests"]
-addopts = ["--import-mode=importlib", "-m", "not integration"]
-markers = ["integration: needs the real model and the GPU; run with `uv run pytest -m integration`"]
+addopts = ["--import-mode=importlib", "-m", "not integration and not benchmark"]
+markers = [
+    "integration: needs the owner's machine, with the model on the GPU or the browsers in front; run with `uv run pytest -m integration`",
+    "benchmark: measures for minutes, alone on the owner's machine; run with `uv run pytest -m benchmark -s`",
+]
 qt_api = "pyside6"
 
 [tool.coverage.run]
