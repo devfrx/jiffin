@@ -78,3 +78,22 @@ to notice a broken update within a working hour. One read clears it. Only tab
 windows count, those whose title ends with the browser's suffix: a dialog, an
 installed web app or DevTools has no bar. The tray gets the set of unreadable
 browsers whenever it changes.
+
+## Measured
+
+Browsers turn on their accessibility tree when a UI Automation client appears,
+and that CPU counts in the budget of
+[ADR-0003](../adr/0003-acceptance-thresholds.md). The benchmark
+(`uv run pytest -m benchmark -s`) keeps a fresh Vivaldi in front, on a page
+whose title changes every second: 5 minutes without the capture, then 5 with
+it, which reads the address at every change. On the owner's machine, 28
+logical cores, on 2026-09-30:
+
+| CPU | % of one core | % of the machine |
+|---|---|---|
+| Vivaldi, without the capture | 3.92 | 0.14 |
+| Vivaldi, with the capture: 292 reads in 300 s | 4.63 | 0.17 |
+| What the reads cost Vivaldi | 0.71 | 0.03 |
+| The capture itself | 0.23 | 0.01 |
+
+At one read a second, the reads cost Vivaldi under 1% of one core.

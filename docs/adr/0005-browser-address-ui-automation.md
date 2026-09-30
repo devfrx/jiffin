@@ -81,3 +81,11 @@ and Chrome's shortened text contains the site.
   ([ADR-0017](0017-evaluation-harness-subpackage.md)).
 - The tray signal and the banner in the tray list are part of the interface
   work ([ADR-0010](0010-windows-11-look-own-components.md)).
+- Measured by the benchmark ([#41](https://github.com/devfrx/jiffin/issues/41)):
+  with a title that changes every second, the reads cost a fresh Vivaldi 0.7%
+  of one core, 0.03% of the owner's 28-core machine
+  ([context capture](../design/context.md)).
+- A browser running as administrator gives no context, not app and title:
+  whether its window is private cannot be told either, and a window that may
+  be private is ignored as a private one would be
+  ([#41](https://github.com/devfrx/jiffin/issues/41)).
