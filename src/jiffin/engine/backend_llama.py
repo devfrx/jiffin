@@ -2,8 +2,10 @@
 # (https://github.com/Rizzo-AI-Academy/rizzo-flow). Copyright 2026 Simone Rizzo — Rizzo AI
 # Academy. Licensed under the Apache License, Version 2.0.
 # Changed for Jiffin: loads with the engine settings of ADR-0011 and reports what `initialize`
-# returns; scores with the shared prefix only; judging (d = logit A − logit B) added.
-"""llama.cpp scoring: no generation, flat unpadded batches, prefix branches that share KV cells."""
+# returns; scores with the shared prefix only; judging (d = logit A − logit B) and greedy
+# generation for rewriting added.
+"""llama.cpp on one session: scoring in flat unpadded batches, with prefix branches that share
+KV cells, and greedy generation."""
 
 from collections.abc import Iterator, Sequence
 from pathlib import Path
@@ -13,7 +15,7 @@ from jinja2 import TemplateError
 from jinja2.sandbox import ImmutableSandboxedEnvironment
 
 from jiffin.engine import llama_release, prompts
-from jiffin.engine.errors import ModelNotLoadable
+from jiffin.engine.errors import ModelNotLoadable, TextTooLong
 from jiffin.engine.llama_cpp import Session
 from jiffin.protocol.messages import Context, EngineSettings, Statement
 
@@ -109,6 +111,33 @@ class LlamaBackend:
         )
         logits = self.score(prefix, jobs)
         return {key: yes - no for key, (yes, no) in logits.items()}
+
+    def rewrite(self, condition: str) -> str:
+        """The condition as one English statement, decoded greedily (ADR-0008)."""
+        prompt = prompts.compile_rewrite(
+            self.tokenizer, condition, self.settings.context_per_question
+        )
+        statement = self.session.detokenize(self.generate(prompt, prompts.STATEMENT_TOKENS))
+        if not statement.strip():
+            raise RuntimeError("the model wrote an empty statement")
+        return statement.strip()
+
+    def generate(self, prompt: list[int], limit: int) -> list[int]:
+        """The tokens that greedily follow `prompt`, up to the end of the generation.
+
+        Raise TextTooLong when the generation goes on past `limit` tokens: text is never cut.
+        """
+        session = self.session
+        session.clear()
+        row = self._feed(prompt, 0, 0, logits=True)
+        generated: list[int] = []
+        while not session.is_end(token := session.sample(row)):
+            if len(generated) == limit:
+                raise TextTooLong(f"the statement did not end within {limit} tokens")
+            generated.append(token)
+            session.decode([token], [len(prompt) + len(generated) - 1], [0], [0])
+            row = 0
+        return generated
 
     def score(self, prefix: list[int], jobs: list[prompts.Compiled]) -> dict[int, list[float]]:
         """The logits of every question's answer slots, by id."""

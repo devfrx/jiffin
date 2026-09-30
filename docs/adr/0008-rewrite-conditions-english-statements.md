@@ -112,3 +112,7 @@ The last two are the v2 additions.
   ([ADR-0017](0017-evaluation-harness-subpackage.md)).
 - Editing a reminder creates a new revision, so a wrong statement is fixed by
   editing the condition.
+- Measured in the engine ([#37](https://github.com/devfrx/jiffin/issues/37)):
+  a rewrite takes about 0.3 s, and judging and rewriting in one session peak
+  at 3,257 MiB of VRAM, within the budget. The engine writes the prototype's
+  statements word for word.

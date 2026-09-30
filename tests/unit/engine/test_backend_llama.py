@@ -5,11 +5,13 @@ from typing import cast
 import pytest
 
 from jiffin.engine.backend_llama import N_BATCH, LlamaBackend
+from jiffin.engine.errors import TextTooLong
 from jiffin.engine.llama_cpp import Session
 from jiffin.engine.prompts import Compiled
 from jiffin.protocol.messages import Context, EngineSettings, Statement
 
 SLOTS = [65, 66]
+END = 0
 
 
 @dataclass
@@ -26,6 +28,8 @@ class FakeSession:
 
     calls: list[object] = field(default_factory=list)
     batch: list[int] = field(default_factory=list)
+    script: list[int] = field(default_factory=list)
+    """The tokens `sample` returns, in order; END ends a generation."""
 
     def clear(self) -> None:
         self.calls.append("clear")
@@ -45,6 +49,17 @@ class FakeSession:
         assert slots == SLOTS
         return [float(self.batch[index]), float(-self.batch[index])]
 
+    def sample(self, index: int) -> int:
+        assert index == len(self.batch) - 1
+        self.calls.append(("sample", index))
+        return self.script.pop(0)
+
+    def is_end(self, token: int) -> bool:
+        return token == END
+
+    def detokenize(self, tokens: Sequence[int]) -> str:
+        return "".join(map(chr, tokens))
+
     def branch(self, source: int, target: int) -> None:
         self.calls.append(("branch", source, target))
 
@@ -56,10 +71,10 @@ class FakeSession:
 
 
 class Tokenizer:
-    """One token per character; the chat template keeps the user message alone."""
+    """One token per character; the chat template joins the messages."""
 
     def apply_chat_template(self, messages: list[dict[str, str]], **variables: object) -> str:
-        return messages[1]["content"]
+        return "".join(message["content"] for message in messages)
 
     def encode(self, text: str) -> list[int]:
         return [ord(character) for character in text]
@@ -135,3 +150,36 @@ def test_judging_gives_d_as_the_logit_of_yes_minus_the_logit_of_no() -> None:
     # Every question ends with the full stop of its closing line, and the fake's logits at a
     # token t are (t, −t): d = 2t.
     assert d == {3: 2.0 * ord("."), 9: 2.0 * ord(".")}
+
+
+def test_generation_is_greedy_until_the_end_of_the_generation() -> None:
+    session = FakeSession(script=[72, 105, END])
+    assert backend(session).generate([1, 2, 3], limit=64) == [72, 105]
+    assert session.calls == [
+        "clear",
+        Decoded([1, 2, 3], [0, 1, 2], [0, 0, 0], [2]),
+        ("sample", 2),
+        Decoded([72], [3], [0], [0]),
+        ("sample", 0),
+        Decoded([105], [4], [0], [0]),
+        ("sample", 0),
+    ]
+
+
+def test_a_generation_may_take_exactly_the_limit() -> None:
+    assert backend(FakeSession(script=[72, 105, END])).generate([1, 2, 3], limit=2) == [72, 105]
+
+
+def test_a_generation_longer_than_the_limit_is_refused_not_cut() -> None:
+    with pytest.raises(TextTooLong, match="within 2 tokens"):
+        backend(FakeSession(script=[72, 105, 33, END])).generate([1, 2, 3], limit=2)
+
+
+def test_rewrite_returns_the_statement_without_surrounding_space() -> None:
+    session = FakeSession(script=[*map(ord, " The user has opened Figma.\n"), END])
+    assert backend(session).rewrite("quando apro Figma") == "The user has opened Figma."
+
+
+def test_an_empty_statement_is_an_error() -> None:
+    with pytest.raises(RuntimeError, match="empty statement"):
+        backend(FakeSession(script=[ord(" "), END])).rewrite("quando apro Figma")

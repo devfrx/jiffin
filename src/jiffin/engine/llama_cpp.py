@@ -3,8 +3,9 @@
 # Academy. Licensed under the Apache License, Version 2.0.
 # Changed for Jiffin: Windows and CUDA only; the GPU is chosen without options; the load mode
 # and the KV cache come from the engine settings; a failed load says whether the GPU ran out of
-# memory; the model type is read; type annotations; what scoring does not use is left out.
-"""ctypes binding to libllama, limited to what scoring needs: no sampling, no generation.
+# memory; the model type is read; greedy sampling and detokenizing added for generation; type
+# annotations; what the engine does not use is left out.
+"""ctypes binding to libllama, limited to what the engine needs: scoring and greedy generation.
 
 Struct layouts and signatures are transcribed from `include/llama.h` and
 `ggml/include/ggml-backend.h` of the release pinned in `llama_release.py`. Structs are passed
@@ -141,6 +142,14 @@ SIGNATURES: dict[str, tuple[Any, list[Any]]] = {
         c_int32,
         [c_void_p, c_char_p, c_int32, POINTER(c_int32), c_int32, c_bool, c_bool],
     ),
+    "llama_detokenize": (
+        c_int32,
+        [c_void_p, POINTER(c_int32), c_int32, c_char_p, c_int32, c_bool, c_bool],
+    ),
+    "llama_vocab_is_eog": (c_bool, [c_void_p, c_int32]),
+    "llama_sampler_init_greedy": (c_void_p, []),
+    "llama_sampler_sample": (c_int32, [c_void_p, c_void_p, c_int32]),
+    "llama_sampler_free": (None, [c_void_p]),
     "llama_n_batch": (c_uint32, [c_void_p]),
     "llama_get_memory": (c_void_p, [c_void_p]),
     "llama_memory_clear": (None, [c_void_p, c_bool]),
@@ -274,6 +283,7 @@ class Session:
         self.n_batch = n_batch
         self.vocab: int = library.llama_model_get_vocab(model)
         self.memory: int = library.llama_get_memory(context)
+        self.sampler: int = library.llama_sampler_init_greedy()
 
     @classmethod
     def load(
@@ -333,9 +343,10 @@ class Session:
 
     def close(self) -> None:
         if self.context:
+            self.library.llama_sampler_free(self.sampler)
             self.library.llama_free(self.context)
             self.library.llama_model_free(self.model)
-            self.context = self.model = self.vocab = self.memory = 0
+            self.context = self.model = self.vocab = self.memory = self.sampler = 0
 
     # --- text -----------------------------------------------------------------------------
 
@@ -350,6 +361,26 @@ class Session:
         if count < 0:
             raise ValueError("llama_tokenize: buffer too small")
         return buffer[:count]
+
+    def detokenize(self, tokens: Sequence[int]) -> str:
+        """The text of `tokens`, without special tokens."""
+        ids = (c_int32 * len(tokens))(*tokens)
+        capacity = 16 * len(tokens) + 16
+        buffer = ctypes.create_string_buffer(capacity)
+        count = self.library.llama_detokenize(
+            self.vocab, ids, len(tokens), buffer, capacity, False, False
+        )
+        if count < 0:  # the size it needs
+            capacity = -count
+            buffer = ctypes.create_string_buffer(capacity)
+            count = self.library.llama_detokenize(
+                self.vocab, ids, len(tokens), buffer, capacity, False, False
+            )
+        return buffer.raw[:count].decode("utf-8", errors="replace")
+
+    def is_end(self, token: int) -> bool:
+        """Whether `token` ends a generation: end of sentence, of turn, and the like."""
+        return bool(self.library.llama_vocab_is_eog(self.vocab, token))
 
     def meta(self, key: str) -> str | None:
         buffer = ctypes.create_string_buffer(1024)
@@ -406,6 +437,10 @@ class Session:
         if not row:
             raise ValueError(f"No logits were produced at batch position {index}")
         return [float(row[slot]) for slot in slots]
+
+    def sample(self, index: int) -> int:
+        """The most likely next token at batch position `index`: greedy, temperature 0."""
+        return int(self.library.llama_sampler_sample(self.sampler, self.context, index))
 
     def clear(self) -> None:
         self.library.llama_memory_clear(self.memory, True)

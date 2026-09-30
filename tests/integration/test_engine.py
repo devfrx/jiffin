@@ -7,6 +7,7 @@ what it needs is missing. Of the sample, only ids and numbers ever reach the out
 
 import itertools
 import json
+import re
 import statistics
 import subprocess
 import sys
@@ -23,12 +24,14 @@ from jiffin.protocol.messages import (
     INITIALIZE,
     JUDGE,
     PROTOCOL_VERSION,
+    REWRITE,
     SHUTDOWN,
     Context,
     EngineSettings,
     InitializeParams,
     JudgeParams,
     Method,
+    RewriteParams,
     ShutdownParams,
     Statement,
     Strict,
@@ -42,6 +45,7 @@ MODEL = (
 )
 SAMPLE = NO_GIT / "sibyl-campione"
 MEASURED = NO_GIT / "sibyl-misura" / "risultati" / "alt-rizzo-q4.jsonl"
+REWRITTEN = SAMPLE / "asserzioni-rizzo-q4-v2.json"
 SETTINGS = EngineSettings(  # ADR-0011
     context_per_question=2048, micro_batch=16, load_mode="direct_io", kv_cache="f16"
 )
@@ -50,6 +54,12 @@ SETTINGS = EngineSettings(  # ADR-0011
 LOADED_MIB, PEAK_MIB = 3_227, 3_245
 DELAY_P95_SECONDS = 0.508
 NOISE = 0.05
+# The delay moves with what else the machine is doing: writing the prompts takes the CPU for
+# about a fifth of it. On 2026-09-30 its p95 went from 467 to 561 ms within an hour, with the
+# same code. Without the shared prefix, 20 questions would decode three times the tokens.
+DELAY_NOISE = 0.25
+BUDGET_MIB = 4 * 1024  # ADR-0003
+REWRITE_SECONDS = 0.4  # the most #37 expects
 # The prototype sent 18 questions per context (yes in A, and yes in B) in micro-batches of 4,
 # with 8,192 tokens per question; the engine sends 9, in one micro-batch, with 2,048. On the
 # GPU the result of a sum depends on how the batch is laid out, so d moves a little: in the
@@ -90,6 +100,15 @@ STATEMENTS = [
         start=1,
     )
 ]
+# Invented conditions, none of them among the prompt's examples, with what each statement must
+# keep: a name, a negation, an "or" (ADR-0008).
+CONDITIONS = {
+    "se non sto lavorando al progetto Verdi": ("not", "Verdi"),
+    "quando guardo una partita o leggo di calcio": (" or ",),
+    "se sono su Amazon": ("Amazon",),
+    "quando uso Excel per la contabilità": ("Excel",),
+    "se sto facendo una videochiamata su Teams": ("Teams",),
+}
 
 
 class EngineProcess:
@@ -122,6 +141,9 @@ class EngineProcess:
         result = self.call(JUDGE, JudgeParams(context=context, statements=statements))
         return {score.id: score.d for score in result.scores}
 
+    def rewrite(self, condition: str) -> str:
+        return self.call(REWRITE, RewriteParams(condition=condition)).statement
+
     def close(self) -> int:
         """Shut down, close stdin as the app does, and return the exit code."""
         assert self.process.stdin is not None
@@ -145,14 +167,23 @@ def engine() -> Iterator[EngineProcess]:
     assert started.close() == 0
 
 
-def test_vram_with_20_statements_per_call(engine: EngineProcess) -> None:
-    peak = engine.loaded_mib
+def test_vram_with_20_statements_per_call_and_rewriting(engine: EngineProcess) -> None:
+    judging = engine.loaded_mib
     for _ in range(10):
         engine.judge(CONTEXT, STATEMENTS)
-        peak = max(peak, gpu_used_mib() - engine.idle_mib)
-    print(f"VRAM: {engine.loaded_mib} MiB loaded, {peak} MiB at peak")
+        judging = max(judging, gpu_used_mib() - engine.idle_mib)
+    both = judging
+    for condition in CONDITIONS:
+        engine.rewrite(condition)
+        engine.judge(CONTEXT, STATEMENTS)
+        both = max(both, gpu_used_mib() - engine.idle_mib)
+    print(
+        f"VRAM: {engine.loaded_mib} MiB loaded, {judging} MiB at peak judging, "
+        f"{both} MiB at peak judging and rewriting"
+    )
     assert engine.loaded_mib <= LOADED_MIB * (1 + NOISE)
-    assert peak <= PEAK_MIB * (1 + NOISE)
+    assert judging <= PEAK_MIB * (1 + NOISE)
+    assert both <= BUDGET_MIB
 
 
 def test_judge_delay_for_20_statements(engine: EngineProcess) -> None:
@@ -165,7 +196,25 @@ def test_judge_delay_for_20_statements(engine: EngineProcess) -> None:
         delays.append(time.perf_counter() - started)
     p50, p95 = statistics.median(delays), statistics.quantiles(delays, n=20)[-1]
     print(f"judge, 20 statements: p50 {p50 * 1000:.0f} ms, p95 {p95 * 1000:.0f} ms")
-    assert p95 <= DELAY_P95_SECONDS * (1 + NOISE)
+    assert p95 <= DELAY_P95_SECONDS * (1 + DELAY_NOISE)
+
+
+def test_rewrite_keeps_names_negations_and_alternatives(engine: EngineProcess) -> None:
+    for condition, kept in CONDITIONS.items():
+        statement = engine.rewrite(condition)
+        print(f"{condition!r} -> {statement!r}")
+        assert statement.startswith("The user ") and statement.endswith(".")
+        assert all(words in statement for words in kept), statement
+
+
+def test_rewrite_time(engine: EngineProcess) -> None:
+    times = []
+    for condition in CONDITIONS:
+        started = time.perf_counter()
+        engine.rewrite(condition)
+        times.append(time.perf_counter() - started)
+    print(f"rewrite: p50 {statistics.median(times) * 1000:.0f} ms, max {max(times) * 1000:.0f} ms")
+    assert max(times) <= REWRITE_SECONDS
 
 
 def test_d_matches_what_the_prototype_measured(engine: EngineProcess) -> None:
@@ -204,3 +253,19 @@ def test_d_matches_what_the_prototype_measured(engine: EngineProcess) -> None:
     assert len(differences) == len(measured) == 954
     assert differences[-1] <= PARITY_MAX
     assert mean <= PARITY_MEAN
+
+
+def test_rewrites_match_what_the_prototype_wrote(engine: EngineProcess) -> None:
+    if not all(path.is_file() for path in (SAMPLE / "etichette.json", REWRITTEN)):
+        pytest.skip(f"the private sample is not in {NO_GIT}")
+    reminders = json.loads((SAMPLE / "etichette.json").read_text(encoding="utf-8"))["reminders"]
+    theirs = json.loads(REWRITTEN.read_text(encoding="utf-8"))
+    # The condition is what comes before "ricordami", as the prototype took it.
+    condition = re.compile(r"^\s*((?:quando|se)\b.*?)[\s,]+ricordami\b", re.IGNORECASE | re.DOTALL)
+    same = 0
+    for reminder in reminders:
+        match = condition.match(reminder["text"])
+        assert match is not None
+        same += engine.rewrite(match.group(1).strip()) == theirs[reminder["id"]]["en"]
+    print(f"rewrites equal to the prototype's: {same} of {len(reminders)}")
+    assert same == len(reminders)

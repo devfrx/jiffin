@@ -6,8 +6,12 @@ from jiffin.engine.errors import TextTooLong
 from jiffin.engine.prompts import (
     OPTIONS,
     QUESTION,
+    REWRITE_EXAMPLES,
+    REWRITE_SYSTEM,
+    STATEMENT_TOKENS,
     SYSTEM,
     compile_judge,
+    compile_rewrite,
     render_question,
     render_state,
 )
@@ -22,8 +26,8 @@ class CharacterTokenizer:
 
     def apply_chat_template(self, messages: list[dict[str, str]], **variables: object) -> str:
         assert variables == {"add_generation_prompt": True, "enable_thinking": False}
-        system, user = messages
-        return f"<S>{system['content']}</S><U>{user['content']}</U><B></think>"
+        turns = "".join(f"<{m['role']}>{m['content']}</{m['role']}>" for m in messages)
+        return f"{turns}<assistant></think>"
 
     def encode(self, text: str) -> list[int]:
         return [ord(character) for character in text]
@@ -69,12 +73,12 @@ def test_every_statement_becomes_one_question_after_the_same_prefix() -> None:
     prefix, jobs = compile_judge(
         CharacterTokenizer(), BANK, statements("The user is at the bank.", "The user reads."), 2048
     )
-    head = f"<S>{SYSTEM}</S><U>{render_state(BANK)}"
+    head = f"<system>{SYSTEM}</system><user>{render_state(BANK)}"
     assert prefix == [ord(character) for character in head[:-1]]
     assert [job.id for job in jobs] == [1, 2]
     for job, text in zip(jobs, ["The user is at the bank.", "The user reads."], strict=True):
         question = render_question(QUESTION.format(statement=text), OPTIONS)
-        assert "".join(map(chr, job.tokens)) == f"{head}{question}</U><B></think>"
+        assert "".join(map(chr, job.tokens)) == f"{head}{question}</user><assistant></think>"
         assert job.slots == [ord("A"), ord("B")]
 
 
@@ -95,3 +99,23 @@ def test_an_answer_letter_merged_with_the_prompt_is_refused() -> None:
 
     with pytest.raises(ValueError, match="single-token answer slot A"):
         compile_judge(Merging(), FIGMA, statements("The user is in Figma."), 2048)
+
+
+def test_the_rewrite_prompt_is_the_instructions_then_the_examples_then_the_condition() -> None:
+    tokens = compile_rewrite(CharacterTokenizer(), "se sono su Amazon", 2048)
+    examples = "".join(
+        f"<user>{condition}</user><assistant>{statement}</assistant>"
+        for condition, statement in REWRITE_EXAMPLES
+    )
+    assert "".join(map(chr, tokens)) == (
+        f"<system>{REWRITE_SYSTEM}</system>{examples}"
+        "<user>se sono su Amazon</user><assistant></think>"
+    )
+
+
+def test_a_condition_that_leaves_no_room_for_the_statement_is_refused() -> None:
+    fitting = len(compile_rewrite(CharacterTokenizer(), "se sono su Amazon", 2048))
+    limit = fitting + STATEMENT_TOKENS
+    assert len(compile_rewrite(CharacterTokenizer(), "se sono su Amazon", limit)) == fitting
+    with pytest.raises(TextTooLong):
+        compile_rewrite(CharacterTokenizer(), "se sono su Amazon.", limit)
