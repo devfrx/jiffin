@@ -27,7 +27,11 @@ uv run pre-commit run --all-files     # run them on the whole repository
 uv run pytest                         # unit tests
 uv run scripts/fetch_llama_cpp.py     # llama.cpp for the engine, about 575 MB, once
 uv run pytest -m integration          # tests that need the model and the GPU
+uv run python -m jiffin.harness --help  # the evaluation harness
 ```
+
+The harness measures the app against its acceptance thresholds; how it works
+is in [docs/design/harness.md](docs/design/harness.md).
 
 ## License
 
