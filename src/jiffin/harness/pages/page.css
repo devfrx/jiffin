@@ -16,10 +16,10 @@ h1 { font-size: 22px; margin: 0 0 4px; }
 h2 { font-size: 17px; margin: 28px 0 8px; }
 p { color: var(--muted); margin: 4px 0 12px; }
 table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); }
-th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
-th { font-size: 13px; color: var(--muted); font-weight: 600; }
+th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); overflow-wrap: break-word; }
+th { font-size: 13px; color: var(--muted); font-weight: 600; white-space: nowrap; }
 td.number { font-variant-numeric: tabular-nums; white-space: nowrap; }
-.address { font-family: Consolas, ui-monospace, monospace; font-size: 13px; color: var(--muted); }
+.address { font-family: Consolas, ui-monospace, monospace; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .muted { color: var(--muted); }
 .yes { color: var(--on); }
 .no { color: var(--off); font-weight: 600; }
