@@ -1,15 +1,59 @@
 # Engine
 
-How the app drives the engine process, how the engine judges a context, and
-how it rewrites a condition ([ADR-0006](../adr/0006-judge-rizzo-flow-q4.md),
+How the app gets the model file and drives the engine process, how the engine
+judges a context, and how it rewrites a condition
+([ADR-0006](../adr/0006-judge-rizzo-flow-q4.md),
 [ADR-0008](../adr/0008-rewrite-conditions-english-statements.md),
-[ADR-0011](../adr/0011-engine-child-process-json-rpc.md)). The code is
+[ADR-0011](../adr/0011-engine-child-process-json-rpc.md),
+[ADR-0015](../adr/0015-package-pyinstaller-velopack.md)). The code is
 `engine/`: `server.py` speaks the protocol, `prompts.py` writes the prompts,
 `backend_llama.py` scores and generates, and `llama_cpp.py` binds llama.cpp.
 The last three derive from Rizzo Flow at commit `b9ba007e`
-([NOTICE](../../NOTICE)). The app's side is `client/`: `supervisor.py` is the
-model port and the restarts, `process.py` one engine process with its pipes,
-and `job.py` its Job Object.
+([NOTICE](../../NOTICE)). The app's side is `client/`: `model_file.py` gets the
+model file and checks it, `supervisor.py` is the model port and the restarts,
+`process.py` one engine process with its pipes, and `job.py` its Job Object.
+
+## The model file
+
+The installer does not ship the model: `model_file.ensure` gets it from the
+revision ADR-0006 pins, into the `models` folder beside the database, and
+checks it before every start of the engine. It blocks, for minutes when it
+downloads and 3.7 s when it only checks, so the app calls it on a thread of its
+own.
+
+```mermaid
+flowchart TD
+    E{the file is in the folder?} -->|yes| C[check its size, then its sha256]
+    C -->|they match| R[the engine can start]
+    C -->|they differ| M[refuse it, and leave it for the user to replace]
+    E -->|no| Q[download into the part, from its size: with a range when it holds something]
+    Q --> A{the answer}
+    A -->|206 from the end of the part| W[append to the part]
+    A -->|200 with the whole file| Z[write the part from the start]
+    A -->|an error, or anything else| N[fail, the part untouched]
+    W --> D{the part reached the size of the file?}
+    Z --> D
+    D -->|no: the transfer was cut| K[fail, and keep the part]
+    D -->|yes| P[check the part]
+    P -->|it matches| O[rename it to the file]
+    O --> R
+    P -->|it differs| X[delete the part, and fail]
+```
+
+- **The part** is `<name>.part`. A network failure never loses what arrived:
+  the next call resumes with a range. An answer that is not the file, such as
+  the login page of a public Wi-Fi, is refused before a byte is written.
+- **Every failure names one problem** for the interface: the network (the next
+  call resumes), the space (the rest of the download and 1 GiB more must be
+  free), the disk, or a mismatch. The messages name files and numbers, never a
+  folder.
+- **Offline**, the interface tells the user where to put the file, with its
+  address, size and sha256. The file gets the same check, and a wrong one is
+  refused, never deleted.
+- **Progress** comes in bytes after every MiB, for the download and for the
+  check.
+- On 2026-09-30 the pinned address redirected to Hugging Face's CDN, which
+  answered a range with 206 and the full size of the file.
 
 ## The process
 

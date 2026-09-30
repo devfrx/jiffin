@@ -1,4 +1,5 @@
-"""The real engine under the client's supervision, with the model on the GPU (ADR-0011).
+"""The client with the real model: its file against the pin (ADR-0006), and the real engine
+under the client's supervision, on the GPU (ADR-0011).
 
 These tests run only on the owner's machine, with `uv run pytest -m integration`; they skip
 when the model is not in the `NO_GIT` folder beside the repository.
@@ -10,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from jiffin.client import model_file
+from jiffin.client.model_file import Phase, Progress
 from jiffin.client.supervisor import TIMEOUTS, State, Status, Supervisor
 from jiffin.core.clock import SystemClock
 from jiffin.core.context import Context
@@ -25,7 +28,7 @@ MODEL = (
     / "rizzo-flow"
     / "spark-x2.5-4b-rizzo-flow-lora-q4_k_m.gguf"
 )
-MODEL_SHA256 = "79de5cb8dbfd1a1f5cb3037252251594352841fe5e3dc1ae8cead053010fcd54"  # ADR-0006
+MODEL_SHA256 = model_file.MODEL.sha256
 CHANGELOG = Context(
     "vivaldi",
     "CHANGELOG.md at main · rossi/gestionale",
@@ -42,6 +45,13 @@ def model() -> Path:
     if not MODEL.is_file():
         pytest.skip(f"the model is not in {MODEL}")
     return MODEL
+
+
+def test_the_model_on_this_machine_is_the_pinned_one(model: Path) -> None:
+    progress: list[Progress] = []
+    assert model_file.ensure(model_file.MODEL, model.parent, progress.append) == model
+    size = model_file.MODEL.size
+    assert progress[-1] == Progress(Phase.CHECKING, size, size)
 
 
 def test_the_engine_starts_judges_rewrites_and_shuts_down(model: Path) -> None:
