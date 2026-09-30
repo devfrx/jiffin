@@ -26,6 +26,12 @@ class Debounce:
     def __init__(self) -> None:
         self._current: Context | None = None
         self._pending: EvaluationRequest | None = None
+        self._stable: EvaluationRequest | None = None
+
+    @property
+    def stable(self) -> EvaluationRequest | None:
+        """The request of the current context once handed out: the context is stable."""
+        return self._stable
 
     @property
     def deadline(self) -> int | None:
@@ -39,6 +45,7 @@ class Debounce:
         due = self.poll(observation.at)
         if observation.context != self._current:
             self._current = observation.context
+            self._stable = None
             self._pending = (
                 None
                 if observation.context is None
@@ -51,5 +58,5 @@ class Debounce:
         deadline = self.deadline
         if deadline is None or now < deadline:
             return None
-        due, self._pending = self._pending, None
-        return due
+        self._stable, self._pending = self._pending, None
+        return self._stable
