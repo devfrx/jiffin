@@ -1,7 +1,7 @@
 """Where the open alerts are: on screen, waiting for a place, or vanished unanswered."""
 
 from collections import deque
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, replace
 
 from jiffin.core.records import Alert
@@ -29,10 +29,10 @@ class AlertsView:
 class Alerts:
     """The alerts not answered yet. Methods return the alerts whose record has changed."""
 
-    def __init__(self) -> None:
+    def __init__(self, unseen: Iterable[Alert] = ()) -> None:
         self._visible: list[Alert] = []
         self._waiting: deque[Alert] = deque()
-        self._unseen: list[Alert] = []
+        self._unseen: list[Alert] = list(unseen)
 
     def view(self) -> AlertsView:
         return AlertsView(tuple(self._visible), len(self._waiting), tuple(self._unseen))

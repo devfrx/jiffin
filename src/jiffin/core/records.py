@@ -127,3 +127,28 @@ class Alert:
 
 
 Record = Reminder | ReminderDeleted | Silence | SilencesCleared | CacheEntry | Evaluation | Alert
+
+
+@dataclass(frozen=True, slots=True)
+class LastIds:
+    """The highest ids saved so far: new records continue after them."""
+
+    reminder: int = 0
+    revision: int = 0
+    evaluation: int = 0
+    alert: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class Snapshot:
+    """What `core` gets back from `store` when the app starts."""
+
+    reminders: tuple[Reminder, ...] = ()
+    silences: tuple[Silence, ...] = ()
+    cache: tuple[CacheEntry, ...] = ()
+    """The entries of the current revisions."""
+    last_alerts: tuple[tuple[int, int], ...] = ()
+    """For each reminder that has alerted, its id and when its last alert was made."""
+    unseen: tuple[Alert, ...] = ()
+    """Alerts shown and never answered, newest first."""
+    last_ids: LastIds = LastIds()

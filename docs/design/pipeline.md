@@ -60,9 +60,11 @@ Only active reminders whose revision has a statement are judged.
   late `poll()` loses nothing.
 - **Store.** After every event, `take_records()` returns what changed, in
   saving order: reminders (with their current revision), deletions, silences,
-  cache entries, evaluations, alerts. Records with an id replace the previous
-  record with that id; a cache entry replaces the one with the same context,
-  revision and engine build.
+  cache entries, evaluations, alerts. `Store.save()` keeps them in one
+  transaction: records with an id replace the previous record with that id,
+  and a cache entry replaces the one with the same context, revision and
+  engine build. At startup, `Reminders` starts from `Store.load()`; the schema
+  is in [data-model.md](data-model.md).
 - **Interface.** `on_alerts` receives an `AlertsView` after every change, on
   the worker thread: the alerts on screen (at most 3), how many wait, and those
   that vanished unanswered. The interface answers with `done`, `useful`,

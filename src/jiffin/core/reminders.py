@@ -29,6 +29,7 @@ from jiffin.core.records import (
     Revision,
     Silence,
     SilencesCleared,
+    Snapshot,
 )
 
 THRESHOLD = 0.97
@@ -56,23 +57,35 @@ DAY_STARTS_AT = time(4)
 
 
 class Reminders:
-    def __init__(self, model: Model, clock: Clock, on_alerts: Callable[[AlertsView], None]) -> None:
+    def __init__(
+        self,
+        model: Model,
+        clock: Clock,
+        on_alerts: Callable[[AlertsView], None],
+        saved: Snapshot | None = None,
+    ) -> None:
+        """Start from what `store` saved, or from nothing."""
+        saved = saved or Snapshot()
         self._model = model
         self._clock = clock
         self._on_alerts = on_alerts
         self._debounce = Debounce()
-        self._alerts = Alerts()
-        self._reminders: dict[int, Reminder] = {}
-        self._silences: set[tuple[int, Context]] = set()
-        self._cache: dict[tuple[Context, int, EngineBuild], float] = {}
-        self._last_alert_at: dict[int, int] = {}
-        self._snooze_deadlines: dict[int, int] = {}
+        self._alerts = Alerts(saved.unseen)
+        self._reminders = {reminder.id: reminder for reminder in saved.reminders}
+        self._silences = {(silence.reminder_id, silence.context) for silence in saved.silences}
+        self._cache = {(e.context, e.revision_id, e.build): e.d for e in saved.cache}
+        self._last_alert_at = dict(saved.last_alerts)
+        self._snooze_deadlines = {
+            reminder.id: reminder.snoozed_until
+            for reminder in saved.reminders
+            if reminder.completed_at is None and reminder.snoozed_until is not None
+        }
         self._records: list[Record] = []
-        self._view_changed = False
-        self._reminder_ids = itertools.count(1)
-        self._revision_ids = itertools.count(1)
-        self._evaluation_ids = itertools.count(1)
-        self._alert_ids = itertools.count(1)
+        self._view_changed = bool(saved.unseen)
+        self._reminder_ids = itertools.count(saved.last_ids.reminder + 1)
+        self._revision_ids = itertools.count(saved.last_ids.revision + 1)
+        self._evaluation_ids = itertools.count(saved.last_ids.evaluation + 1)
+        self._alert_ids = itertools.count(saved.last_ids.alert + 1)
 
     def take_records(self) -> list[Record]:
         """What changed since the last call, in the order `store` must save it."""
