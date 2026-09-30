@@ -15,6 +15,19 @@ The design is settled and implementation is starting.
 - What is being built for the first installable version: the
   [v0.1.0 milestone](https://github.com/devfrx/jiffin/milestone/1).
 
+## Development
+
+Python and every tool come from [uv](https://docs.astral.sh/uv/), at the
+versions in `uv.lock`:
+
+```sh
+uv sync                               # Python 3.13 and all dependencies
+uv run pre-commit install             # run the quality gates on every commit
+uv run pre-commit run --all-files     # run them on the whole repository
+uv run pytest                         # unit tests
+uv run pytest -m integration          # tests that need the model and the GPU
+```
+
 ## License
 
 [Apache-2.0](LICENSE).
