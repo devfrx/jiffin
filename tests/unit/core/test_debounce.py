@@ -3,8 +3,8 @@ from jiffin.core.context import Context, Observation, normalize
 from jiffin.core.debounce import DEBOUNCE_MS, Debounce, EvaluationRequest
 
 START = 1_790_000_000_000  # 2026-09-21, in UTC milliseconds
-ROSSI = Context("code", "changelog.md - rossi", None)
-BANK = Context("vivaldi", "Banca Rossi", "bancarossi.it")
+ROSSI = Context("code.exe", "changelog.md - rossi", None)
+BANK = Context("vivaldi.exe", "Banca Rossi", "bancarossi.it")
 
 
 def observe(debounce: Debounce, clock: SimulatedClock, context: Context | None) -> None:

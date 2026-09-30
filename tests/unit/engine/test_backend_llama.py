@@ -144,7 +144,7 @@ def test_a_question_that_does_not_start_with_the_prefix_is_refused() -> None:
 
 
 def test_judging_gives_d_as_the_logit_of_yes_minus_the_logit_of_no() -> None:
-    context = Context(app="figma", title="Icone – Figma", address=None)
+    context = Context(app="figma.exe", title="Icone – Figma", address=None)
     statements = [Statement(id=3, text="The user is in Figma."), Statement(id=9, text="No.")]
     d = backend(FakeSession()).judge(context, statements)
     # Every question ends with the full stop of its closing line, and the fake's logits at a

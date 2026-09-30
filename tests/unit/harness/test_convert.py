@@ -76,7 +76,7 @@ class FakeEngine:
         return f"The user: {condition}."
 
     def judge(self, context: Context, statements: Mapping[int, str]) -> dict[int, float]:
-        return dict.fromkeys(statements, 2.0 if context.app == "vivaldi" else -3.0)
+        return dict.fromkeys(statements, 2.0 if context.app == "vivaldi.exe" else -3.0)
 
 
 @pytest.fixture
@@ -92,12 +92,14 @@ def test_the_capture_is_read_with_the_apps_rules(day: Path) -> None:
     assert read.observations == (
         Observation(ms(ROWS[0]["ts"]), None),
         Observation(
-            ms(ROWS[1]["ts"]), Context("code", "app.py - verdi - Visual Studio Code", None)
+            ms(ROWS[1]["ts"]), Context("code.exe", "app.py - verdi - Visual Studio Code", None)
         ),
-        Observation(ms(ROWS[2]["ts"]), Context("vivaldi", "Banca Rossi", "bancarossi.it/conto")),
+        Observation(
+            ms(ROWS[2]["ts"]), Context("vivaldi.exe", "Banca Rossi", "bancarossi.it/conto")
+        ),
         Observation(ms(ROWS[3]["ts"]), None),
-        Observation(ms(ROWS[4]["ts"]), Context("chrome", "Nuova scheda", None)),
-        Observation(ms(ROWS[5]["ts"]), Context("outlook", "Posta in arrivo - Outlook", None)),
+        Observation(ms(ROWS[4]["ts"]), Context("chrome.exe", "Nuova scheda", None)),
+        Observation(ms(ROWS[5]["ts"]), Context("outlook.exe", "Posta in arrivo - Outlook", None)),
         Observation(ms(ROWS[6]["ts"]), None),
     )
     assert read.end == ms(ROWS[-1]["ts"])
@@ -116,12 +118,12 @@ def test_the_day_becomes_a_copy_of_the_log(day: Path, tmp_path: Path) -> None:
     capture.convert(capture.read(day), reminders, FakeEngine(), copy)
     log = snapshot.read(copy)
     assert [evaluation.context.app for evaluation in log.evaluations] == [
-        "code",
-        "vivaldi",
-        "chrome",
-        "outlook",
+        "code.exe",
+        "vivaldi.exe",
+        "chrome.exe",
+        "outlook.exe",
     ]
-    assert [alert.context.app for alert in log.alerts] == ["vivaldi"]
+    assert [alert.context.app for alert in log.alerts] == ["vivaldi.exe"]
     with pytest.raises(HarnessError, match="exists already"):
         capture.convert(capture.read(day), reminders, FakeEngine(), copy)
 

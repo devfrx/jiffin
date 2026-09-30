@@ -126,7 +126,7 @@ def scene(monkeypatch: pytest.MonkeyPatch) -> Scene:
 def test_an_app_is_observed_with_its_normalized_title_and_the_time(scene: Scene) -> None:
     scene.foreground.refresh()
     assert scene.observations == [
-        Observation(START, Context("notepad", "appunti.txt - Blocco note", None))
+        Observation(START, Context("notepad.exe", "appunti.txt - Blocco note", None))
     ]
 
 
@@ -137,20 +137,20 @@ def test_only_a_change_of_context_is_sent(scene: Scene) -> None:
     scene.clock.advance(1_000)
     scene.rename(NOTEPAD, "lettera.txt - Blocco note")
     assert [observation.at for observation in scene.observations] == [START, START + 2_000]
-    assert scene.contexts[-1] == Context("notepad", "lettera.txt - Blocco note", None)
+    assert scene.contexts[-1] == Context("notepad.exe", "lettera.txt - Blocco note", None)
 
 
 def test_a_browser_tab_is_observed_with_its_address(scene: Scene) -> None:
     scene.switch(VIVALDI)
-    assert scene.contexts == [Context("vivaldi", "Fatture", "fatture.example.it/elenco")]
+    assert scene.contexts == [Context("vivaldi.exe", "Fatture", "fatture.example.it/elenco")]
 
 
 @pytest.mark.parametrize(
     ("reading", "context"),
     [
-        (Reading(Outcome.TYPING), Context("vivaldi", "Fatture", None)),
-        (Reading(Outcome.FAILED), Context("vivaldi", "Fatture", None)),
-        (Reading(Outcome.ADDRESS, None), Context("vivaldi", "Fatture", None)),
+        (Reading(Outcome.TYPING), Context("vivaldi.exe", "Fatture", None)),
+        (Reading(Outcome.FAILED), Context("vivaldi.exe", "Fatture", None)),
+        (Reading(Outcome.ADDRESS, None), Context("vivaldi.exe", "Fatture", None)),
         (Reading(Outcome.PRIVATE), None),
         (Reading(Outcome.UNSURE), None),
     ],
@@ -169,11 +169,11 @@ def test_nothing_in_front_jiffin_and_unknown_programs_are_not_contexts(scene: Sc
     for window in (None, NOTEPAD, JIFFIN, NOTEPAD, SYSTEM):
         scene.switch(window)
     assert scene.contexts == [
-        Context("notepad", "appunti.txt - Blocco note", None),
+        Context("notepad.exe", "appunti.txt - Blocco note", None),
         None,
-        Context("notepad", "appunti.txt - Blocco note", None),
+        Context("notepad.exe", "appunti.txt - Blocco note", None),
         None,
-        Context("notepad", "appunti.txt - Blocco note", None),
+        Context("notepad.exe", "appunti.txt - Blocco note", None),
         None,
     ]
 
@@ -212,7 +212,7 @@ def test_a_failure_while_reading_is_logged_and_the_hook_goes_on(
         scene.switch(NOTEPAD)
     assert "the foreground could not be read" in caplog.text
     scene.switch(VIVALDI)
-    assert scene.contexts == [Context("vivaldi", "Fatture", "fatture.example.it/elenco")]
+    assert scene.contexts == [Context("vivaldi.exe", "Fatture", "fatture.example.it/elenco")]
 
 
 def test_only_the_tab_windows_of_a_browser_count_for_its_address(scene: Scene) -> None:
@@ -225,7 +225,7 @@ def test_only_the_tab_windows_of_a_browser_count_for_its_address(scene: Scene) -
         scene.switch(VIVALDI)
         scene.switch(NOTEPAD)
         scene.clock.advance(UNREADABLE_MS // (UNREADABLE_FAILURES - 1))
-    assert scene.unreadable == [frozenset({"vivaldi"})]
+    assert scene.unreadable == [frozenset({"vivaldi.exe"})]
 
 
 def record(unreadable: Unreadable, clock: SimulatedClock, app: str, *readable: bool) -> None:
@@ -239,26 +239,26 @@ def test_an_address_is_unreadable_after_enough_failures_over_enough_time() -> No
     clock = SimulatedClock(START)
     changes: list[frozenset[str]] = []
     unreadable = Unreadable(clock, changes.append)
-    record(unreadable, clock, "vivaldi", *[False] * UNREADABLE_FAILURES)  # enough failures
+    record(unreadable, clock, "vivaldi.exe", *[False] * UNREADABLE_FAILURES)  # enough failures
     assert changes == []  # but only 4 minutes
     clock.advance(UNREADABLE_MS)
-    record(unreadable, clock, "vivaldi", False)
-    assert changes == [frozenset({"vivaldi"})]
-    record(unreadable, clock, "chrome", False)
+    record(unreadable, clock, "vivaldi.exe", False)
+    assert changes == [frozenset({"vivaldi.exe"})]
+    record(unreadable, clock, "chrome.exe", False)
     clock.advance(2 * UNREADABLE_MS)
-    record(unreadable, clock, "chrome", False)  # enough time, but two failures
-    assert changes == [frozenset({"vivaldi"})]
-    record(unreadable, clock, "vivaldi", True)
-    assert changes == [frozenset({"vivaldi"}), frozenset()]
+    record(unreadable, clock, "chrome.exe", False)  # enough time, but two failures
+    assert changes == [frozenset({"vivaldi.exe"})]
+    record(unreadable, clock, "vivaldi.exe", True)
+    assert changes == [frozenset({"vivaldi.exe"}), frozenset()]
 
 
 def test_a_read_in_between_starts_the_count_again() -> None:
     clock = SimulatedClock(START)
     changes: list[frozenset[str]] = []
     unreadable = Unreadable(clock, changes.append)
-    record(unreadable, clock, "brave", *[False] * (UNREADABLE_FAILURES - 1), True)
+    record(unreadable, clock, "brave.exe", *[False] * (UNREADABLE_FAILURES - 1), True)
     clock.advance(UNREADABLE_MS)
-    record(unreadable, clock, "brave", False)
+    record(unreadable, clock, "brave.exe", False)
     assert changes == []
 
 

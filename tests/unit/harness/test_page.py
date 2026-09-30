@@ -17,9 +17,9 @@ ICONS = Revision(10, 1, 1, "quando apro Figma", "esportare le icone")
 PAIRS = {
     pair.key: pair
     for pair in (
-        Pair(Context("figma", "<script>alert(1)</script>", None), ICONS),
-        Pair(Context("vivaldi", "Banca Rossi", "bancarossi.it"), ICONS),
-        Pair(Context("outlook", "Posta in arrivo", None), ICONS),
+        Pair(Context("figma.exe", "<script>alert(1)</script>", None), ICONS),
+        Pair(Context("vivaldi.exe", "Banca Rossi", "bancarossi.it"), ICONS),
+        Pair(Context("outlook.exe", "Posta in arrivo", None), ICONS),
     )
 }
 SCRIPT, BANK, MAIL = PAIRS

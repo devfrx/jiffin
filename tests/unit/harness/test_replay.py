@@ -34,7 +34,7 @@ D = {
     ("Posta in arrivo - Outlook", POSTA[0]): 1.2,
     ("Offerte treni", PAUSA[0]): 0.9,
 }
-FIGMA = Context("figma", "Icone - Figma", None)
+FIGMA = Context("figma.exe", "Icone - Figma", None)
 
 
 class FakeEngine:
@@ -216,7 +216,7 @@ def test_recorded_scores_fail_where_the_log_did(recorded: tuple[Log, days.Day]) 
     clock.advance(judged.at - clock.now())
     assert scores.judge(judged.context, {1: statement}) == {1: judged.candidates[0].d}
     with pytest.raises(ModelError, match="never judged"):
-        scores.judge(Context("excel", "Budget", None), {1: statement})
+        scores.judge(Context("excel.exe", "Budget", None), {1: statement})
     failed = next(e for e in day.evaluations if e.failed)
     clock.advance(failed.at - clock.now())
     with pytest.raises(ModelError, match="as the log recorded"):

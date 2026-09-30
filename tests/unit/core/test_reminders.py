@@ -28,9 +28,9 @@ from jiffin.core.reminders import HOUR_MS, MINUTE_MS, THRESHOLD, Reminders, Snoo
 
 START = 1_790_000_000_000  # 2026-09-21, in UTC milliseconds
 BUILD = EngineBuild(1, "0.1.0", "b11081", "79de5cb8", judge_prompt=1, rewrite_prompt=2)
-FIGMA = Context("figma", "Icone - Figma", None)
-BANK = Context("vivaldi", "Banca Rossi", "bancarossi.it")
-ROSSI = Context("code", "changelog.md - rossi", None)
+FIGMA = Context("figma.exe", "Icone - Figma", None)
+BANK = Context("vivaldi.exe", "Banca Rossi", "bancarossi.it")
+ROSSI = Context("code.exe", "changelog.md - rossi", None)
 
 
 def english(condition: str) -> str:
@@ -428,7 +428,7 @@ def test_a_snooze_that_ends_elsewhere_waits_for_a_true_context() -> None:
 def test_not_here_silences_the_reminder_in_that_exact_context() -> None:
     scene = Scene()
     reminder = scene.create("quando lavoro al progetto Rossi")
-    report = Context("code", "report.md - rossi", None)
+    report = Context("code.exe", "report.md - rossi", None)
     scene.model.says(ROSSI, "quando lavoro al progetto Rossi")
     scene.model.says(report, "quando lavoro al progetto Rossi")
     scene.stay(ROSSI)

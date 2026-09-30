@@ -12,9 +12,9 @@ from jiffin.store.store import Log
 
 T0 = 1_791_194_400_000  # 2026-10-05 10:00 UTC
 BUILD = EngineBuild(1, "0.1.0", "b11081", "79de5cb8", 1, 2)
-FIGMA = Context("figma", "Icone - Figma", None)
-BANK = Context("vivaldi", "Banca Rossi", "bancarossi.it")
-MAIL = Context("outlook", "Posta in arrivo", None)
+FIGMA = Context("figma.exe", "Icone - Figma", None)
+BANK = Context("vivaldi.exe", "Banca Rossi", "bancarossi.it")
+MAIL = Context("outlook.exe", "Posta in arrivo", None)
 ICONS = Revision(10, 1, 1, "quando apro Figma", "esportare le icone", "The user has Figma.", BUILD)
 RENT = Revision(20, 2, 1, "se sono sul sito della banca", "pagare l'affitto", "The bank.", BUILD)
 REVISIONS = {10: ICONS, 20: RENT}
@@ -90,9 +90,9 @@ def test_pairs_are_every_judged_context_and_reminder_once() -> None:
 
 
 def test_a_key_depends_on_the_texts_only() -> None:
-    same = days.key(Context("figma", "Icone - Figma", None), "quando apro Figma")
+    same = days.key(Context("figma.exe", "Icone - Figma", None), "quando apro Figma")
     assert days.key(FIGMA, ICONS.condition) == same
-    assert days.key(Context("figma", "Icone - Figma", ""), "quando apro Figma") != same
+    assert days.key(Context("figma.exe", "Icone - Figma", ""), "quando apro Figma") != same
     assert days.key(FIGMA, "quando apro Sketch") != same
 
 

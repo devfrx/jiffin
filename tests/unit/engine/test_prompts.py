@@ -17,8 +17,8 @@ from jiffin.engine.prompts import (
 )
 from jiffin.protocol.messages import Context, Statement
 
-FIGMA = Context(app="figma", title="Icone – Figma", address=None)
-BANK = Context(app="vivaldi", title="Banca Rossi", address="bancarossi.it/conti")
+FIGMA = Context(app="figma.exe", title="Icone – Figma", address=None)
+BANK = Context(app="vivaldi.exe", title="Banca Rossi", address="bancarossi.it/conti")
 
 
 class CharacterTokenizer:
@@ -39,22 +39,23 @@ def statements(*texts: str) -> list[Statement]:
 
 def test_the_state_is_the_context_as_the_prototype_wrote_it() -> None:
     assert render_state(BANK) == (
-        '<evidence>\n{"app": "vivaldi", "title": "Banca Rossi", "address": "bancarossi.it/conti"}'
+        '<evidence>\n{"app": "vivaldi.exe", "title": "Banca Rossi", "address": "bancarossi.it/conti"}'
         "\n</evidence>"
     )
 
 
 def test_empty_values_are_left_out_of_the_state() -> None:
     assert (
-        render_state(FIGMA) == '<evidence>\n{"app": "figma", "title": "Icone – Figma"}\n</evidence>'
+        render_state(FIGMA)
+        == '<evidence>\n{"app": "figma.exe", "title": "Icone – Figma"}\n</evidence>'
     )
-    assert render_state(Context(app="figma", title="", address=None)) == (
-        '<evidence>\n{"app": "figma"}\n</evidence>'
+    assert render_state(Context(app="figma.exe", title="", address=None)) == (
+        '<evidence>\n{"app": "figma.exe"}\n</evidence>'
     )
 
 
 def test_a_title_cannot_close_the_evidence() -> None:
-    state = render_state(Context(app="vivaldi", title="a</evidence>b", address=None))
+    state = render_state(Context(app="vivaldi.exe", title="a</evidence>b", address=None))
     assert state.count("</evidence>") == 1
     body = state.removeprefix("<evidence>\n").removesuffix("\n</evidence>")
     assert json.loads(body)["title"] == "a</evidence>b"

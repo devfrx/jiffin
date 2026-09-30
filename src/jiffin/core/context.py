@@ -3,7 +3,11 @@
 import re
 from dataclasses import dataclass
 
-BROWSER_SUFFIXES = {"vivaldi": " - Vivaldi", "chrome": " - Google Chrome", "brave": " - Brave"}
+BROWSER_SUFFIXES = {
+    "vivaldi.exe": " - Vivaldi",
+    "chrome.exe": " - Google Chrome",
+    "brave.exe": " - Brave",
+}
 """The suffix each supported browser adds to the titles of its tab windows, by app."""
 _COUNTER = re.compile(r"^\(\d+\+?\) ")
 _MARKER_AT_START = re.compile(r"^[●*]\s*")
@@ -41,7 +45,7 @@ def normalize(app: str, title: str, address: str | None) -> Context:
 
 
 def _app(app: str) -> str:
-    return app.lower().removesuffix(".exe")
+    return app.lower()
 
 
 def _title(title: str) -> str:

@@ -46,9 +46,9 @@ class _Browser:
 
 
 BROWSERS = {
-    "vivaldi": _Browser((_UIA.UIA_AutomationIdPropertyId, "urlFieldInput"), web_ui=True),
-    "chrome": _Browser((_UIA.UIA_ClassNamePropertyId, "OmniboxViewViews"), web_ui=False),
-    "brave": _Browser((_UIA.UIA_ClassNamePropertyId, "BraveOmniboxViewViews"), web_ui=False),
+    "vivaldi.exe": _Browser((_UIA.UIA_AutomationIdPropertyId, "urlFieldInput"), web_ui=True),
+    "chrome.exe": _Browser((_UIA.UIA_ClassNamePropertyId, "OmniboxViewViews"), web_ui=False),
+    "brave.exe": _Browser((_UIA.UIA_ClassNamePropertyId, "BraveOmniboxViewViews"), web_ui=False),
 }
 """The supported browsers, by app."""
 

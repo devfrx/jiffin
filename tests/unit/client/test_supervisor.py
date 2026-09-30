@@ -23,7 +23,7 @@ FAKE_ENGINE = [sys.executable, str(Path(__file__).with_name("fake_engine.py"))]
 START = 1_790_000_000_000  # 2026-09-21, in UTC milliseconds
 HOUR_MS = 3_600_000
 SHA256 = "79de5cb8dbfd1a1f5cb3037252251594352841fe5e3dc1ae8cead053010fcd54"
-FIGMA = Context("figma", "Icone - Figma", None)
+FIGMA = Context("figma.exe", "Icone - Figma", None)
 ICONS = "The user is designing icons."
 
 
@@ -244,7 +244,7 @@ def test_an_error_answer_fails_only_its_call(scene: Scene) -> None:
 # Windows titles are UTF-16 and may end halfway through an emoji: a lone surrogate.
 def test_a_text_the_engine_cannot_read_fails_only_its_call(scene: Scene) -> None:
     with pytest.raises(ModelError):
-        scene.supervisor.judge(Context("figma", "Icone \ud83d", None), {1: ICONS})
+        scene.supervisor.judge(Context("figma.exe", "Icone \ud83d", None), {1: ICONS})
     assert scene.status == Status(State.READY)
     assert scene.supervisor.rewrite("quando apro Figma") == "The user: quando apro Figma."
 

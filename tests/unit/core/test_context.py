@@ -5,9 +5,14 @@ from jiffin.core.context import Context, normalize
 
 @pytest.mark.parametrize(
     ("raw", "app"),
-    [("Code.exe", "code"), ("vivaldi.exe", "vivaldi"), ("WINWORD.EXE", "winword"), ("olk", "olk")],
+    [
+        ("Code.exe", "code.exe"),
+        ("vivaldi.exe", "vivaldi.exe"),
+        ("WINWORD.EXE", "winword.exe"),
+        ("olk", "olk"),
+    ],
 )
-def test_app_is_the_lowercase_executable_name(raw: str, app: str) -> None:
+def test_app_is_the_lowercase_executable_name_with_its_extension(raw: str, app: str) -> None:
     assert normalize(raw, "", None).app == app
 
 
@@ -50,12 +55,12 @@ def test_title_normalization(raw: str, title: str) -> None:
     ],
 )
 def test_address_normalization(raw: str | None, address: str | None) -> None:
-    assert normalize("vivaldi", "", raw).address == address
+    assert normalize("vivaldi.exe", "", raw).address == address
 
 
 def test_chrome_shortened_address_and_vivaldi_full_address_give_the_same_key() -> None:
-    chrome = normalize("chrome", "Progetto Rossi", "github.com/rossi/app")
-    vivaldi = normalize("vivaldi", "Progetto Rossi", "https://www.github.com/rossi/app/")
+    chrome = normalize("chrome.exe", "Progetto Rossi", "github.com/rossi/app")
+    vivaldi = normalize("vivaldi.exe", "Progetto Rossi", "https://www.github.com/rossi/app/")
     assert chrome.address == vivaldi.address == "github.com/rossi/app"
 
 
@@ -68,5 +73,5 @@ def test_contexts_that_normalize_alike_are_one_key() -> None:
 
 def test_without_an_address_the_context_is_app_and_title() -> None:
     unreadable = normalize("chrome.exe", "Progetto Rossi - Google Chrome", None)
-    assert unreadable == Context("chrome", "Progetto Rossi", None)
+    assert unreadable == Context("chrome.exe", "Progetto Rossi", None)
     assert unreadable != normalize("chrome.exe", "Progetto Rossi", "github.com/rossi")

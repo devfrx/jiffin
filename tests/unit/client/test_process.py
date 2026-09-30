@@ -31,7 +31,7 @@ COMMAND = [sys.executable, str(FAKE_ENGINE)]
 SETTINGS = EngineSettings(
     context_per_question=2048, micro_batch=16, load_mode="direct_io", kv_cache="f16"
 )
-FIGMA = Context(app="figma", title="Icone - Figma", address=None)
+FIGMA = Context(app="figma.exe", title="Icone - Figma", address=None)
 
 
 @pytest.fixture

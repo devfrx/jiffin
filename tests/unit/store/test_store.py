@@ -29,8 +29,8 @@ from jiffin.store.store import RETENTION_MS, Store
 NOW = 1_790_000_000_000
 DAY = 24 * 60 * 60 * 1000
 BUILD = EngineBuild(1, "0.1.0", "b11081", "79de5cb8", judge_prompt=1, rewrite_prompt=2)
-FIGMA = Context("figma", "Icone - Figma", None)
-BANK = Context("vivaldi", "Banca Rossi", "bancarossi.it")
+FIGMA = Context("figma.exe", "Icone - Figma", None)
+BANK = Context("vivaldi.exe", "Banca Rossi", "bancarossi.it")
 
 
 def reminder(reminder_id: int, condition: str = "quando apro Figma") -> Reminder:

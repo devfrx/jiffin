@@ -88,10 +88,10 @@ def labelled(tmp_path: Path) -> sample.Sample:
 
 def test_the_sample_is_read_as_the_app_sees_contexts(labelled: sample.Sample) -> None:
     assert labelled.contexts == (
-        Context("code", "changelog.md - rossi - Visual Studio Code", None),
-        Context("vivaldi", "Banca Rossi", "bancarossi.it/conto"),
-        Context("vivaldi", "Nuova scheda", None),  # typing in the bar: no address
-        Context("outlook", "Posta in arrivo", None),  # an address only in the browsers
+        Context("code.exe", "changelog.md - rossi - Visual Studio Code", None),
+        Context("vivaldi.exe", "Banca Rossi", "bancarossi.it/conto"),
+        Context("vivaldi.exe", "Nuova scheda", None),  # typing in the bar: no address
+        Context("outlook.exe", "Posta in arrivo", None),  # an address only in the browsers
     )
 
 
