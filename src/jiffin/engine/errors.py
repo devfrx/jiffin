@@ -18,10 +18,6 @@ class EngineError(Exception):
         return Error.of(self.code, str(self), retry=self.retry)
 
 
-class MethodNotFound(EngineError):
-    code = ErrorCode.METHOD_NOT_FOUND
-
-
 class NotInitialized(EngineError):
     code = ErrorCode.NOT_INITIALIZED
 

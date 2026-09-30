@@ -11,7 +11,7 @@ from typing import IO, Any, Protocol
 
 from jiffin.engine import llama_release, prompts
 from jiffin.engine.backend_llama import LlamaBackend
-from jiffin.engine.errors import EngineError, MethodNotFound, NotInitialized, ProtocolMismatch
+from jiffin.engine.errors import EngineError, NotInitialized, ProtocolMismatch
 from jiffin.protocol.errors import Error, ErrorCode, ProtocolError
 from jiffin.protocol.framing import read_line, write_message
 from jiffin.protocol.jsonrpc import ErrorResponse, SuccessResponse, parse_request
@@ -24,6 +24,8 @@ from jiffin.protocol.messages import (
     JudgeParams,
     JudgeResult,
     PromptVersions,
+    RewriteParams,
+    RewriteResult,
     Score,
     ShutdownParams,
     Statement,
@@ -48,6 +50,8 @@ class Backend(Protocol):
     def free_vram_bytes(self) -> int: ...
 
     def judge(self, context: Context, statements: Sequence[Statement]) -> dict[int, float]: ...
+
+    def rewrite(self, condition: str) -> str: ...
 
     def close(self) -> None: ...
 
@@ -87,10 +91,11 @@ class Engine:
             return self._initialize(params)
         if isinstance(params, JudgeParams):
             return self._judge(params, received)
-        if isinstance(params, ShutdownParams):
-            self.close()
-            return None
-        raise MethodNotFound("rewrite is not available in this engine yet")
+        if isinstance(params, RewriteParams):
+            return self._rewrite(params, received)
+        assert isinstance(params, ShutdownParams)  # parse_request knows no other method
+        self.close()
+        return None
 
     def _initialize(self, params: InitializeParams) -> InitializeResult:
         if params.protocol != PROTOCOL_VERSION:
@@ -115,13 +120,24 @@ class Engine:
         )
 
     def _judge(self, params: JudgeParams, received: float) -> JudgeResult:
-        if self._backend is None:
-            raise NotInitialized("judge needs a model: send initialize first")
-        d = self._backend.judge(params.context, params.statements)
+        d = self._loaded("judge").judge(params.context, params.statements)
         return JudgeResult(
             scores=[Score(id=statement.id, d=d[statement.id]) for statement in params.statements],
             timings=Timings(total_seconds=time.perf_counter() - received),
         )
+
+    def _rewrite(self, params: RewriteParams, received: float) -> RewriteResult:
+        statement = self._loaded("rewrite").rewrite(params.condition)
+        return RewriteResult(
+            statement=statement,
+            prompt_version=prompts.REWRITE_VERSION,
+            timings=Timings(total_seconds=time.perf_counter() - received),
+        )
+
+    def _loaded(self, method: str) -> Backend:
+        if self._backend is None:
+            raise NotInitialized(f"{method} needs a model: send initialize first")
+        return self._backend
 
 
 def serve(requests: IO[bytes], responses: IO[bytes], engine: Engine) -> None:

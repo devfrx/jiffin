@@ -15,6 +15,7 @@ from jiffin.protocol.messages import (
     INITIALIZE,
     JUDGE,
     PROTOCOL_VERSION,
+    REWRITE,
     SHUTDOWN,
     Context,
     EngineSettings,
@@ -25,6 +26,7 @@ from jiffin.protocol.messages import (
     Method,
     PromptVersions,
     RewriteParams,
+    RewriteResult,
     ShutdownParams,
     Statement,
     Strict,
@@ -52,6 +54,10 @@ class FakeBackend:
 
     def judge(self, context: Context, statements: Sequence[Statement]) -> dict[int, float]:
         return {statement.id: statement.id / 2 for statement in statements}
+
+    def rewrite(self, condition: str) -> str:
+        assert condition == "quando apro Figma"
+        return "The user has opened Figma."
 
     def close(self) -> None:
         self.closed = True
@@ -162,12 +168,20 @@ def test_a_failure_inside_judge_is_an_internal_error_and_the_engine_goes_on() ->
     assert error_of(again) == ErrorCode.INTERNAL_ERROR
 
 
-def test_rewrite_is_not_available_yet() -> None:
+def test_rewrite_returns_the_statement_and_its_prompt_version() -> None:
     engine = Engine(Loader())
     ask(engine, INITIALIZE, initialize())
-    line = Request(id=2, method="rewrite", params=RewriteParams(condition="quando apro Figma"))
-    response = engine.answer(line.model_dump_json().encode(), received=0.0)
-    assert error_of(response) == ErrorCode.METHOD_NOT_FOUND
+    response = ask(engine, REWRITE, RewriteParams(condition="quando apro Figma"), 2)
+    assert isinstance(response, SuccessResponse)
+    assert isinstance(response.result, RewriteResult)
+    assert response.result.statement == "The user has opened Figma."
+    assert response.result.prompt_version == 2
+    assert response.result.timings.total_seconds >= 0
+
+
+def test_rewrite_needs_initialize_first() -> None:
+    response = ask(Engine(Loader()), REWRITE, RewriteParams(condition="quando apro Figma"))
+    assert error_of(response) == ErrorCode.NOT_INITIALIZED
 
 
 def test_shutdown_releases_the_model() -> None:
