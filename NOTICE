@@ -1,0 +1,11 @@
+Jiffin
+Copyright 2026 devfrx
+
+This product includes software derived from Rizzo Flow
+(https://github.com/Rizzo-AI-Academy/rizzo-flow, commit b9ba007e), licensed under
+the Apache License, Version 2.0, whose NOTICE file begins:
+
+  Rizzo Flow
+  Copyright 2026 Simone Rizzo — Rizzo AI Academy (https://www.rizzoaiacademy.com)
+
+The derived files are in src/jiffin/engine; the head of each one says what changed.

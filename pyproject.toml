@@ -6,6 +6,7 @@ readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.13"
 dependencies = [
+    "jinja2>=3.1.6",
     "pydantic>=2.13.5",
     "pyside6-essentials>=6.11.2",
 ]
@@ -42,7 +43,7 @@ line-length = 100
 [tool.mypy]
 strict = true
 plugins = ["pydantic.mypy"]
-files = ["src", "tests"]
+files = ["src", "tests", "scripts"]
 
 [tool.pytest]
 strict = true
