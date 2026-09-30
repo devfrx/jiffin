@@ -16,9 +16,9 @@ from jiffin.store.store import Store
 
 T0 = 1_791_194_400_000  # 2026-10-05 10:00 UTC
 BUILD = EngineBuild(1, "0.1.0", "b11081", "79de5cb8", 1, 2)
-FIGMA = Context("figma", "Icone <nuove> - Figma", None)
-BANK = Context("vivaldi", "Banca Rossi", "bancarossi.it")
-MAIL = Context("outlook", "Posta in arrivo", None)
+FIGMA = Context("figma.exe", "Icone <nuove> - Figma", None)
+BANK = Context("vivaldi.exe", "Banca Rossi", "bancarossi.it")
+MAIL = Context("outlook.exe", "Posta in arrivo", None)
 ICONS, RENT, POST = "quando apro Figma", "se sono sul sito della banca", "quando leggo la posta"
 D = {(FIGMA, ICONS): 2.5, (BANK, RENT): 0.99, (MAIL, POST): 0.98}
 

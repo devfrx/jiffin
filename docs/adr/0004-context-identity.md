@@ -1,6 +1,6 @@
 # ADR-0004: Define a context as app, window title and tab address
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR-0018](0018-keep-exe-in-the-app-name.md) (the app keeps `.exe`)
 - **Date:** 2026-09-29
 - **Deciders:** devfrx
 - **Sources:** tickets [#11](https://github.com/devfrx/jiffin/issues/11) (context), [#15](https://github.com/devfrx/jiffin/issues/15) (cache expiry) and [#17](https://github.com/devfrx/jiffin/issues/17) (tab address)
@@ -33,8 +33,9 @@ contexts evaluated with a 20 s debounce and the cache):
 
 **Signals**, read from the foreground window:
 
-- **app**: the executable name, lowercase, without `.exe`; for UWP apps the
-  real process, not `ApplicationFrameHost`;
+- **app**: the executable name, lowercase, with `.exe`
+  ([ADR-0018](0018-keep-exe-in-the-app-name.md)); for UWP apps the real
+  process, not `ApplicationFrameHost`;
 - **title**: the window title;
 - **address**: only in Vivaldi, Chrome and Brave, the text of the address bar
   ([ADR-0005](0005-browser-address-ui-automation.md)).

@@ -35,7 +35,7 @@ from jiffin.protocol.messages import (
 SETTINGS = EngineSettings(
     context_per_question=2048, micro_batch=16, load_mode="direct_io", kv_cache="f16"
 )
-CONTEXT = Context(app="vivaldi", title="Banca Rossi", address="bancarossi.it")
+CONTEXT = Context(app="vivaldi.exe", title="Banca Rossi", address="bancarossi.it")
 STATEMENTS = [
     Statement(id=4, text="The user is on the bank's website."),
     Statement(id=2, text="The user is writing an email."),

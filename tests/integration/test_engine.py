@@ -68,7 +68,7 @@ PARITY_MAX, PARITY_MEAN = 0.5, 0.1
 """Largest and mean |Δd| allowed; measured on 2026-09-30: 0.371 and 0.082."""
 
 CONTEXT = Context(
-    app="vivaldi",
+    app="vivaldi.exe",
     title="CHANGELOG.md at main · rossi/gestionale",
     address="github.com/rossi/gestionale/blob/main/CHANGELOG.md",
 )

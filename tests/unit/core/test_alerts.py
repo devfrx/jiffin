@@ -9,7 +9,7 @@ REVISION = Revision(1, 1, 1, "quando apro Figma", "esportare le icone", "The use
 
 
 def alert(alert_id: int) -> Alert:
-    return Alert(alert_id, alert_id, REVISION, 1, Context("figma", "Icone", None), 2.0, NOW)
+    return Alert(alert_id, alert_id, REVISION, 1, Context("figma.exe", "Icone", None), 2.0, NOW)
 
 
 def test_an_alert_is_shown_at_once_when_there_is_room() -> None:

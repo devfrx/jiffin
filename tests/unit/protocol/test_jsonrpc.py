@@ -57,7 +57,9 @@ CALLS: list[tuple[Method[Any, Any], Strict, Strict | None]] = [
         JUDGE,
         JudgeParams(
             context=Context(
-                app="vivaldi", title="Progetto Rossi – changelog", address="github.com/rossi/app"
+                app="vivaldi.exe",
+                title="Progetto Rossi – changelog",
+                address="github.com/rossi/app",
             ),
             statements=[
                 Statement(id=3, text="The user is working on the Rossi project."),

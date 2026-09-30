@@ -11,7 +11,7 @@ from jiffin.protocol.messages import (
     Timings,
 )
 
-CONTEXT = Context(app="code", title="changelog.md - rossi", address=None)
+CONTEXT = Context(app="code.exe", title="changelog.md - rossi", address=None)
 
 
 def test_statement_ids_are_unique() -> None:
@@ -56,9 +56,9 @@ def test_statements_take_exact_types(data: dict[str, object]) -> None:
 
 
 def test_a_context_may_have_no_address_but_not_an_empty_one() -> None:
-    assert Context(app="code", title="", address=None).address is None
+    assert Context(app="code.exe", title="", address=None).address is None
     with pytest.raises(ValidationError):
-        Context(app="code", title="", address="")
+        Context(app="code.exe", title="", address="")
 
 
 @pytest.mark.parametrize(
@@ -73,5 +73,5 @@ def test_engine_settings_take_known_values(change: dict[str, object]) -> None:
 
 def test_validation_errors_leave_the_input_out() -> None:
     with pytest.raises(ValidationError) as caught:
-        Context.model_validate({"app": "vivaldi", "title": ["Banca Rossi"], "address": None})
+        Context.model_validate({"app": "vivaldi.exe", "title": ["Banca Rossi"], "address": None})
     assert "Banca Rossi" not in str(caught.value)

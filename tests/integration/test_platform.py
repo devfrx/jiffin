@@ -146,7 +146,7 @@ class Browser:
 
 def installed(app: str) -> str | None:
     for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
-        key = rf"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\{app}.exe"
+        key = rf"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\{app}"
         try:
             return winreg.QueryValue(hive, key)
         except OSError:
@@ -235,7 +235,7 @@ def test_typing_in_the_bar_gives_no_address(pages: Pages, seen: Seen, browser: B
 
 @pytest.mark.benchmark
 def test_the_cpu_vivaldi_spends_on_the_reads(pages: Pages, tmp_path: Path) -> None:
-    browser = start("vivaldi", tmp_path)
+    browser = start("vivaldi.exe", tmp_path)
     try:
         browser.open(pages.url("ticking", every_ms=1_000))
         time.sleep(10)

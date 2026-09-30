@@ -14,7 +14,7 @@ record links the tickets it comes from.
 | [0001](0001-keep-data-and-inference-local.md) | Keep all data and inference on the user's machine | Accepted |
 | [0002](0002-apache-license-english-repository.md) | License the code under Apache-2.0 and write the repository in English | Accepted |
 | [0003](0003-acceptance-thresholds.md) | Accept the first version on a real working day, against fixed thresholds | Accepted |
-| [0004](0004-context-identity.md) | Define a context as app, window title and tab address | Accepted |
+| [0004](0004-context-identity.md) | Define a context as app, window title and tab address | Accepted; amended by [0018](0018-keep-exe-in-the-app-name.md) |
 | [0005](0005-browser-address-ui-automation.md) | Read the browser address with UI Automation | Accepted |
 | [0006](0006-judge-rizzo-flow-q4.md) | Judge conditions with Rizzo Flow 4B in Q4_K_M | Accepted |
 | [0007](0007-single-stage-pipeline.md) | Judge every active reminder in one stage, without retrieval | Accepted |
@@ -28,3 +28,4 @@ record links the tickets it comes from.
 | [0015](0015-package-pyinstaller-velopack.md) | Package with PyInstaller and Velopack, and download the model on first run | Accepted |
 | [0016](0016-quality-tooling.md) | Enforce quality with Ruff, mypy, pytest and import-linter, in pre-commit and Windows CI | Accepted |
 | [0017](0017-evaluation-harness-subpackage.md) | Ship the evaluation harness as a subpackage, outside the app bundle | Accepted |
+| [0018](0018-keep-exe-in-the-app-name.md) | Keep `.exe` in the app name the judge sees | Accepted |

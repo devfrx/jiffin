@@ -31,7 +31,7 @@ COLUMNS = (
     "battery_percent",
     "plugged",
 )
-BROWSERS = frozenset(f"{app}.exe" for app in BROWSER_SUFFIXES)
+BROWSERS = frozenset(BROWSER_SUFFIXES)
 
 
 @dataclass(frozen=True, slots=True)

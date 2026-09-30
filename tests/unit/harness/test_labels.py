@@ -15,9 +15,9 @@ ICONS = Revision(10, 1, 1, "quando apro Figma", "esportare le icone")
 PAIRS = {
     pair.key: pair
     for pair in (
-        Pair(Context("figma", "Icone - Figma", None), ICONS),
-        Pair(Context("vivaldi", "Banca Rossi", "bancarossi.it"), ICONS),
-        Pair(Context("outlook", "Posta in arrivo", None), ICONS),
+        Pair(Context("figma.exe", "Icone - Figma", None), ICONS),
+        Pair(Context("vivaldi.exe", "Banca Rossi", "bancarossi.it"), ICONS),
+        Pair(Context("outlook.exe", "Posta in arrivo", None), ICONS),
     )
 }
 FIGMA, BANK, MAIL = PAIRS
@@ -30,7 +30,7 @@ def test_the_pairs_are_written_with_their_texts(tmp_path: Path) -> None:
     assert path.name == "labels-2026-10-05.json"
     assert record["pairs"][1] == {
         "key": BANK,
-        "app": "vivaldi",
+        "app": "vivaldi.exe",
         "title": "Banca Rossi",
         "address": "bancarossi.it",
         "condition": "quando apro Figma",

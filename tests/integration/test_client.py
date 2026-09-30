@@ -30,7 +30,7 @@ MODEL = (
 )
 MODEL_SHA256 = model_file.MODEL.sha256
 CHANGELOG = Context(
-    "vivaldi",
+    "vivaldi.exe",
     "CHANGELOG.md at main · rossi/gestionale",
     "github.com/rossi/gestionale/blob/main/CHANGELOG.md",
 )

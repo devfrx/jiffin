@@ -57,7 +57,7 @@ def test_every_message_is_flushed() -> None:
 def test_unreadable_messages_are_not_written(title: str) -> None:
     stream = io.BytesIO()
     params = JudgeParams(
-        context=Context(app="code", title=title, address=None),
+        context=Context(app="code.exe", title=title, address=None),
         statements=[Statement(id=1, text="The user is working on the Rossi project.")],
     )
     with pytest.raises(ValueError):
