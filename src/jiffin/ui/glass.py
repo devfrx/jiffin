@@ -8,7 +8,9 @@ it solid again until it is recreated: once, a while after the last message of th
 change of the animation effects is only read again; other setting changes are not the look's.
 
 The creation window keeps Windows' own frame and title bar, and is active like any window: it
-only gets Mica under it, and its frame messages are left to Windows.
+gets Mica under it, and its frame messages are left to Windows. Its client area is erased to
+black, which DWM shows as the glass: Qt draws through DirectComposition and never paints the
+window's GDI surface, which shows white between Mica and the QML on each show otherwise.
 
 The filter sees every message of the interface thread; it reads the code first, and the rest
 of the message only for the few codes it handles.
@@ -39,7 +41,7 @@ class Glass(QAbstractNativeEventFilter):
         self._windows: set[int] = set()
         """Without a frame: the alerts."""
         self._framed: set[int] = set()
-        """With Windows' own frame: the creation window."""
+        """With Windows' own frame: the creation window, erased to black."""
         self._nudged: set[int] = set()
         self._recreate = False
         """The change that is settling changed the colours."""
@@ -78,6 +80,13 @@ class Glass(QAbstractNativeEventFilter):
             elif msg.wParam == win32.SPI_SETCLIENTAREAANIMATION:
                 self._changed(recreate=False)
             return False, 0
+        if code == win32.WM_ERASEBKGND:
+            msg = wintypes.MSG.from_address(address)
+            hwnd = msg.hWnd or 0
+            if hwnd not in self._framed:
+                return False, 0
+            win32.erase_to_glass(hwnd, msg.wParam)
+            return True, 1
         if code not in (win32.WM_NCCALCSIZE, win32.WM_NCACTIVATE):
             return False, 0
         msg = wintypes.MSG.from_address(address)

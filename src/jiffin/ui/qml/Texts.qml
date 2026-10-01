@@ -27,8 +27,9 @@ QtObject {
     readonly property string save: "Salva"
     readonly property string cancel: "Annulla"
 
-    // The sentence the two boxes make (#12): "Quando …, ti ricordo di …".
+    // The sentence the two boxes make (#12): "Quando …, ti ricordo di …". The full stop comes
+    // with the action: Italian puts none after an ellipsis.
     function preview(condition: string, action: string): string {
-        return (condition || "Quando …") + ", ti ricordo di " + (action || "…") + ".";
+        return (condition || "Quando …") + ", ti ricordo di " + (action ? action + "." : "…");
     }
 }

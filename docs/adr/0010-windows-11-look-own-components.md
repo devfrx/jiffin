@@ -72,6 +72,15 @@ The owner chose A. Building it in Qt Quick showed three problems:
 - A `{65536, 0, 0, 0}` margin and a nudge of the window after the first
   `show()`, from QWindowKit (Apache-2.0); whether they are needed is unproven.
 
+**Glass under a window with Windows' own frame** (verified on the creation
+window, [#43](https://github.com/devfrx/jiffin/issues/43)):
+
+- The client area is painted black on `WM_ERASEBKGND`, from the native event
+  filter: where a window whose frame extends into the client area is black,
+  DWM shows the backdrop. Otherwise the window's GDI surface, which Qt never
+  paints since it draws through DirectComposition, shows white between Mica
+  and the QML at every show; a nudge clears it only until the next show.
+
 **Windows settings** are read and followed live:
 
 | Setting | Change notification | Where to read it |

@@ -1,3 +1,4 @@
+import gc
 from collections.abc import Callable, Iterator
 from dataclasses import replace
 
@@ -116,11 +117,22 @@ class Screen:
         """The sentence under the boxes."""
         return self._item(
             lambda item: (
-                str(item.property("text") or "").endswith(".")
-                and item.inherits("QQuickText")
-                and ", ti ricordo di " in str(item.property("text"))
+                item.inherits("QQuickText") and ", ti ricordo di " in str(item.property("text"))
             )
         ).property("text")
+
+    def examples(self) -> set[str]:
+        """The examples the boxes show in grey."""
+        for item in items(self.window.contentItem()):
+            item.ensurePolished()
+        return {
+            str(item.property("text"))
+            for item in items(self.window.contentItem())
+            if item.isVisible()
+            and item.inherits("QQuickText")
+            and (box := item.parentItem()) is not None
+            and box.inherits("QQuickTextEdit")
+        }
 
     def _item(self, wanted: Callable[[QQuickItem], bool]) -> QQuickItem:
         # Layouts place what they show only when polished, before the next frame.
@@ -226,12 +238,19 @@ def test_salva_waits_for_both_boxes(screen: Screen) -> None:
 
 def test_the_sentence_under_the_boxes_follows_them(screen: Screen) -> None:
     screen.new()
-    assert screen.sentence() == "Quando …, ti ricordo di …."
+    assert screen.sentence() == "Quando …, ti ricordo di …"
     screen.type("quando apro  Figma")
-    assert screen.sentence() == "Quando apro Figma, ti ricordo di …."
+    assert screen.sentence() == "Quando apro Figma, ti ricordo di …"
     screen.press(Qt.Key.Key_Tab)
     screen.type("esportare le icone!")
     assert screen.sentence() == "Quando apro Figma, ti ricordo di esportare le icone."
+
+
+def test_an_empty_box_shows_an_example(screen: Screen) -> None:
+    screen.new()
+    assert screen.examples() == {"quando lavoro al progetto Rossi", "aggiornare il changelog"}
+    screen.type("quando apro Figma")
+    assert screen.examples() == {"aggiornare il changelog"}
 
 
 @pytest.mark.parametrize("close", ["Annulla", "Esc"])
@@ -281,6 +300,26 @@ def test_the_shortcut_again_keeps_the_reminder_being_written(screen: Screen) -> 
     screen.creation.cancel()
     screen.new()
     assert screen.text(WHEN) == ""
+
+
+def test_the_creation_goes_with_the_engine_and_no_binding_reads_it_gone(
+    qtbot: QtBot, dwm: list[tuple[object, ...]]
+) -> None:
+    """On quitting, Python lets go of the interface in any order: the creation stays until the
+    engine goes, and then none of its window's bindings reads it gone (a warning fails)."""
+    look = Look(Windows().read)
+    engine = QQmlEngine()
+    look.provide(engine)
+    creation = Creation(engine, Changes(), Glass(look))
+    creation.new()
+    gone: list[str] = []
+    creation.destroyed.connect(lambda: gone.append("creation"))
+    del creation
+    gc.collect()
+    assert gone == []
+    del engine
+    gc.collect()
+    assert gone == ["creation"]
 
 
 def test_the_shortcut_while_editing_starts_a_new_reminder(screen: Screen) -> None:

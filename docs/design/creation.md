@@ -34,8 +34,9 @@ stateDiagram-v2
     Editing --> Hidden : Salva, Annulla, Esc or close
 ```
 
-- Two boxes, "Quando" and "Ricordami di", and under them the sentence they
-  make: "Quando apro Figma, ti ricordo di esportare le icone." The user writes
+- Two boxes, "Quando" and "Ricordami di", each showing an example in grey
+  while empty, and under them the sentence they make: "Quando apro Figma, ti
+  ricordo di esportare le icone." The user writes
   the whole condition, "quando …" or "se …"
   ([ADR-0008](../adr/0008-rewrite-conditions-english-statements.md)), and the
   judge gets exactly that box, with its spaces tidied (#12).

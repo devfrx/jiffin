@@ -71,6 +71,19 @@ FocusScope {
                 box.nextItemInFocusChain(false).forceActiveFocus(Qt.BacktabFocusReason);
             }
 
+            // The template draws no placeholder. WinUI's shows while the box is empty, with the
+            // focus too.
+            Text {
+                x: box.leftPadding
+                y: box.topPadding
+                width: box.width - box.leftPadding - box.rightPadding
+                visible: box.length === 0 && box.preeditText.length === 0
+                text: box.placeholderText
+                color: box.placeholderTextColor
+                font: box.font
+                wrapMode: Text.Wrap
+            }
+
             background: Rectangle {
                 radius: 4
                 color: box.activeFocus ? Colors.controlFillInputActive : box.hovered ? Colors.controlFillHover : Colors.controlFill

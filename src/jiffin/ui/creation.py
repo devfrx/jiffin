@@ -43,7 +43,9 @@ class Creation(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
     first one the focus."""
 
     def __init__(self, engine: QQmlEngine, changes: Changes, glass: Glass) -> None:
-        super().__init__()
+        # The engine owns this object, and deletes it only once the window's bindings are
+        # dead: whatever Python lets go of first on quitting, none of them reads it gone.
+        super().__init__(engine)
         self._changes = changes
         self._reminder_id: int | None = None
         """The reminder being edited; None for a new one."""
