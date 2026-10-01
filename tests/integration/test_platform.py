@@ -107,6 +107,10 @@ class Browser:
             "--no-first-run",
             "--no-default-browser-check",
             "--disable-sync",
+            # Programs such as security suites register extensions for Chrome in the registry, and
+            # Vivaldi reads them too: a fresh profile installs them disabled, and Vivaldi says so
+            # in a dialog that takes the focus from the address bar (#62).
+            "--disable-extensions",
         ]
         self._profile = profile
         # The first window of a fresh Vivaldi shows its welcome, without the address bar.

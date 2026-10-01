@@ -13,7 +13,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from importlib import resources
 from typing import cast
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import SplitResult, parse_qs, urlsplit
 
 from jiffin.harness.labels import Labels
 
@@ -28,6 +28,8 @@ SECURITY_HEADERS = {
         "connect-src 'self'; img-src data:; base-uri 'none'; form-action 'none'"
     ),
 }
+BODY_LIMIT = 64 * 1024
+"""The longest body the page reads: an answer takes some 40 bytes."""
 
 
 class LabelServer(HTTPServer):
@@ -63,6 +65,10 @@ def serve(server: LabelServer, open_browser: bool = True) -> None:
 
 
 class _Handler(BaseHTTPRequestHandler):
+    timeout = 2
+    """Seconds a read or a write may wait: a browser sends its request at once. The page serves one
+    connection at a time, so a client that goes silent is dropped instead of holding up others."""
+
     def log_message(self, format: str, *args: object) -> None:
         pass  # the console is for whoever labels, not for the requests
 
@@ -70,12 +76,31 @@ class _Handler(BaseHTTPRequestHandler):
     def _server(self) -> LabelServer:
         return cast(LabelServer, self.server)
 
-    def _allowed(self) -> bool:
-        token = parse_qs(urlsplit(self.path).query).get("t", [""])[0]
+    def _target(self) -> SplitResult | None:
+        """The request's target, or None if it is no URL, as `http://[::1/` is not."""
+        try:
+            return urlsplit(self.path)
+        except ValueError:
+            return None
+
+    def _allowed(self, target: SplitResult) -> bool:
+        token = parse_qs(target.query).get("t", [""])[0]
         server = self._server
         return self.headers.get("Host") == server.host and hmac.compare_digest(
             token.encode(), server.token.encode()
         )
+
+    def _body(self) -> bytes | None:
+        """The whole body, or None if its length is not a number from 0 to `BODY_LIMIT`.
+
+        Read before any answer: closing a connection with part of the request unread resets it,
+        and on Windows the client then loses the answer. A body refused stays unread.
+        """
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            return None
+        return self.rfile.read(length) if 0 <= length <= BODY_LIMIT else None
 
     def _send(
         self, status: int, body: str, content_type: str = "text/plain; charset=utf-8"
@@ -90,9 +115,12 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self) -> None:
-        if not self._allowed():
+        target = self._target()
+        if target is None:
+            return self._send(400, "Invalid target")
+        if not self._allowed(target):
             return self._send(403, "Forbidden")
-        route = urlsplit(self.path).path
+        route = target.path
         if route == "/":
             page = resources.files("jiffin.harness") / "pages" / "label.html"
             return self._send(200, page.read_text(encoding="utf-8"), "text/html; charset=utf-8")
@@ -102,15 +130,21 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(404, "Not found")
 
     def do_POST(self) -> None:
-        if not self._allowed() or urlsplit(self.path).path != "/label":
+        body = self._body()
+        target = self._target()
+        if target is None:
+            return self._send(400, "Invalid target")
+        if not self._allowed(target) or target.path != "/label":
             return self._send(403, "Forbidden")
+        if body is None:
+            return self._send(400, f"Invalid length: up to {BODY_LIMIT} bytes")
         if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
             return self._send(415, "JSON only")
         try:
-            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
-            if body["key"] not in self._server.keys:
+            answer = json.loads(body)
+            if answer["key"] not in self._server.keys:
                 raise ValueError("a pair outside this page")
-            self._server.labels.answer(body["key"], body["relevant"])
+            self._server.labels.answer(answer["key"], answer["relevant"])
         except (ValueError, KeyError, TypeError) as error:
             return self._send(400, f"Invalid answer: {error}")
         self._send(200, '{"ok": true}', "application/json")
