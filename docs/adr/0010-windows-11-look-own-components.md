@@ -41,8 +41,8 @@ The owner chose A. Building it in Qt Quick showed three problems:
 
 **Materials.**
 
-- The alert and the tray list use the material chosen in the settings, one of
-  four; the default is B.
+- The alert, the creation window and the tray list use the material chosen in
+  the settings, one of four; the default is B.
 
   | | Material | Look |
   |---|---|---|
@@ -55,11 +55,16 @@ The owner chose A. Building it in Qt Quick showed three problems:
   `#2C2C2C` with luminosity 0.96 in dark, `#FCFCFC` with 0.85 in light. It
   started as an approximation at about 80%; the owner set it at 90% by eye,
   next to Windows' menus ([#42](https://github.com/devfrx/jiffin/issues/42)).
-- The creation window uses Mica.
+- The creation window is a card like the alert, without Windows' title bar.
+  The owner chose it on screen
+  ([#43](https://github.com/devfrx/jiffin/issues/43)) over Mica under
+  Windows' title bar, the first choice here, and over B under Windows' title
+  bar, whose caption DWM draws on the bare backdrop, without B's veil.
 - With Windows' transparency effects off, or in energy saver, surfaces are
   solid, and the glass comes back when they are on again.
 
-**Glass on a window that is never active** (verified):
+**Glass on a window that is never active** (verified), which the creation
+window uses too, so its glass stays while the user is in another app:
 
 - `WS_CAPTION` in the style, with `WM_NCCALCSIZE` returning 0: without a frame,
   DWM ignores the backdrop.
@@ -71,6 +76,15 @@ The owner chose A. Building it in Qt Quick showed three problems:
   is toggled.
 - A `{65536, 0, 0, 0}` margin and a nudge of the window after the first
   `show()`, from QWindowKit (Apache-2.0); whether they are needed is unproven.
+
+**Glass under a window with Windows' own frame** (verified on the first
+creation window, [#43](https://github.com/devfrx/jiffin/issues/43); no window
+keeps Windows' frame now): its client area has to be painted black on
+`WM_ERASEBKGND`, from the native event filter, since DWM shows the backdrop
+where a window whose frame extends into the client area is black. Otherwise
+the window's GDI surface, which Qt never paints since it draws through
+DirectComposition, shows white between the backdrop and the QML at every show;
+a nudge clears it only until the next show.
 
 **Windows settings** are read and followed live:
 

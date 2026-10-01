@@ -70,10 +70,13 @@ qt_log_level_fail = "WARNING"
 files = [
     "src/jiffin/ui/__main__.py",
     "src/jiffin/ui/alert.py",
+    "src/jiffin/ui/creation.py",
     "src/jiffin/ui/look.py",
     "src/jiffin/ui/qml/AlertWindow.qml",
     "src/jiffin/ui/qml/Colors.qml",
+    "src/jiffin/ui/qml/CreationWindow.qml",
     "src/jiffin/ui/qml/FluentButton.qml",
+    "src/jiffin/ui/qml/FluentTextBox.qml",
     "src/jiffin/ui/qml/Texts.qml",
     "src/jiffin/ui/qml/Typography.qml",
 ]

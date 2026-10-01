@@ -1,5 +1,5 @@
-"""Win32 for the interface: the glass under a window that is never active, and the Windows
-settings Qt does not expose (ADR-0010).
+"""Win32 for the interface: the glass under a window that is never active, the Windows settings
+Qt does not expose (ADR-0010), and the global shortcut, which Qt does not have (#43).
 
 Signatures are transcribed from the Windows SDK headers `winuser.h` and `dwmapi.h`.
 """
@@ -13,9 +13,14 @@ WM_SETTINGCHANGE = 0x001A
 WM_NCCALCSIZE = 0x0083
 WM_NCACTIVATE = 0x0086
 WM_THEMECHANGED = 0x031A
+WM_HOTKEY = 0x0312
 WM_DWMCOLORIZATIONCOLORCHANGED = 0x0320
 SPI_SETCLIENTAREAANIMATION = 0x1043
 """The wParam of the WM_SETTINGCHANGE that Windows' animation effects changed."""
+
+MOD_SHIFT = 0x0004
+MOD_WIN = 0x0008
+_MOD_NOREPEAT = 0x4000
 
 DWMSBT_NONE = 1
 DWMSBT_MAINWINDOW = 2
@@ -79,6 +84,8 @@ _USER32: dict[str, tuple[Any, list[Any]]] = {
         wintypes.BOOL,
         [wintypes.UINT, wintypes.UINT, ctypes.c_void_p, wintypes.UINT],
     ),
+    "RegisterHotKey": (wintypes.BOOL, [wintypes.HWND, ctypes.c_int, wintypes.UINT, wintypes.UINT]),
+    "UnregisterHotKey": (wintypes.BOOL, [wintypes.HWND, ctypes.c_int]),
 }
 _DWMAPI: dict[str, tuple[Any, list[Any]]] = {
     "DwmSetWindowAttribute": (
@@ -168,6 +175,19 @@ def animations() -> bool:
     if not _user32.SystemParametersInfoW(_SPI_GETCLIENTAREAANIMATION, 0, ctypes.byref(enabled), 0):
         return True
     return bool(enabled.value)
+
+
+def register_hotkey(hotkey_id: int, modifiers: int, key: int) -> int:
+    """Have Windows post WM_HOTKEY with `hotkey_id` to this thread whenever the keys are pressed,
+    whatever app has the focus; holding them down posts it once. Return 0, or Windows' error:
+    1409 when another app has the keys."""
+    if _user32.RegisterHotKey(None, hotkey_id, modifiers | _MOD_NOREPEAT, key):
+        return 0
+    return ctypes.get_last_error()
+
+
+def unregister_hotkey(hotkey_id: int) -> None:
+    _user32.UnregisterHotKey(None, hotkey_id)
 
 
 def _attribute(hwnd: int, attribute: int, value: int) -> None:

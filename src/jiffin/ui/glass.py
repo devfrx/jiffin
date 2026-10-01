@@ -1,8 +1,9 @@
-"""The glass under the alert windows, and the Windows messages that change the look (ADR-0010).
+"""The glass under the alerts and the creation window, and the Windows messages that change the
+look (ADR-0010).
 
 The recipe, verified with the prototype of #31: the window gets a frame and never shows it
 (WM_NCCALCSIZE answered with 0), and DWM is always told the frame is active (WM_NCACTIVATE
-passed as TRUE to DefWindowProcW, never to Qt), since the backdrop of a window that is never
+passed as TRUE to DefWindowProcW, never to Qt), since the backdrop of a window that is not
 active is solid otherwise. After a change of theme, accent or colours, DWM draws it solid again
 until it is recreated: once, a while after the last message of the change. A change of the
 animation effects is only read again; other setting changes are not the look's.

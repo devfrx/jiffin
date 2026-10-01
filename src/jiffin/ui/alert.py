@@ -13,6 +13,7 @@ from PySide6.QtCore import Property, QEnum, QObject, Signal, Slot
 from PySide6.QtQml import QmlElement, QmlUncreatable
 
 from jiffin.core.reminders import Snooze
+from jiffin.ui.words import sentence
 
 QML_IMPORT_NAME = "Jiffin"
 QML_IMPORT_MAJOR_VERSION = 1
@@ -76,8 +77,8 @@ class AlertSlot(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has
         assert self.free, "an alert is still in this slot"
         self._state = _State.SHOWN
         self._alert_id = alert_id
-        self._condition = _sentence(condition)
-        self._action = _sentence(action)
+        self._condition = sentence(condition)
+        self._action = sentence(action)
         self._panel = AlertSlot.Panel.BUTTONS
         self._hovered = False
         self.changed.emit()
@@ -177,9 +178,3 @@ class AlertSlot(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has
     def _leave(self) -> None:
         self._state = _State.LEAVING
         self.leaving.emit()
-
-
-def _sentence(text: str) -> str:
-    """The user's words, with a capital to start: "quando apro Figma" shows as "Quando apro…"."""
-    text = text.strip()
-    return text[:1].upper() + text[1:]
