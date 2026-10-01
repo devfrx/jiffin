@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jiffin — avviso nell'overlay</title>
+<!--
+  The alert of the overlay, as built in src/jiffin/ui/qml (ADR-0010, tickets #12, #25 and #42),
+  ported from the board "A — Parte di Windows: scelta" of the visual direction. Material B: the
+  glass with the veil of Windows' menus. Colours are those of Colors.qml; text and icons use
+  Windows 11's system fonts, Segoe UI Variable and Segoe Fluent Icons.
+-->
+<style>
+  :root {
+    --page: #d6d9de;
+  }
+  .light {
+    --desk: #ffffff;
+    --desk-side: #f3f3f3;
+    --stripe-a: #a259d9;
+    --stripe-b: #2f7dd1;
+    --stripe-c: #e08a3c;
+    --veil: rgba(252, 252, 252, 0.9);
+    --stroke: rgba(0, 0, 0, 0.059);
+    --shadow: 0 8px 16px rgba(0, 0, 0, 0.14);
+    --text-primary: rgba(0, 0, 0, 0.894);
+    --text-secondary: rgba(0, 0, 0, 0.62);
+    --text-on-accent: #ffffff;
+    --control-fill: rgba(255, 255, 255, 0.702);
+    --control-stroke: rgba(0, 0, 0, 0.059);
+    --control-edge: rgba(0, 0, 0, 0.161);
+    --accent: #005fb8;
+    --accent-stroke: rgba(255, 255, 255, 0.078);
+    --accent-edge: rgba(0, 0, 0, 0.4);
+  }
+  .dark {
+    --desk: #1f1f1f;
+    --desk-side: #181818;
+    --stripe-a: #c586c0;
+    --stripe-b: #4fc1ff;
+    --stripe-c: #ce9178;
+    --veil: rgba(44, 44, 44, 0.9);
+    --stroke: rgba(255, 255, 255, 0.071);
+    --shadow: 0 8px 16px rgba(0, 0, 0, 0.36);
+    --text-primary: #ffffff;
+    --text-secondary: rgba(255, 255, 255, 0.773);
+    --text-on-accent: #000000;
+    --control-fill: rgba(255, 255, 255, 0.059);
+    --control-stroke: rgba(255, 255, 255, 0.071);
+    --control-edge: rgba(255, 255, 255, 0.094);
+    --accent: #60cdff;
+    --accent-stroke: rgba(255, 255, 255, 0.078);
+    --accent-edge: rgba(0, 0, 0, 0.137);
+  }
+
+  body {
+    margin: 0;
+    padding: 32px 16px;
+    background: var(--page);
+    color: #1a1a1a;
+    font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  }
+  h1 {
+    margin: 0 0 4px;
+    font-size: 20px;
+    font-weight: 600;
+  }
+  .lead {
+    margin: 0 0 24px;
+    max-width: 72ch;
+    font-size: 14px;
+    line-height: 20px;
+  }
+  .themes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 32px;
+  }
+  .theme h2 {
+    margin: 0 0 8px;
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  /* A desk with colourful content, for the glass to blur. */
+  .desk {
+    position: relative;
+    width: min(620px, calc(100vw - 32px));
+    height: 380px;
+    overflow: hidden;
+    border-radius: 8px;
+    background:
+      repeating-linear-gradient(90deg, var(--stripe-a) 0 18px, transparent 18px 64px) 40px 120px / 100% 10px no-repeat,
+      repeating-linear-gradient(90deg, var(--stripe-b) 0 90px, transparent 90px 130px) 40px 150px / 100% 10px no-repeat,
+      repeating-linear-gradient(90deg, var(--stripe-c) 0 60px, transparent 60px 100px) 64px 180px / 100% 10px no-repeat,
+      linear-gradient(90deg, var(--desk-side) 0 140px, var(--desk) 140px);
+  }
+  .stack {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    width: min(540px, calc(100% - 24px));
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .alert {
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 12px 12px 14px;
+    border: 1px solid var(--stroke);
+    border-radius: 8px;
+    background: var(--veil);
+    backdrop-filter: blur(30px) saturate(125%);
+    box-shadow: var(--shadow);
+  }
+  .badge {
+    flex: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    background: var(--control-fill);
+    color: var(--text-secondary);
+    display: grid;
+    place-items: center;
+  }
+  .words {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .condition {
+    font-family: "Segoe UI Variable Small", "Segoe UI", system-ui, sans-serif;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .action {
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  /* As wide as the widest panel, so the words keep their width when a panel opens. */
+  .buttons {
+    flex: none;
+    min-width: 248px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  .icon {
+    font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets", sans-serif;
+    font-size: 16px;
+    line-height: 1;
+  }
+  .chevron {
+    font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets", sans-serif;
+    font-size: 12px;
+  }
+
+  /* Fluent 2 buttons: standard, accent and subtle (FluentButton.qml). */
+  button {
+    position: relative;
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--control-stroke);
+    border-radius: 4px;
+    background: var(--control-fill);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  /* The edge that makes a button look raised: at the top in dark, at the bottom in light. */
+  button::after {
+    content: "";
+    position: absolute;
+    left: 4px;
+    right: 4px;
+    height: 1px;
+    background: var(--control-edge);
+  }
+  .dark button::after {
+    top: 0;
+  }
+  .light button::after {
+    bottom: 0;
+  }
+  button.accent {
+    border-color: var(--accent-stroke);
+    background: var(--accent);
+    color: var(--text-on-accent);
+  }
+  .theme button.accent::after {
+    top: auto;
+    bottom: 0;
+    background: var(--accent-edge);
+  }
+  button.subtle {
+    border: none;
+    background: transparent;
+  }
+  button.subtle::after {
+    content: none;
+  }
+  button.square {
+    width: 32px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .time {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 2px;
+    background: var(--accent);
+  }
+  .caption {
+    margin: 0 0 4px;
+    font-size: 12px;
+    color: #3d3d3d;
+  }
+  .notes {
+    margin: 24px 0 0;
+    padding-left: 20px;
+    max-width: 72ch;
+    font-size: 14px;
+    line-height: 20px;
+  }
+</style>
+</head>
+<body>
+<h1>Avviso nell'overlay</h1>
+<p class="lead">Fino a tre avvisi in alto al centro dello schermo, il più vecchio in cima. Ognuno mostra il «Quando…» dell'utente sopra cosa fare, e una barretta che segna i 10 secondi. Rimanda e «…» aprono i loro pannelli dentro l'avviso.</p>
+
+<div class="themes">
+  <section class="theme light" aria-label="Tema chiaro">
+    <h2>Chiaro</h2>
+    <div class="desk">
+      <div class="stack">
+        <div class="alert">
+          <span class="badge icon" aria-hidden="true">&#xE8A5;</span>
+          <div class="words">
+            <span class="condition">Quando lavoro al progetto Rossi</span>
+            <span class="action">Aggiornare il changelog prima del rilascio</span>
+          </div>
+          <div class="buttons">
+            <button class="accent">Fatto</button>
+            <button>Rimanda<span class="chevron" aria-hidden="true">&#xE70D;</span></button>
+            <button class="subtle square" aria-label="Altre azioni"><span class="icon" aria-hidden="true">&#xE712;</span></button>
+          </div>
+          <span class="time" style="width: 64%"></span>
+        </div>
+        <div class="alert">
+          <span class="badge icon" aria-hidden="true">&#xE8A5;</span>
+          <div class="words">
+            <span class="condition">Quando apro il gestionale delle fatture</span>
+            <span class="action">Controllare la scadenza dell'F24</span>
+          </div>
+          <div class="buttons">
+            <button class="subtle square" aria-label="Indietro"><span class="icon" aria-hidden="true">&#xE72B;</span></button>
+            <button>15 min</button>
+            <button>1 ora</button>
+            <button>Domani</button>
+          </div>
+          <span class="time" style="width: 40%"></span>
+        </div>
+        <div class="alert">
+          <span class="badge icon" aria-hidden="true">&#xE8A5;</span>
+          <div class="words">
+            <span class="condition">Quando scrivo una mail a Giulia</span>
+            <span class="action">Allegare il preventivo firmato</span>
+          </div>
+          <div class="buttons">
+            <button class="subtle square" aria-label="Indietro"><span class="icon" aria-hidden="true">&#xE72B;</span></button>
+            <button>Utile</button>
+            <button>Non qui</button>
+          </div>
+          <span class="time" style="width: 88%"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="theme dark" aria-label="Tema scuro">
+    <h2>Scuro</h2>
+    <div class="desk">
+      <div class="stack">
+        <div class="alert">
+          <span class="badge icon" aria-hidden="true">&#xE8A5;</span>
+          <div class="words">
+            <span class="condition">Quando lavoro al progetto Rossi</span>
+            <span class="action">Aggiornare il changelog prima del rilascio</span>
+          </div>
+          <div class="buttons">
+            <button class="accent">Fatto</button>
+            <button>Rimanda<span class="chevron" aria-hidden="true">&#xE70D;</span></button>
+            <button class="subtle square" aria-label="Altre azioni"><span class="icon" aria-hidden="true">&#xE712;</span></button>
+          </div>
+          <span class="time" style="width: 64%"></span>
+        </div>
+        <div class="alert">
+          <span class="badge icon" aria-hidden="true">&#xE8A5;</span>
+          <div class="words">
+            <span class="condition">Quando apro il gestionale delle fatture</span>
+            <span class="action">Controllare la scadenza dell'F24</span>
+          </div>
+          <div class="buttons">
+            <button class="subtle square" aria-label="Indietro"><span class="icon" aria-hidden="true">&#xE72B;</span></button>
+            <button>15 min</button>
+            <button>1 ora</button>
+            <button>Domani</button>
+          </div>
+          <span class="time" style="width: 40%"></span>
+        </div>
+        <div class="alert">
+          <span class="badge icon" aria-hidden="true">&#xE8A5;</span>
+          <div class="words">
+            <span class="condition">Quando scrivo una mail a Giulia</span>
+            <span class="action">Allegare il preventivo firmato</span>
+          </div>
+          <div class="buttons">
+            <button class="subtle square" aria-label="Indietro"><span class="icon" aria-hidden="true">&#xE72B;</span></button>
+            <button>Utile</button>
+            <button>Non qui</button>
+          </div>
+          <span class="time" style="width: 88%"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<ul class="notes">
+  <li>In alto: i pulsanti, con i 10 secondi che passano. Al centro: Rimanda aperto. In basso: «…» aperto, con Utile e Non qui. Con un pannello aperto, o il mouse sopra, il tempo si ferma.</li>
+  <li>Entrata dall'alto in 250 ms, uscita in 167 ms; con le animazioni di Windows spente, solo dissolvenza. La barretta segna il tempo anche senza animazioni.</li>
+  <li>Il vetro è quello del materiale B: Acrylic con il velo dei menu di Windows. Con la trasparenza spenta, o col risparmio energetico, la superficie è piena.</li>
+</ul>
+</body>
+</html>

@@ -1,0 +1,429 @@
+"""The alert overlay on the real screen, while the user types in another app (#31, ADR-0009).
+
+These tests run only on the owner's machine. `uv run pytest -m integration
+tests/integration/test_ui.py` opens a window with a text box in front of everything, then
+for about two minutes shows alerts, types in the box, moves the mouse over the alerts and
+clicks their buttons. Leave the computer alone meanwhile, and any window or dialog that shows
+up too: a click anywhere moves the focus, which is what these tests watch.
+"""
+
+import ctypes
+import subprocess
+import sys
+from collections.abc import Iterator
+from ctypes import POINTER, wintypes
+from pathlib import Path
+from typing import Any
+
+import pytest
+from PySide6.QtCore import QPointF
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtQml import QQmlProperty, qmlContext
+from PySide6.QtQuick import QQuickItem, QQuickWindow
+from pytestqt.qtbot import QtBot
+
+from jiffin.core.alerts import AlertsView
+from jiffin.core.context import Context
+from jiffin.core.records import Alert, Revision
+from jiffin.core.reminders import Snooze
+from jiffin.ui.alert import AlertSlot
+from jiffin.ui.interface import Interface
+
+TARGET = [sys.executable, str(Path(__file__).with_name("target_window.py"))]
+ROUNDS = 20
+ANSWERS: tuple[tuple[tuple[str, ...], tuple[object, ...]], ...] = (
+    (("Fatto",), ("done",)),
+    (("Rimanda", "1 ora"), ("snooze", Snooze.HOUR)),
+    (("Altre azioni", "Utile"), ("useful",)),
+)
+"""How the rounds answer, in turn: the buttons clicked, and the answer they give."""
+ON_THE_TEXT = QPointF(100, 20)
+"""A point of an alert over its text, away from the buttons."""
+VANISH_MS = 15_000
+"""The alerts' 10 s, with room."""
+
+
+class _MouseInput(ctypes.Structure):
+    _fields_ = (
+        ("dx", wintypes.LONG),
+        ("dy", wintypes.LONG),
+        ("mouseData", wintypes.DWORD),
+        ("dwFlags", wintypes.DWORD),
+        ("time", wintypes.DWORD),
+        ("dwExtraInfo", ctypes.c_size_t),
+    )
+
+
+class _KeyboardInput(ctypes.Structure):
+    _fields_ = (
+        ("wVk", wintypes.WORD),
+        ("wScan", wintypes.WORD),
+        ("dwFlags", wintypes.DWORD),
+        ("time", wintypes.DWORD),
+        ("dwExtraInfo", ctypes.c_size_t),
+    )
+
+
+class _InputUnion(ctypes.Union):
+    _fields_ = (("mi", _MouseInput), ("ki", _KeyboardInput))
+
+
+class _Input(ctypes.Structure):
+    _fields_ = (("type", wintypes.DWORD), ("u", _InputUnion))
+
+
+class _GuiThreadInfo(ctypes.Structure):
+    _fields_ = (
+        ("cbSize", wintypes.DWORD),
+        ("flags", wintypes.DWORD),
+        ("hwndActive", wintypes.HWND),
+        ("hwndFocus", wintypes.HWND),
+        ("hwndCapture", wintypes.HWND),
+        ("hwndMenuOwner", wintypes.HWND),
+        ("hwndMoveSize", wintypes.HWND),
+        ("hwndCaret", wintypes.HWND),
+        ("rcCaret", wintypes.RECT),
+    )
+
+
+# name -> (result, arguments)
+_USER32: dict[str, tuple[Any, list[Any]]] = {
+    "SendInput": (wintypes.UINT, [wintypes.UINT, POINTER(_Input), ctypes.c_int]),
+    "GetSystemMetrics": (ctypes.c_int, [ctypes.c_int]),
+    "GetForegroundWindow": (wintypes.HWND, []),
+    "GetWindowThreadProcessId": (wintypes.DWORD, [wintypes.HWND, POINTER(wintypes.DWORD)]),
+    "GetGUIThreadInfo": (wintypes.BOOL, [wintypes.DWORD, POINTER(_GuiThreadInfo)]),
+    "GetWindowRect": (wintypes.BOOL, [wintypes.HWND, POINTER(wintypes.RECT)]),
+    "WindowFromPoint": (wintypes.HWND, [wintypes.POINT]),
+    "SetWindowPos": (
+        wintypes.BOOL,
+        [
+            wintypes.HWND,
+            wintypes.HWND,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            wintypes.UINT,
+        ],
+    ),
+    "GetClassNameW": (ctypes.c_int, [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]),
+    "SendMessageW": (
+        wintypes.LPARAM,
+        [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM],
+    ),
+    "PostMessageW": (
+        wintypes.BOOL,
+        [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM],
+    ),
+}
+
+_user32 = ctypes.WinDLL("user32", use_last_error=True)
+for _name, (_result, _arguments) in _USER32.items():
+    _function = getattr(_user32, _name)
+    _function.restype, _function.argtypes = _result, _arguments
+
+_INPUT_MOUSE, _INPUT_KEYBOARD = 0, 1
+_KEYEVENTF_KEYUP, _KEYEVENTF_UNICODE = 0x0002, 0x0004
+_MOUSEEVENTF_MOVE, _MOUSEEVENTF_LEFTDOWN, _MOUSEEVENTF_LEFTUP = 0x0001, 0x0002, 0x0004
+_MOUSEEVENTF_VIRTUALDESK, _MOUSEEVENTF_ABSOLUTE = 0x4000, 0x8000
+_SM_XVIRTUALSCREEN, _SM_YVIRTUALSCREEN = 76, 77
+_SM_CXVIRTUALSCREEN, _SM_CYVIRTUALSCREEN = 78, 79
+_WM_CLOSE, _WM_GETTEXT, _WM_GETTEXTLENGTH = 0x0010, 0x000D, 0x000E
+_HWND_TOPMOST, _HWND_NOTOPMOST = -1, -2
+_SWP_NOSIZE, _SWP_NOMOVE, _SWP_NOACTIVATE = 0x0001, 0x0002, 0x0010
+
+
+def _send(events: list[_Input]) -> None:
+    batch = (_Input * len(events))(*events)
+    sent = _user32.SendInput(len(events), batch, ctypes.sizeof(_Input))
+    assert sent == len(events), f"SendInput: {ctypes.WinError(ctypes.get_last_error())}"
+
+
+def move_mouse(x: int, y: int) -> None:
+    """Move the mouse as a real one does, to physical pixels; SetCursorPos alone sends no
+    WM_MOUSEMOVE to the window below."""
+    left = _user32.GetSystemMetrics(_SM_XVIRTUALSCREEN)
+    top = _user32.GetSystemMetrics(_SM_YVIRTUALSCREEN)
+    width = _user32.GetSystemMetrics(_SM_CXVIRTUALSCREEN)
+    height = _user32.GetSystemMetrics(_SM_CYVIRTUALSCREEN)
+    event = _Input(type=_INPUT_MOUSE)
+    event.u.mi = _MouseInput(
+        round((x - left) * 65535 / (width - 1)),
+        round((y - top) * 65535 / (height - 1)),
+        0,
+        _MOUSEEVENTF_MOVE | _MOUSEEVENTF_ABSOLUTE | _MOUSEEVENTF_VIRTUALDESK,
+        0,
+        0,
+    )
+    _send([event])
+
+
+def click(hwnd: int, x: int, y: int) -> None:
+    """Click at a point of `hwnd`, only if it is the window there: never on another app."""
+    under = _user32.WindowFromPoint(wintypes.POINT(x, y)) or 0
+    assert under == hwnd, f"{class_name(under)!r} is where the click should go: no click"
+    move_mouse(x, y)
+    events = [_Input(type=_INPUT_MOUSE), _Input(type=_INPUT_MOUSE)]
+    events[0].u.mi.dwFlags = _MOUSEEVENTF_LEFTDOWN
+    events[1].u.mi.dwFlags = _MOUSEEVENTF_LEFTUP
+    _send(events)
+
+
+def on_top(hwnd: int, topmost: bool) -> None:
+    after = _HWND_TOPMOST if topmost else _HWND_NOTOPMOST
+    flags = _SWP_NOMOVE | _SWP_NOSIZE | _SWP_NOACTIVATE
+    assert _user32.SetWindowPos(hwnd, after, 0, 0, 0, 0, flags)
+
+
+def type_text(text: str) -> None:
+    """Characters to the foreground window, as a keyboard types them."""
+    events = []
+    for character in text:
+        for flags in (_KEYEVENTF_UNICODE, _KEYEVENTF_UNICODE | _KEYEVENTF_KEYUP):
+            event = _Input(type=_INPUT_KEYBOARD)
+            event.u.ki = _KeyboardInput(0, ord(character), flags, 0, 0)
+            events.append(event)
+    _send(events)
+
+
+def rect(hwnd: int) -> tuple[int, int, int, int]:
+    """Left, top, right and bottom, in physical pixels."""
+    found = wintypes.RECT()
+    assert _user32.GetWindowRect(hwnd, ctypes.byref(found))
+    return found.left, found.top, found.right, found.bottom
+
+
+def class_name(hwnd: int) -> str:
+    name = ctypes.create_unicode_buffer(256)
+    _user32.GetClassNameW(hwnd, name, len(name))
+    return name.value
+
+
+class Desk:
+    """The app the user types in, in a process of its own, and where Windows says the focus is."""
+
+    def __init__(self) -> None:
+        self._process = subprocess.Popen(TARGET, stdout=subprocess.PIPE, text=True)
+        assert self._process.stdout is not None
+        self.window, self.box = (int(handle) for handle in self._process.stdout.readline().split())
+        self.typed = ""
+        self.moves: list[str] = []
+        """Each step at which the focus was not in the box, and where it was."""
+
+    def centre(self) -> tuple[int, int]:
+        """The middle of the text box, away from the alerts, in physical pixels."""
+        left, top, right, bottom = rect(self.box)
+        return (left + right) // 2, (top + bottom) // 2
+
+    def front(self) -> None:
+        """Click in the box, as the user would, to bring it to the front. For the click its
+        window is on top of every other, so that the click cannot reach another app."""
+        on_top(self.window, True)
+        click(self.box, *self.centre())
+        on_top(self.window, False)
+
+    def rest(self) -> None:
+        """The mouse on the text box, away from the alerts."""
+        move_mouse(*self.centre())
+
+    def check(self, step: str) -> None:
+        """The foreground window, the focus and the caret are still the box's."""
+        foreground = _user32.GetForegroundWindow() or 0
+        thread = _user32.GetWindowThreadProcessId(self.window, None)
+        info = _GuiThreadInfo(cbSize=ctypes.sizeof(_GuiThreadInfo))
+        _user32.GetGUIThreadInfo(thread, ctypes.byref(info))
+        focus, caret = info.hwndFocus or 0, info.hwndCaret or 0
+        if (foreground, focus, caret) != (self.window, self.box, self.box):
+            self.moves.append(
+                f"{step}: foreground {class_name(foreground)!r}, focus {focus:#x}, caret {caret:#x}"
+            )
+
+    def type(self, text: str, step: str) -> None:
+        """Type in the box, and never elsewhere: if it has lost the foreground, the test stops."""
+        if (_user32.GetForegroundWindow() or 0) != self.window:
+            self.check(step)
+            pytest.fail(f"the text box lost the foreground: {self.moves}")
+        type_text(text)
+        self.typed += text
+
+    def text(self) -> str:
+        length = _user32.SendMessageW(self.box, _WM_GETTEXTLENGTH, 0, 0)
+        text = ctypes.create_unicode_buffer(length + 1)
+        _user32.SendMessageW(self.box, _WM_GETTEXT, length + 1, ctypes.addressof(text))
+        return text.value
+
+    def close(self) -> None:
+        _user32.PostMessageW(self.window, _WM_CLOSE, 0, 0)
+        try:
+            self._process.wait(10)
+        except subprocess.TimeoutExpired:
+            self._process.kill()
+
+
+class Answers:
+    """The answers given on screen, in order: (what, alert id[, snooze])."""
+
+    def __init__(self) -> None:
+        self.given: list[tuple[object, ...]] = []
+
+    def done(self, alert_id: int) -> None:
+        self.given.append(("done", alert_id))
+
+    def useful(self, alert_id: int) -> None:
+        self.given.append(("useful", alert_id))
+
+    def not_here(self, alert_id: int) -> None:
+        self.given.append(("not_here", alert_id))
+
+    def snooze(self, alert_id: int, snooze: Snooze) -> None:
+        self.given.append(("snooze", alert_id, snooze))
+
+    def vanished(self, alert_id: int) -> None:
+        self.given.append(("vanished", alert_id))
+
+
+class Screen:
+    """The app's interface, made as the app makes it, with core's part played by the test."""
+
+    def __init__(self, app: QGuiApplication) -> None:
+        self.answers = Answers()
+        self.interface = Interface(app, self.answers)
+
+    def show(self, *alert_ids: int) -> None:
+        alerts = tuple(alert(alert_id) for alert_id in alert_ids)
+        self.interface.overlay.show(AlertsView(alerts, 0, ()))
+
+    def window(self, alert_id: int) -> QQuickWindow:
+        for window in QGuiApplication.topLevelWindows():
+            found = window.findChild(AlertSlot)
+            if window.isVisible() and found is not None and found.alert_id == alert_id:
+                assert isinstance(window, QQuickWindow)
+                return window
+        raise LookupError(f"alert {alert_id} is not on screen")
+
+    def none_shown(self) -> bool:
+        return not any(w.isVisible() for w in QGuiApplication.topLevelWindows())
+
+
+def alert(alert_id: int) -> Alert:
+    revision = Revision(
+        alert_id, alert_id, 1, "quando apro Figma", f"esportare le icone {alert_id}"
+    )
+    context = Context("figma.exe", "Icone - Figma", None)
+    return Alert(alert_id, alert_id, revision, alert_id, context, 2.0, 0, shown_at=0)
+
+
+def items(item: QQuickItem) -> Iterator[QQuickItem]:
+    for child in item.childItems():
+        yield child
+        yield from items(child)
+
+
+def button(window: QQuickWindow, name: str) -> QPointF:
+    """The centre of the button a screen reader calls `name`, in the window."""
+
+    def named(item: QQuickItem) -> bool:
+        context = qmlContext(item)
+        return context is not None and QQmlProperty(item, "Accessible.name", context).read() == name
+
+    # Rows place what they show only when polished, before the next frame.
+    for item in items(window.contentItem()):
+        item.ensurePolished()
+    found = next(item for item in items(window.contentItem()) if item.isVisible() and named(item))
+    return found.mapToScene(QPointF(found.width() / 2, found.height() / 2))
+
+
+def on_screen(window: QQuickWindow, point: QPointF) -> tuple[int, int]:
+    """A point of the window, in physical pixels on the screen."""
+    left, top, _, _ = rect(int(window.winId()))
+    ratio = window.devicePixelRatio()
+    return round(left + point.x() * ratio), round(top + point.y() * ratio)
+
+
+@pytest.fixture(scope="session")
+def qapp_cls() -> type[QGuiApplication]:
+    return QGuiApplication
+
+
+@pytest.fixture(scope="module")
+def screen(qapp: QGuiApplication) -> Screen:
+    assert qapp.platformName() == "windows", "run the integration tests apart from the unit tests"
+    return Screen(qapp)
+
+
+@pytest.fixture
+def desk(qtbot: QtBot) -> Iterator[Desk]:
+    desk = Desk()
+    qtbot.wait(1000)  # the window shows, maximized
+    desk.front()
+    qtbot.wait(500)
+    desk.check("start")
+    assert desk.moves == [], "the text box must have the focus to start"
+    yield desk
+    desk.close()
+
+
+@pytest.mark.integration
+def test_an_alert_never_takes_the_focus_from_where_the_user_types(
+    qtbot: QtBot, screen: Screen, desk: Desk
+) -> None:
+    before = len(screen.answers.given)
+    expected: list[tuple[object, ...]] = []
+    for turn in range(1, ROUNDS + 1):
+        screen.show(turn)
+        qtbot.wait(500)
+        desk.check(f"{turn} shown")
+        desk.type(f"a{turn:02d} ", f"{turn} typing")
+        qtbot.wait(200)
+        desk.check(f"{turn} typed")
+
+        window = screen.window(turn)
+        move_mouse(*on_screen(window, ON_THE_TEXT))
+        qtbot.wait(300)
+        progress = window.property("progress")
+        qtbot.wait(1200)
+        assert window.property("progress") == progress, f"{turn}: the time ran under the mouse"
+        desk.check(f"{turn} hovered")
+
+        names, (what, *rest) = ANSWERS[turn % len(ANSWERS)]
+        for name in names:
+            x, y = on_screen(window, button(window, name))
+            move_mouse(x, y)
+            qtbot.wait(200)
+            click(int(window.winId()), x, y)
+            qtbot.wait(300)
+            desk.check(f"{turn} clicked {name}")
+        expected.append((what, turn, *rest))
+        qtbot.waitUntil(screen.none_shown)
+        desk.check(f"{turn} left")
+
+        desk.rest()
+        desk.type(f"b{turn:02d} ", f"{turn} typing again")
+        qtbot.wait(200)
+        desk.check(f"{turn} typed again")
+
+    assert desk.moves == []
+    assert desk.text() == desk.typed
+    assert screen.answers.given[before:] == expected
+
+
+@pytest.mark.integration
+def test_three_alerts_vanish_on_their_own_and_leave_the_focus_alone(
+    qtbot: QtBot, screen: Screen, desk: Desk
+) -> None:
+    before = len(screen.answers.given)
+    screen.show(101, 102, 103)
+    qtbot.wait(500)
+    desk.check("three shown")
+    desk.type("tre ", "three shown")
+    qtbot.waitUntil(lambda: len(screen.answers.given) == before + 3, timeout=VANISH_MS)
+    qtbot.waitUntil(screen.none_shown)
+    desk.check("three vanished")
+    assert desk.moves == []
+    assert sorted(screen.answers.given[before:], key=str) == [
+        ("vanished", 101),
+        ("vanished", 102),
+        ("vanished", 103),
+    ]
+    assert desk.text() == desk.typed

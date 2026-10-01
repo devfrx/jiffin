@@ -47,12 +47,14 @@ The owner chose A. Building it in Qt Quick showed three problems:
   | | Material | Look |
   |---|---|---|
   | A | `DWMSBT_TRANSIENTWINDOW` (Desktop Acrylic) | light glass, blurred content behind |
-  | **B** | A plus a veil, `#2C2C2C` (dark) or `#FCFCFC` (light) at about 80% | like Windows menus: almost solid, a hint of glass |
+  | **B** | A plus a veil, `#2C2C2C` (dark) or `#FCFCFC` (light) at 90% | like Windows menus: almost solid, a hint of glass |
   | C | `DWMSBT_MAINWINDOW` (Mica) | like the Settings window |
   | D | `DWMSBT_TABBEDWINDOW` (Mica Alt) | darker, more colour from the desktop |
 
   B's veil comes from WinUI's `AcrylicBackgroundFillColorDefaultBrush`: tint
-  `#2C2C2C` with luminosity 0.96 in dark, `#FCFCFC` with 0.85 in light.
+  `#2C2C2C` with luminosity 0.96 in dark, `#FCFCFC` with 0.85 in light. It
+  started as an approximation at about 80%; the owner set it at 90% by eye,
+  next to Windows' menus ([#42](https://github.com/devfrx/jiffin/issues/42)).
 - The creation window uses Mica.
 - With Windows' transparency effects off, or in energy saver, surfaces are
   solid, and the glass comes back when they are on again.
@@ -112,7 +114,6 @@ an unseen alert; "!" when a browser address cannot be read
 **Follow-up**
 
 - Port the chosen mockups into `docs/design/mockups/`.
-- Refine B's 80% veil, an approximation.
 - Qt sends a mouse enter and leave after `hide()`: ignore hover events on
   hidden windows.
 - Screen-reader announcements are postponed
