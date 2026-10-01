@@ -1,0 +1,551 @@
+import gc
+from collections.abc import Callable, Iterator
+from dataclasses import replace
+from datetime import datetime, timedelta, timezone
+
+import pytest
+from PySide6.QtCore import QPointF, Qt
+from PySide6.QtGui import QGuiApplication, QWindow
+from PySide6.QtQml import QQmlEngine, QQmlProperty, qmlContext, qmlEngine
+from PySide6.QtQuick import QQuickItem, QQuickWindow
+from PySide6.QtTest import QTest
+from pytestqt.qtbot import QtBot
+
+from jiffin.core.alerts import AlertsView
+from jiffin.core.clock import SimulatedClock
+from jiffin.core.context import Context
+from jiffin.core.records import Alert, Reminder, Revision
+from jiffin.core.reminders import HOUR_MS, MINUTE_MS, ActiveReminder, RemindersView, Snooze
+from jiffin.ui import tray_list, win32
+from jiffin.ui.glass import Glass
+from jiffin.ui.look import Look, Settings
+from jiffin.ui.rows import Rows
+from jiffin.ui.tray_list import MARGIN, REOPEN_MS, TrayList
+
+DARK = Settings(
+    dark=True,
+    accent="#4cc2ff",
+    transparency=True,
+    animations=True,
+    taskbar_dark=True,
+    taskbar_accent="#4cc2ff",
+)
+ROME = timezone(timedelta(hours=2))
+START = int(datetime(2026, 10, 1, 10, 0, tzinfo=ROME).timestamp() * 1000)
+"""Thursday 1 October 2026, 10:00 in Rome."""
+FIGMA = Context("figma.exe", "Icone - Figma", None)
+
+
+class Commands:
+    """What the list asked of `core`, in order: (what, id[, snooze])."""
+
+    def __init__(self) -> None:
+        self.sent: list[tuple[object, ...]] = []
+
+    def done(self, alert_id: int) -> None:
+        self.sent.append(("done", alert_id))
+
+    def snooze(self, alert_id: int, snooze: Snooze) -> None:
+        self.sent.append(("snooze", alert_id, snooze))
+
+    def complete(self, reminder_id: int) -> None:
+        self.sent.append(("complete", reminder_id))
+
+    def delete(self, reminder_id: int) -> None:
+        self.sent.append(("delete", reminder_id))
+
+    def seen(self) -> None:
+        self.sent.append(("seen",))
+
+
+class Writer:
+    """What the list opened the creation window for: (what[, reminder id, condition, action])."""
+
+    def __init__(self) -> None:
+        self.opened: list[tuple[object, ...]] = []
+
+    def new(self) -> None:
+        self.opened.append(("new",))
+
+    def edit(self, reminder_id: int, condition: str, action: str) -> None:
+        self.opened.append(("edit", reminder_id, condition, action))
+
+
+def active(
+    reminder_id: int,
+    condition: str,
+    action: str,
+    silences: int = 0,
+    snoozed_until: int | None = None,
+) -> ActiveReminder:
+    revision = Revision(reminder_id, reminder_id, 1, condition, action)
+    return ActiveReminder(Reminder(reminder_id, START, revision, None, snoozed_until), silences)
+
+
+def unseen(alert_id: int, action: str, shown_at: int, seen_at: int | None = None) -> Alert:
+    revision = Revision(alert_id, alert_id, 1, "quando apro il gestionale delle fatture", action)
+    return Alert(
+        alert_id,
+        alert_id,
+        revision,
+        alert_id,
+        FIGMA,
+        2.0,
+        shown_at,
+        shown_at=shown_at,
+        vanished_at=shown_at + 10_000,
+        seen_at=seen_at,
+    )
+
+
+def at(day: int, hour: int, minute: int, month: int = 10) -> int:
+    return int(datetime(2026, month, day, hour, minute, tzinfo=ROME).timestamp() * 1000)
+
+
+def items(item: QQuickItem) -> Iterator[QQuickItem]:
+    for child in item.childItems():
+        yield child
+        yield from items(child)
+
+
+def accessible(item: QQuickItem, name: str) -> object:
+    """None for the items a control makes on its own, which QML never sees."""
+    context = qmlContext(item)
+    return None if context is None else QQmlProperty(item, f"Accessible.{name}", context).read()
+
+
+def in_button(item: QQuickItem) -> bool:
+    parent = item.parentItem()
+    while parent is not None:
+        if parent.inherits("QQuickAbstractButton"):
+            return True
+        parent = parent.parentItem()
+    return False
+
+
+def column(rows: Rows, role: str) -> list[object]:
+    """One role of every row, top to bottom."""
+    number = next(n for n, name in rows.roleNames().items() if bytes(name.data()) == role.encode())
+    return [rows.data(rows.index(i), number) for i in range(rows.rowCount())]
+
+
+class Screen:
+    """The tray list on the offscreen screen, with what it asked of `core` and the creation
+    window."""
+
+    def __init__(self, qtbot: QtBot) -> None:
+        self._qtbot = qtbot
+        self.look = Look(lambda: DARK)
+        self.engine = QQmlEngine()
+        self.look.provide(self.engine)
+        self.clock = SimulatedClock(START, ROME)
+        self.commands = Commands()
+        self.writer = Writer()
+        self.retries = 0
+        self.list = TrayList(
+            self.engine, self.commands, self.writer, self._retry, Glass(self.look), self.clock
+        )
+        # The lists of earlier tests may still be there, until their engines go.
+        (window,) = (w for w in QGuiApplication.topLevelWindows() if qmlEngine(w) is self.engine)
+        assert isinstance(window, QQuickWindow)
+        self.window = window
+
+    def open(self) -> None:
+        """What a click on the tray icon does; the list is ready once it has the focus."""
+        self.list.toggle()
+        self._qtbot.waitUntil(self.window.isActive)
+
+    def lines(self) -> list[str]:
+        """What the list reads, top to bottom, without its buttons and icons."""
+        found = []
+        for item in self._shown():
+            text = str(item.property("text")) if item.inherits("QQuickText") else ""
+            if text and not in_button(item) and not "" <= text[0] <= "":
+                corner = item.mapToScene(QPointF(0, 0))
+                found.append((corner.y(), corner.x(), text))
+        return [text for _, _, text in sorted(found)]
+
+    def button(self, name: str, row: str | None = None) -> QQuickItem:
+        """The button a screen reader calls `name`, in the card or row that reads `row`."""
+        return next(
+            item
+            for item in self._shown()
+            if item.inherits("QQuickAbstractButton")
+            and accessible(item, "name") == name
+            and (row is None or self._reads(item, row))
+        )
+
+    def click(self, name: str, row: str | None = None) -> None:
+        button = self.button(name, row)
+        centre = button.mapToScene(QPointF(button.width() / 2, button.height() / 2)).toPoint()
+        QTest.mouseClick(
+            self.window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, centre
+        )
+
+    def press(self, key: Qt.Key) -> None:
+        QTest.keyClick(self.window, key)
+
+    def focused(self) -> tuple[object, object]:
+        """The button with the keyboard focus: its name, and the row it acts on."""
+        item = self.window.activeFocusItem()
+        assert item is not None
+        return accessible(item, "name"), accessible(item, "description")
+
+    def _reads(self, button: QQuickItem, text: str) -> bool:
+        """The card or row of the button reads `text`."""
+        row = button.parentItem()
+        while row is not None and row.property("alertId") is None:
+            if row.property("reminderId") is not None:
+                break
+            row = row.parentItem()
+        return row is not None and any(
+            child.inherits("QQuickText") and child.property("text") == text for child in items(row)
+        )
+
+    def _shown(self) -> list[QQuickItem]:
+        # Layouts place what they show only when polished, before the next frame.
+        for item in items(self.window.contentItem()):
+            item.ensurePolished()
+        return [item for item in items(self.window.contentItem()) if item.isVisible()]
+
+    def _retry(self) -> None:
+        self.retries += 1
+
+
+@pytest.fixture
+def screen(qtbot: QtBot, dwm: list[tuple[object, ...]]) -> Iterator[Screen]:
+    screen = Screen(qtbot)
+    yield screen
+    screen.list.close()
+
+
+@pytest.fixture
+def elsewhere(qtbot: QtBot) -> Iterator[Callable[[], None]]:
+    """Another window takes the focus, as the taskbar does when the tray icon is clicked."""
+    other = QWindow()
+    other.resize(100, 100)
+
+    def focus() -> None:
+        other.show()
+        other.requestActivate()
+        qtbot.waitUntil(other.isActive)
+
+    yield focus
+    other.destroy()
+
+
+def test_the_tray_icon_opens_the_list_at_the_bottom_right_with_the_focus(screen: Screen) -> None:
+    screen.open()
+    area = QGuiApplication.primaryScreen().availableGeometry()
+    frame = screen.window.frameGeometry()
+    assert (frame.right(), frame.bottom()) == (area.right() - MARGIN, area.bottom() - MARGIN)
+    assert screen.window.title() == "Promemoria"
+    assert screen.lines() == ["Promemoria", "Attivi", "Nessun promemoria attivo."]
+
+
+def test_the_list_is_a_card_on_the_alerts_glass(
+    screen: Screen, dwm: list[tuple[object, ...]]
+) -> None:
+    flags = screen.window.flags()
+    assert flags & Qt.WindowType.FramelessWindowHint
+    assert not flags & Qt.WindowType.WindowDoesNotAcceptFocus
+    hwnd = int(screen.window.winId())
+    assert dwm == [("set_backdrop", hwnd, True, win32.DWMSBT_TRANSIENTWINDOW)]
+    screen.open()
+    assert dwm[1:] == [("activate_frame", hwnd), ("nudge", hwnd)]
+
+
+def test_esc_and_the_tray_icon_close_the_list(screen: Screen) -> None:
+    screen.open()
+    screen.press(Qt.Key.Key_Escape)
+    assert not screen.window.isVisible()
+    screen.open()
+    screen.list.toggle()
+    assert not screen.window.isVisible()
+
+
+def test_a_click_elsewhere_closes_the_list_and_the_icon_does_not_reopen_it_at_once(
+    qtbot: QtBot, screen: Screen, elsewhere: Callable[[], None]
+) -> None:
+    screen.open()
+    elsewhere()
+    qtbot.waitUntil(lambda: not screen.window.isVisible())
+    screen.list.toggle()  # the click on the icon that took the focus
+    assert not screen.window.isVisible()
+    qtbot.wait(REOPEN_MS)
+    screen.open()
+
+
+def test_the_active_reminders_show_newest_first_with_their_state(screen: Screen) -> None:
+    screen.list.show_reminders(
+        RemindersView(
+            (
+                active(3, "quando apro Figma", "esportare le icone", 0, START + 690_000),
+                active(2, "quando apro la posta", "rispondere a Giulia", silences=2),
+                active(1, "se sono sul sito della banca", "pagare l'F24", 1, START + HOUR_MS),
+            )
+        )
+    )
+    screen.open()
+    assert screen.lines() == [
+        "Promemoria",
+        "Attivi",
+        "Esportare le icone",
+        "Quando apro Figma",
+        "Rimandato: torna tra 12 min",
+        "Rispondere a Giulia",
+        "Quando apro la posta",
+        "Taciuto in 2 posti",
+        "Pagare l'F24",
+        "Se sono sul sito della banca",
+        "Rimandato: torna alle 11:00 · Taciuto in 1 posto",
+    ]
+
+
+def test_a_snooze_counts_down_while_the_list_is_open(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch, dwm: list[tuple[object, ...]]
+) -> None:
+    monkeypatch.setattr(tray_list, "REFRESH_MS", 50)
+    screen = Screen(qtbot)
+    tomorrow = active(2, "quando apro Figma", "esportare le icone", 0, at(2, 8, 0))
+    soon = active(1, "quando apro la posta", "rispondere a Giulia", 0, START + 5 * MINUTE_MS)
+    screen.list.show_reminders(RemindersView((tomorrow, soon)))
+    screen.open()
+    assert "Rimandato: torna domani alle 08:00" in screen.lines()
+    assert "Rimandato: torna tra 5 min" in screen.lines()
+    screen.clock.advance(3 * MINUTE_MS)
+    qtbot.waitUntil(lambda: "Rimandato: torna tra 2 min" in screen.lines())
+    screen.clock.advance(2 * MINUTE_MS)
+    qtbot.waitUntil(lambda: "Rimandato: torna tra 2 min" not in screen.lines())
+    assert screen.lines()[-2:] == ["Rispondere a Giulia", "Quando apro la posta"]
+    screen.list.close()
+
+
+def test_unseen_alerts_sit_on_top_with_fatto_and_rimanda(screen: Screen) -> None:
+    alert = unseen(8, "controllare la scadenza dell'F24", at(1, 9, 31))
+    screen.list.show_alerts(AlertsView((), 0, (alert,)))
+    screen.list.show_reminders(RemindersView((active(1, "quando apro Figma", "esportare"),)))
+    screen.open()
+    assert screen.lines() == [
+        "Promemoria",
+        "Non visti",
+        "Controllare la scadenza dell'F24",
+        "Quando apro il gestionale delle fatture, alle 09:31",
+        "Attivi",
+        "Esportare",
+        "Quando apro Figma",
+    ]
+    assert screen.commands.sent == [("seen",)]
+    screen.click("Fatto", "Controllare la scadenza dell'F24")
+    screen.click("Rimanda", "Controllare la scadenza dell'F24")
+    screen.click("1 ora", "Controllare la scadenza dell'F24")
+    screen.click("Domani", "Controllare la scadenza dell'F24")
+    screen.click("Indietro", "Controllare la scadenza dell'F24")
+    assert screen.button("Fatto", "Controllare la scadenza dell'F24").isVisible()
+    assert screen.commands.sent[1:] == [
+        ("done", 8),
+        ("snooze", 8, Snooze.HOUR),
+        ("snooze", 8, Snooze.TOMORROW),
+    ]
+
+
+def test_older_unseen_alerts_say_which_day_they_came(screen: Screen) -> None:
+    alerts = (
+        unseen(4, "ieri", at(30, 18, 20, month=9)),
+        unseen(3, "tre giorni fa", at(28, 9, 5, month=9)),
+        unseen(2, "un mese fa", at(1, 12, 0, month=9)),
+    )
+    screen.list.show_alerts(AlertsView((), 0, alerts))
+    screen.open()
+    condition = "Quando apro il gestionale delle fatture, "
+    assert [line for line in screen.lines() if line.startswith(condition)] == [
+        condition + "ieri alle 18:20",
+        condition + "il 28 settembre alle 09:05",
+        condition + "l'1 settembre alle 12:00",
+    ]
+
+
+def test_an_alert_new_to_the_list_keeps_its_dot_until_the_list_closes(screen: Screen) -> None:
+    old = unseen(7, "vecchio", START - HOUR_MS, seen_at=START - 30 * MINUTE_MS)
+    new = unseen(8, "nuovo", START - MINUTE_MS)
+    screen.list.show_alerts(AlertsView((), 0, (new, old)))
+    screen.open()
+    assert screen.commands.sent == [("seen",)]
+    assert column(screen.list.property("unseen"), "fresh") == [True, False]
+    seen = replace(new, seen_at=screen.clock.now())
+    screen.list.show_alerts(AlertsView((), 0, (seen, old)))
+    assert column(screen.list.property("unseen"), "fresh") == [True, False]
+    newer = unseen(9, "appena sparito", screen.clock.now())
+    screen.list.show_alerts(AlertsView((), 0, (newer, seen, old)))
+    assert screen.commands.sent == [("seen",), ("seen",)]
+    assert column(screen.list.property("unseen"), "fresh") == [True, True, False]
+    screen.list.close()
+    assert column(screen.list.property("unseen"), "fresh") == [False, False, False]
+
+
+def test_nuovo_and_modifica_open_the_creation_window_and_close_the_list(screen: Screen) -> None:
+    screen.list.show_reminders(
+        RemindersView((active(2, "quando apro la posta", "rispondere a Giulia"),))
+    )
+    screen.open()
+    screen.click("Nuovo")
+    assert not screen.window.isVisible()
+    screen.open()
+    screen.click("Modifica", "Rispondere a Giulia")
+    assert not screen.window.isVisible()
+    assert screen.writer.opened == [
+        ("new",),
+        ("edit", 2, "quando apro la posta", "rispondere a Giulia"),
+    ]
+
+
+def test_completa_and_elimina_go_to_core_and_the_list_stays(screen: Screen) -> None:
+    screen.list.show_reminders(
+        RemindersView(
+            (
+                active(2, "quando apro la posta", "rispondere a Giulia"),
+                active(1, "quando apro Figma", "esportare le icone"),
+            )
+        )
+    )
+    screen.open()
+    screen.click("Completa", "Rispondere a Giulia")
+    screen.click("Elimina", "Esportare le icone")
+    assert screen.commands.sent == [("complete", 2), ("delete", 1)]
+    assert screen.window.isVisible()
+
+
+def test_tab_goes_from_button_to_button_and_keeps_its_place_while_rows_come(
+    screen: Screen,
+) -> None:
+    alert = unseen(8, "controllare la scadenza dell'F24", at(1, 9, 31))
+    screen.list.show_alerts(AlertsView((), 0, (alert,)))
+    figma = active(1, "quando apro Figma", "esportare le icone")
+    screen.list.show_reminders(RemindersView((figma,)))
+    screen.open()
+    order = []
+    for _ in range(6):
+        screen.press(Qt.Key.Key_Tab)
+        order.append(screen.focused())
+    assert order == [
+        ("Nuovo", ""),
+        ("Fatto", ""),
+        ("Rimanda", ""),
+        ("Modifica", "Esportare le icone"),
+        ("Completa", "Esportare le icone"),
+        ("Elimina", "Esportare le icone"),
+    ]
+    posta = active(2, "quando apro la posta", "rispondere a Giulia")
+    screen.list.show_reminders(RemindersView((posta, figma)))
+    assert screen.focused() == ("Elimina", "Esportare le icone")
+
+
+def test_rimanda_takes_the_focus_to_its_choices_and_back(screen: Screen) -> None:
+    alert = unseen(8, "controllare la scadenza dell'F24", at(1, 9, 31))
+    screen.list.show_alerts(AlertsView((), 0, (alert,)))
+    screen.open()
+    for _ in range(3):
+        screen.press(Qt.Key.Key_Tab)
+    assert screen.focused() == ("Rimanda", "")
+    screen.press(Qt.Key.Key_Return)
+    assert screen.focused() == ("Indietro", "")
+    screen.press(Qt.Key.Key_Tab)
+    screen.press(Qt.Key.Key_Return)
+    assert screen.commands.sent[-1] == ("snooze", 8, Snooze.QUARTER_HOUR)
+
+
+def test_a_long_list_scrolls_to_the_button_tab_reaches(screen: Screen) -> None:
+    many = tuple(
+        active(n, f"quando apro il progetto {n}", f"chiudere il ticket {n}")
+        for n in range(40, 0, -1)
+    )
+    screen.list.show_reminders(RemindersView(many))
+    screen.open()
+    area = QGuiApplication.primaryScreen().availableGeometry()
+    assert screen.window.height() == area.height() - 2 * MARGIN
+    for _ in range(1 + 3 * 40):
+        screen.press(Qt.Key.Key_Tab)
+    assert screen.focused() == ("Elimina", "Chiudere il ticket 1")
+    button = screen.window.activeFocusItem()
+    assert button is not None
+    bottom = button.mapToScene(QPointF(0, button.height())).y()
+    assert 0 < bottom <= screen.window.height()
+
+
+@pytest.mark.parametrize(
+    ("engine", "message", "retry"),
+    [
+        (TrayList.Engine.RESTARTING, "Il modello si è fermato: lo sto riavviando.", False),
+        (
+            TrayList.Engine.FAILURES,
+            (
+                "Il modello si è fermato quattro volte in un'ora. Finché non riparte, i "
+                "promemoria non avvisano."
+            ),
+            True,
+        ),
+        (
+            TrayList.Engine.MODEL,
+            "Il modello non si carica. Finché non riparte, i promemoria non avvisano.",
+            True,
+        ),
+        (
+            TrayList.Engine.GPU_MEMORY,
+            (
+                "La scheda video non ha abbastanza memoria per il modello. Chiudi un'app che "
+                "la usa, poi riprova."
+            ),
+            True,
+        ),
+        (
+            TrayList.Engine.MISMATCH,
+            "Il modello è di un'altra versione di Jiffin: reinstalla l'app.",
+            False,
+        ),
+    ],
+)
+def test_a_trouble_with_the_engine_shows_on_top(
+    screen: Screen, engine: TrayList.Engine, message: str, retry: bool
+) -> None:
+    screen.list.show_engine(engine)
+    screen.open()
+    assert screen.lines()[:2] == ["Promemoria", message]
+    if retry:
+        screen.click("Riprova")
+        assert screen.retries == 1
+    else:
+        with pytest.raises(StopIteration):
+            screen.button("Riprova")
+    screen.list.show_engine(TrayList.Engine.WORKING)
+    assert message not in screen.lines()
+
+
+def test_an_unreadable_address_shows_a_banner_naming_the_browsers(screen: Screen) -> None:
+    screen.list.show_unreadable(frozenset({"chrome.exe", "brave.exe"}))
+    screen.open()
+    banner = "Brave e Chrome: non riesco a leggere l'indirizzo. Uso solo app e titolo."
+    assert screen.lines()[:2] == ["Promemoria", banner]
+    screen.list.show_unreadable(frozenset({"vivaldi.exe"}))
+    assert screen.lines()[1] == "Vivaldi: non riesco a leggere l'indirizzo. Uso solo app e titolo."
+    screen.list.show_unreadable(frozenset())
+    assert screen.lines() == ["Promemoria", "Attivi", "Nessun promemoria attivo."]
+
+
+def test_the_list_goes_with_the_engine_and_no_binding_reads_it_gone(
+    qtbot: QtBot, dwm: list[tuple[object, ...]]
+) -> None:
+    """On quitting, Python lets go of the interface in any order: the list stays until the
+    engine goes, and then none of its window's bindings reads it gone (a warning fails)."""
+    look = Look(lambda: DARK)
+    engine = QQmlEngine()
+    look.provide(engine)
+    trays = TrayList(engine, Commands(), Writer(), lambda: None, Glass(look), SimulatedClock(0))
+    trays.show_reminders(RemindersView((active(1, "quando apro Figma", "esportare le icone"),)))
+    gone: list[str] = []
+    trays.destroyed.connect(lambda: gone.append("list"))
+    del trays
+    gc.collect()
+    assert gone == []
+    del engine
+    gc.collect()
+    assert gone == ["list"]

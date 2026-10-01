@@ -278,11 +278,13 @@ class Desk:
             self._process.kill()
 
 
-class Answers:
-    """The answers given on screen, in order: (what, alert id[, snooze])."""
+class Core:
+    """What the interface asks of `core`, in order: the answers given on screen, (what, alert
+    id[, snooze]), and the reminders changed there, (what, reminder id or texts)."""
 
     def __init__(self) -> None:
         self.given: list[tuple[object, ...]] = []
+        self.made: list[tuple[object, ...]] = []
 
     def done(self, alert_id: int) -> None:
         self.given.append(("done", alert_id))
@@ -299,12 +301,8 @@ class Answers:
     def vanished(self, alert_id: int) -> None:
         self.given.append(("vanished", alert_id))
 
-
-class Changes:
-    """The reminders saved on screen, in order: (what, [reminder id,] condition, action)."""
-
-    def __init__(self) -> None:
-        self.made: list[tuple[object, ...]] = []
+    def seen(self) -> None:
+        self.given.append(("seen",))
 
     def create(self, condition: str, action: str) -> None:
         self.made.append(("create", condition, action))
@@ -312,18 +310,23 @@ class Changes:
     def edit(self, reminder_id: int, condition: str, action: str) -> None:
         self.made.append(("edit", reminder_id, condition, action))
 
+    def complete(self, reminder_id: int) -> None:
+        self.made.append(("complete", reminder_id))
+
+    def delete(self, reminder_id: int) -> None:
+        self.made.append(("delete", reminder_id))
+
 
 class Screen:
     """The app's interface, made as the app makes it, with core's part played by the test."""
 
     def __init__(self, app: QGuiApplication) -> None:
-        self.answers = Answers()
-        self.changes = Changes()
-        self.interface = Interface(app, self.answers, self.changes)
+        self.core = Core()
+        self.interface = Interface(app, self.core, lambda: None)
 
     def show(self, *alert_ids: int) -> None:
         alerts = tuple(alert(alert_id) for alert_id in alert_ids)
-        self.interface.overlay.show(AlertsView(alerts, 0, ()))
+        self.interface.show_alerts(AlertsView(alerts, 0, ()))
 
     def window(self, alert_id: int) -> QQuickWindow:
         for window in QGuiApplication.topLevelWindows():
@@ -406,7 +409,7 @@ def desk(qtbot: QtBot) -> Iterator[Desk]:
 def test_an_alert_never_takes_the_focus_from_where_the_user_types(
     qtbot: QtBot, screen: Screen, desk: Desk
 ) -> None:
-    before = len(screen.answers.given)
+    before = len(screen.core.given)
     expected: list[tuple[object, ...]] = []
     for turn in range(1, ROUNDS + 1):
         screen.show(turn)
@@ -443,23 +446,23 @@ def test_an_alert_never_takes_the_focus_from_where_the_user_types(
 
     assert desk.moves == []
     assert desk.text() == desk.typed
-    assert screen.answers.given[before:] == expected
+    assert screen.core.given[before:] == expected
 
 
 @pytest.mark.integration
 def test_three_alerts_vanish_on_their_own_and_leave_the_focus_alone(
     qtbot: QtBot, screen: Screen, desk: Desk
 ) -> None:
-    before = len(screen.answers.given)
+    before = len(screen.core.given)
     screen.show(101, 102, 103)
     qtbot.wait(500)
     desk.check("three shown")
     desk.type("tre ", "three shown")
-    qtbot.waitUntil(lambda: len(screen.answers.given) == before + 3, timeout=VANISH_MS)
+    qtbot.waitUntil(lambda: len(screen.core.given) == before + 3, timeout=VANISH_MS)
     qtbot.waitUntil(screen.none_shown)
     desk.check("three vanished")
     assert desk.moves == []
-    assert sorted(screen.answers.given[before:], key=str) == [
+    assert sorted(screen.core.given[before:], key=str) == [
         ("vanished", 101),
         ("vanished", 102),
         ("vanished", 103),
@@ -482,7 +485,7 @@ def test_the_shortcut_brings_the_creation_window_over_another_app(
     type_text("esportare le icone")
     press(_VK_RETURN)
     qtbot.waitUntil(lambda: not window.isVisible())
-    assert screen.changes.made == [("create", "quando apro Figma", "esportare le icone")]
+    assert screen.core.made == [("create", "quando apro Figma", "esportare le icone")]
     qtbot.waitUntil(lambda: foreground() == desk.window)
     qtbot.wait(300)
     desk.check("creation window closed")

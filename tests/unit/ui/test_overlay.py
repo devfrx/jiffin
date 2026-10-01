@@ -17,8 +17,22 @@ from jiffin.ui.glass import Glass
 from jiffin.ui.look import Look, Settings
 from jiffin.ui.overlay import GAP, TOP, Overlay
 
-DARK = Settings(dark=True, accent="#4cc2ff", transparency=True, animations=True)
-LIGHT_SOLID_STILL = Settings(dark=False, accent="#005fb8", transparency=False, animations=False)
+DARK = Settings(
+    dark=True,
+    accent="#4cc2ff",
+    transparency=True,
+    animations=True,
+    taskbar_dark=True,
+    taskbar_accent="#4cc2ff",
+)
+LIGHT_SOLID_STILL = Settings(
+    dark=False,
+    accent="#005fb8",
+    transparency=False,
+    animations=False,
+    taskbar_dark=False,
+    taskbar_accent="#005fb8",
+)
 WAIT_MS = 500
 """How long the alerts of these tests wait for an answer, instead of 10 s."""
 ACTION = "esportare le icone"

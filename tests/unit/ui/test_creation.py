@@ -15,7 +15,14 @@ from jiffin.ui.creation import Creation
 from jiffin.ui.glass import Glass
 from jiffin.ui.look import Look, Settings
 
-DARK = Settings(dark=True, accent="#4cc2ff", transparency=True, animations=True)
+DARK = Settings(
+    dark=True,
+    accent="#4cc2ff",
+    transparency=True,
+    animations=True,
+    taskbar_dark=True,
+    taskbar_accent="#4cc2ff",
+)
 WHEN, WHAT = "Quando", "Ricordami di"
 """The two boxes, as a screen reader names them."""
 
