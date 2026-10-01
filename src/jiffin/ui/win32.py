@@ -111,6 +111,16 @@ for _library, _signatures in ((_user32, _USER32), (_dwmapi, _DWMAPI)):
         _function = getattr(_library, _name)
         _function.restype, _function.argtypes = _result, _arguments
 
+# Exported by ordinal only, since Windows 10 1903: SetPreferredAppMode and FlushMenuThemes, as
+# called by github.com/ysc3839/win32-darkmode, whose code Notepad++ uses.
+_uxtheme = ctypes.WinDLL("uxtheme")
+# ctypes takes an ordinal as the index too; the stub knows only names.
+_set_preferred_app_mode = _uxtheme[135]  # type: ignore[index]
+_set_preferred_app_mode.restype, _set_preferred_app_mode.argtypes = ctypes.c_int, [ctypes.c_int]
+_flush_menu_themes = _uxtheme[136]  # type: ignore[index]
+_flush_menu_themes.restype, _flush_menu_themes.argtypes = None, []
+_ALLOW_DARK = 1
+
 
 def set_backdrop(hwnd: int, dark: bool, backdrop: int) -> None:
     """Put a system backdrop under the window, or take it away with DWMSBT_NONE.
@@ -209,6 +219,15 @@ def accent_shades() -> tuple[str, str]:
         return _DEFAULT_SHADES
     light2, dark1 = (palette[i * 4 : i * 4 + 3].hex() for i in (_LIGHT2, _DARK1))
     return f"#{light2}", f"#{dark1}"
+
+
+def follow_dark_menus() -> None:
+    """Have Windows draw this app's menus dark while the apps' mode is dark: otherwise the tray
+    icon's menu stays light. Windows documents no way to ask for it; this is uxtheme's own,
+    undocumented: SetPreferredAppMode(AllowDark), then FlushMenuThemes. Call it again after a
+    change of theme."""
+    _set_preferred_app_mode(_ALLOW_DARK)
+    _flush_menu_themes()
 
 
 def small_icon_size() -> int:

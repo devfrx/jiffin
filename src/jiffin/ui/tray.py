@@ -130,6 +130,9 @@ class Tray(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has no _
     def install(self) -> None:
         """Put the icon in the tray. Only Windows has a tray among Qt's platforms here: the
         offscreen one of the tests has none, and says so loudly."""
+        # The menu is Windows' own, light unless asked for dark.
+        win32.follow_dark_menus()
+        self._look.changed.connect(win32.follow_dark_menus)
         component = QQmlComponent(self._engine, QUrl.fromLocalFile(QML / "TrayIcon.qml"))
         if component.isError():
             raise RuntimeError(component.errorString())

@@ -38,6 +38,7 @@ QtObject {
     readonly property string edit: "Modifica"
     readonly property string complete: "Completa"
     readonly property string remove: "Elimina"
+    readonly property string removeQuestion: "Eliminare il promemoria per sempre?"
     readonly property string retry: "Riprova"
     readonly property var months: ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"]
     readonly property var browsers: ({

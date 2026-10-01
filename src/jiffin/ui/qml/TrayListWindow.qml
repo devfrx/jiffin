@@ -282,6 +282,18 @@ Window {
                             required property bool returnsTomorrow
                             required property int silences
                             readonly property string status: Texts.status(returnsIn, returnsAt, returnsTomorrow, silences)
+                            // Elimina asks first: the reminder goes for good, with all it knows.
+                            property bool confirming: false
+
+                            // The row turns into the question and back; the focus goes along
+                            // when it was on the button.
+                            function swap(confirming: bool, from: T.AbstractButton, to: T.AbstractButton): void {
+                                const focused = from.activeFocus;
+                                const reason = from.visualFocus ? Qt.TabFocusReason : Qt.OtherFocusReason;
+                                row.confirming = confirming;
+                                if (focused)
+                                    to.forceActiveFocus(reason);
+                            }
 
                             Layout.fillWidth: true
                             implicitHeight: rowLayout.implicitHeight + 16
@@ -289,29 +301,72 @@ Window {
                             RowLayout {
                                 id: rowLayout
 
-                                x: 16
+                                x: 8
                                 y: 8
-                                width: row.width - 16 - 12
+                                width: row.width - 8 - 12
                                 spacing: 4
 
+                                // Completa: a circle, as in Microsoft To Do; the check shows under
+                                // the mouse. It keeps its place while Elimina asks.
+                                FluentButton {
+                                    id: completeButton
+
+                                    Layout.alignment: Qt.AlignTop
+                                    opacity: row.confirming ? 0 : 1
+                                    enabled: !row.confirming
+                                    kind: FluentButton.Subtle
+                                    glyph: completeButton.hovered ? "" : "" // Completed, CircleRing
+                                    Accessible.name: Texts.complete
+                                    Accessible.description: row.action
+                                    focusPolicy: Qt.StrongFocus
+                                    onClicked: window.trayList.complete(row.reminderId)
+                                }
                                 ColumnLayout {
                                     Layout.fillWidth: true
                                     Layout.alignment: Qt.AlignTop
+                                    Layout.topMargin: 6
                                     spacing: 2
 
                                     BodyText {
                                         text: row.action
                                     }
                                     CaptionText {
+                                        visible: !row.confirming
                                         text: row.condition
                                     }
                                     CaptionText {
-                                        visible: row.status.length > 0
+                                        visible: !row.confirming && row.status.length > 0
                                         text: row.status
+                                    }
+                                    CaptionText {
+                                        visible: row.confirming
+                                        text: Texts.removeQuestion
+                                    }
+                                    Row {
+                                        Layout.topMargin: 6
+                                        spacing: 8
+                                        visible: row.confirming
+
+                                        FluentButton {
+                                            id: keepButton
+
+                                            text: Texts.cancel
+                                            Accessible.description: row.action
+                                            focusPolicy: Qt.StrongFocus
+                                            onClicked: row.swap(false, keepButton, removeButton)
+                                        }
+                                        FluentButton {
+                                            kind: FluentButton.Accent
+                                            text: Texts.remove
+                                            Accessible.description: row.action
+                                            focusPolicy: Qt.StrongFocus
+                                            onClicked: window.trayList.delete(row.reminderId)
+                                        }
                                     }
                                 }
                                 FluentButton {
                                     Layout.alignment: Qt.AlignTop
+                                    visible: !row.confirming
                                     kind: FluentButton.Subtle
                                     glyph: "" // Edit
                                     Accessible.name: Texts.edit
@@ -320,22 +375,24 @@ Window {
                                     onClicked: window.trayList.edit(row.reminderId)
                                 }
                                 FluentButton {
+                                    id: removeButton
+
                                     Layout.alignment: Qt.AlignTop
-                                    kind: FluentButton.Subtle
-                                    glyph: "" // CheckMark
-                                    Accessible.name: Texts.complete
-                                    Accessible.description: row.action
-                                    focusPolicy: Qt.StrongFocus
-                                    onClicked: window.trayList.complete(row.reminderId)
-                                }
-                                FluentButton {
-                                    Layout.alignment: Qt.AlignTop
+                                    visible: !row.confirming
                                     kind: FluentButton.Subtle
                                     glyph: "" // Delete
                                     Accessible.name: Texts.remove
                                     Accessible.description: row.action
                                     focusPolicy: Qt.StrongFocus
-                                    onClicked: window.trayList.delete(row.reminderId)
+                                    onClicked: row.swap(true, removeButton, keepButton)
+                                }
+                            }
+
+                            Connections {
+                                target: window.trayList
+
+                                function onOpened(): void {
+                                    row.confirming = false;
                                 }
                             }
                         }

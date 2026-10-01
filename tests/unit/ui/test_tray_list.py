@@ -176,10 +176,21 @@ class Screen:
         )
 
     def click(self, name: str, row: str | None = None) -> None:
+        """Click the button once the window's scene holds it. The scene takes the window's new
+        height through the event queue, and QTest's click skips the queue: after a row grows,
+        it would land below the scene, on nothing."""
         button = self.button(name, row)
-        centre = button.mapToScene(QPointF(button.width() / 2, button.height() / 2)).toPoint()
+
+        def centre() -> QPointF:
+            return button.mapToScene(QPointF(button.width() / 2, button.height() / 2))
+
+        scene = self.window.contentItem()
+        self._qtbot.waitUntil(lambda: scene.boundingRect().contains(centre()))
         QTest.mouseClick(
-            self.window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, centre
+            self.window,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+            centre().toPoint(),
         )
 
     def press(self, key: Qt.Key) -> None:
@@ -399,7 +410,7 @@ def test_nuovo_and_modifica_open_the_creation_window_and_close_the_list(screen: 
     ]
 
 
-def test_completa_and_elimina_go_to_core_and_the_list_stays(screen: Screen) -> None:
+def test_completa_goes_to_core_and_elimina_asks_first(screen: Screen) -> None:
     screen.list.show_reminders(
         RemindersView(
             (
@@ -411,8 +422,42 @@ def test_completa_and_elimina_go_to_core_and_the_list_stays(screen: Screen) -> N
     screen.open()
     screen.click("Completa", "Rispondere a Giulia")
     screen.click("Elimina", "Esportare le icone")
+    assert screen.lines()[-2:] == ["Esportare le icone", "Eliminare il promemoria per sempre?"]
+    screen.click("Annulla", "Esportare le icone")
+    assert screen.lines()[-2:] == ["Esportare le icone", "Quando apro Figma"]
+    screen.click("Elimina", "Esportare le icone")
+    screen.click("Elimina", "Esportare le icone")
     assert screen.commands.sent == [("complete", 2), ("delete", 1)]
     assert screen.window.isVisible()
+
+
+def test_elimina_asks_by_keyboard_too_and_annulla_comes_first(screen: Screen) -> None:
+    screen.list.show_reminders(
+        RemindersView((active(1, "quando apro Figma", "esportare le icone"),))
+    )
+    screen.open()
+    for _ in range(4):
+        screen.press(Qt.Key.Key_Tab)
+    assert screen.focused() == ("Elimina", "Esportare le icone")
+    screen.press(Qt.Key.Key_Return)
+    assert screen.focused() == ("Annulla", "Esportare le icone")
+    screen.press(Qt.Key.Key_Return)
+    assert screen.focused() == ("Elimina", "Esportare le icone")
+    screen.press(Qt.Key.Key_Return)
+    screen.press(Qt.Key.Key_Tab)
+    screen.press(Qt.Key.Key_Return)
+    assert screen.commands.sent == [("delete", 1)]
+
+
+def test_the_question_of_elimina_goes_when_the_list_closes(screen: Screen) -> None:
+    screen.list.show_reminders(
+        RemindersView((active(1, "quando apro Figma", "esportare le icone"),))
+    )
+    screen.open()
+    screen.click("Elimina", "Esportare le icone")
+    screen.press(Qt.Key.Key_Escape)
+    screen.open()
+    assert screen.lines()[-2:] == ["Esportare le icone", "Quando apro Figma"]
 
 
 def test_tab_goes_from_button_to_button_and_keeps_its_place_while_rows_come(
@@ -431,8 +476,8 @@ def test_tab_goes_from_button_to_button_and_keeps_its_place_while_rows_come(
         ("Nuovo", ""),
         ("Fatto", ""),
         ("Rimanda", ""),
-        ("Modifica", "Esportare le icone"),
         ("Completa", "Esportare le icone"),
+        ("Modifica", "Esportare le icone"),
         ("Elimina", "Esportare le icone"),
     ]
     posta = active(2, "quando apro la posta", "rispondere a Giulia")
