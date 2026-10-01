@@ -54,14 +54,10 @@ QtObject {
 
     // A card inside a surface: an unseen alert in the tray list.
     readonly property color cardFill: dark ? "#0DFFFFFF" : "#B3FFFFFF"
-    readonly property color cardStroke: dark ? "#19000000" : "#0F000000"
 
-    // An info bar's severity: its icon in the colour, its background in the background, and
-    // the glyph on the icon in textInverse.
+    // An info bar's severity: its icon in the colour, and the glyph on the icon in textInverse.
     readonly property color caution: dark ? "#FFFCE100" : "#FF9D5D00"
-    readonly property color cautionBackground: dark ? "#FF433519" : "#FFFFF4CE"
     readonly property color critical: dark ? "#FFFF99A4" : "#FFC42B1C"
-    readonly property color criticalBackground: dark ? "#FF442726" : "#FFFDE7E9"
     readonly property color textInverse: dark ? "#E4000000" : "#FFFFFFFF"
 
     // A scroll bar's thumb: ControlStrongFillColorDefault.
