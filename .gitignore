@@ -27,3 +27,6 @@ coverage.xml
 *.db-wal
 *.gguf
 jiffin-prove/
+
+# The QML types of the Python view-models, written by `pyside6-project build` for qmllint
+/Jiffin/

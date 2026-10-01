@@ -62,6 +62,20 @@ markers = [
 ]
 qt_api = "pyside6"
 
+[tool.pyside6-project]
+# What `pyside6-project build` reads (ADR-0016): the QML files, the Python files that register
+# QML types, and one with a main. It writes the types for qmllint into Jiffin/, ignored by git.
+files = [
+    "src/jiffin/ui/__main__.py",
+    "src/jiffin/ui/alert.py",
+    "src/jiffin/ui/look.py",
+    "src/jiffin/ui/qml/AlertWindow.qml",
+    "src/jiffin/ui/qml/Colors.qml",
+    "src/jiffin/ui/qml/FluentButton.qml",
+    "src/jiffin/ui/qml/Texts.qml",
+    "src/jiffin/ui/qml/Typography.qml",
+]
+
 [tool.coverage.run]
 source_pkgs = ["jiffin"]
 # Measures the engine child process; pytest-cov 7 no longer does it on its own.
