@@ -94,6 +94,8 @@ a nudge clears it only until the next show.
 | Accent colour | `WM_DWMCOLORIZATIONCOLORCHANGED`, Qt's `ApplicationPaletteChange` | `QPalette::Accent` |
 | Transparency effects | `WM_SETTINGCHANGE` "ImmersiveColorSet"; nothing from Qt | `EnableTransparency` in the registry |
 | Animation effects | `WM_SETTINGCHANGE` with `SPI_SETCLIENTAREAANIMATION` | `SPI_GETCLIENTAREAANIMATION` |
+| Taskbar light or dark, for the tray icon | `WM_SETTINGCHANGE` "ImmersiveColorSet" | `SystemUsesLightTheme` in the registry |
+| Accent shade for the tray icon's dot | `WM_DWMCOLORIZATIONCOLORCHANGED` | `AccentPalette` in the registry: Light2 on a dark taskbar, Dark1 on a light one |
 
 **Motion**, with WinUI's values: the alert enters from the top in 250 ms with
 `cubic-bezier(0, 0, 0, 1)` and leaves in 167 ms with `cubic-bezier(1, 0, 1, 1)`.
@@ -104,9 +106,21 @@ clear why it appeared, and a thin bar shows its 10 seconds passing, also with
 animations off.
 
 **Tray icon:** a monochrome glyph like the system icons, dark on a light
-taskbar and white on a dark one. States: normal; a dot in the accent colour for
-an unseen alert; "!" when a browser address cannot be read
-([ADR-0005](0005-browser-address-ui-automation.md)).
+taskbar and white on a dark one. States: normal; a dot in the accent colour
+while an alert waits or has not been seen; "!" when a browser address cannot be
+read
+([ADR-0005](0005-browser-address-ui-automation.md)). Its menu is Windows' own,
+and stays light in dark mode unless the app asks for dark menus with uxtheme's
+`SetPreferredAppMode(AllowDark)` and `FlushMenuThemes`: undocumented, exported
+only by ordinal (135 and 136), called as Notepad++ does; Windows documents no
+other way. Seen dark on the owner's machine
+([#43](https://github.com/devfrx/jiffin/issues/43)).
+
+**Tray list:** a card like the alert, over the tray. The owner chose on screen
+([#43](https://github.com/devfrx/jiffin/issues/43)) its warnings as a line
+without the box of WinUI's InfoBar, where only the icon has the severity's
+colour (the yellow box stood out too much), and active reminders that complete
+from a circle at their left, as in Microsoft To Do, with Elimina asking first.
 
 ## Consequences
 
