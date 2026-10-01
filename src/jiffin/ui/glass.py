@@ -1,11 +1,14 @@
-"""The glass under the alert windows, and the Windows messages that change the look (ADR-0010).
+"""The glass under our windows, and the Windows messages that change the look (ADR-0010).
 
-The recipe, verified with the prototype of #31: the window gets a frame and never shows it
-(WM_NCCALCSIZE answered with 0), and DWM is always told the frame is active (WM_NCACTIVATE
-passed as TRUE to DefWindowProcW, never to Qt), since the backdrop of a window that is never
-active is solid otherwise. After a change of theme, accent or colours, DWM draws it solid again
-until it is recreated: once, a while after the last message of the change. A change of the
-animation effects is only read again; other setting changes are not the look's.
+The recipe for the alerts, verified with the prototype of #31: the window gets a frame and never
+shows it (WM_NCCALCSIZE answered with 0), and DWM is always told the frame is active
+(WM_NCACTIVATE passed as TRUE to DefWindowProcW, never to Qt), since the backdrop of a window
+that is never active is solid otherwise. After a change of theme, accent or colours, DWM draws
+it solid again until it is recreated: once, a while after the last message of the change. A
+change of the animation effects is only read again; other setting changes are not the look's.
+
+The creation window keeps Windows' own frame and title bar, and is active like any window: it
+only gets Mica under it, and its frame messages are left to Windows.
 
 The filter sees every message of the interface thread; it reads the code first, and the rest
 of the message only for the few codes it handles.
@@ -17,7 +20,7 @@ from ctypes import wintypes
 from PySide6.QtCore import QAbstractNativeEventFilter, QByteArray, QTimer
 
 from jiffin.ui import win32
-from jiffin.ui.look import Look
+from jiffin.ui.look import Look, Material
 
 SETTLE_MS = 1000
 """How long after the last message of a change the look is read again and the glass recreated."""
@@ -34,6 +37,9 @@ class Glass(QAbstractNativeEventFilter):
         super().__init__()
         self._look = look
         self._windows: set[int] = set()
+        """Without a frame: the alerts."""
+        self._framed: set[int] = set()
+        """With Windows' own frame: the creation window."""
         self._nudged: set[int] = set()
         self._recreate = False
         """The change that is settling changed the colours."""
@@ -45,6 +51,11 @@ class Glass(QAbstractNativeEventFilter):
         """A window of ours: its frame is never shown, and the glass goes under it."""
         self._windows.add(hwnd)
         win32.set_backdrop(hwnd, self._look.settings.dark, self._look.backdrop)
+
+    def add_framed(self, hwnd: int) -> None:
+        """A window with Windows' own frame: Mica goes under it."""
+        self._framed.add(hwnd)
+        win32.set_backdrop(hwnd, self._look.settings.dark, self._look.backdrop_for(Material.MICA))
 
     def shown(self, hwnd: int) -> None:
         win32.activate_frame(hwnd)
@@ -84,9 +95,12 @@ class Glass(QAbstractNativeEventFilter):
         self._settle.start()
 
     def _apply(self) -> None:
+        dark = self._look.settings.dark
         for hwnd in self._windows:
-            win32.set_backdrop(hwnd, self._look.settings.dark, self._look.backdrop)
+            win32.set_backdrop(hwnd, dark, self._look.backdrop)
             win32.activate_frame(hwnd)
+        for hwnd in self._framed:
+            win32.set_backdrop(hwnd, dark, self._look.backdrop_for(Material.MICA))
 
     def _settled(self) -> None:
         recreate, self._recreate = self._recreate, False

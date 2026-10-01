@@ -122,8 +122,12 @@ class Look(QObject):
 
     @property
     def backdrop(self) -> int:
-        """The DWM backdrop: the material's, or none when the surface is solid."""
-        return win32.DWMSBT_NONE if self._solid() else _BACKDROPS[self._material]
+        """The DWM backdrop of the alerts and the list: the chosen material's."""
+        return self.backdrop_for(self._material)
+
+    def backdrop_for(self, material: Material) -> int:
+        """The material's DWM backdrop, or none when the surface is solid."""
+        return win32.DWMSBT_NONE if self._solid() else _BACKDROPS[material]
 
     def _solid(self) -> bool:
         return not self._settings.transparency

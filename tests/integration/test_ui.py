@@ -1,10 +1,12 @@
-"""The alert overlay on the real screen, while the user types in another app (#31, ADR-0009).
+"""The interface on the real screen, while the user types in another app: the alerts never
+take the focus (#31, ADR-0009), and the shortcut brings the creation window to the front (#43).
 
 These tests run only on the owner's machine. `uv run pytest -m integration
 tests/integration/test_ui.py` opens a window with a text box in front of everything, then
 for about two minutes shows alerts, types in the box, moves the mouse over the alerts and
-clicks their buttons. Leave the computer alone meanwhile, and any window or dialog that shows
-up too: a click anywhere moves the focus, which is what these tests watch.
+clicks their buttons, and presses Win+Shift+N to write a reminder. Leave the computer alone
+meanwhile, and any window or dialog that shows up too: a click anywhere moves the focus, which
+is what these tests watch.
 """
 
 import ctypes
@@ -125,6 +127,7 @@ for _name, (_result, _arguments) in _USER32.items():
 
 _INPUT_MOUSE, _INPUT_KEYBOARD = 0, 1
 _KEYEVENTF_KEYUP, _KEYEVENTF_UNICODE = 0x0002, 0x0004
+_VK_TAB, _VK_RETURN, _VK_SHIFT, _VK_LWIN = 0x09, 0x0D, 0x10, 0x5B
 _MOUSEEVENTF_MOVE, _MOUSEEVENTF_LEFTDOWN, _MOUSEEVENTF_LEFTUP = 0x0001, 0x0002, 0x0004
 _MOUSEEVENTF_VIRTUALDESK, _MOUSEEVENTF_ABSOLUTE = 0x4000, 0x8000
 _SM_XVIRTUALSCREEN, _SM_YVIRTUALSCREEN = 76, 77
@@ -185,6 +188,20 @@ def type_text(text: str) -> None:
             event.u.ki = _KeyboardInput(0, ord(character), flags, 0, 0)
             events.append(event)
     _send(events)
+
+
+def press(*keys: int) -> None:
+    """Keys held down in order, then let go: `press(_VK_LWIN, _VK_SHIFT, ord("N"))`."""
+    events = []
+    for key, flags in [(key, 0) for key in keys] + [(key, _KEYEVENTF_KEYUP) for key in keys[::-1]]:
+        event = _Input(type=_INPUT_KEYBOARD)
+        event.u.ki = _KeyboardInput(key, 0, flags, 0, 0)
+        events.append(event)
+    _send(events)
+
+
+def foreground() -> int:
+    return _user32.GetForegroundWindow() or 0
 
 
 def rect(hwnd: int) -> tuple[int, int, int, int]:
@@ -283,12 +300,26 @@ class Answers:
         self.given.append(("vanished", alert_id))
 
 
+class Changes:
+    """The reminders saved on screen, in order: (what, [reminder id,] condition, action)."""
+
+    def __init__(self) -> None:
+        self.made: list[tuple[object, ...]] = []
+
+    def create(self, condition: str, action: str) -> None:
+        self.made.append(("create", condition, action))
+
+    def edit(self, reminder_id: int, condition: str, action: str) -> None:
+        self.made.append(("edit", reminder_id, condition, action))
+
+
 class Screen:
     """The app's interface, made as the app makes it, with core's part played by the test."""
 
     def __init__(self, app: QGuiApplication) -> None:
         self.answers = Answers()
-        self.interface = Interface(app, self.answers)
+        self.changes = Changes()
+        self.interface = Interface(app, self.answers, self.changes)
 
     def show(self, *alert_ids: int) -> None:
         alerts = tuple(alert(alert_id) for alert_id in alert_ids)
@@ -304,6 +335,13 @@ class Screen:
 
     def none_shown(self) -> bool:
         return not any(w.isVisible() for w in QGuiApplication.topLevelWindows())
+
+    def creation(self) -> QQuickWindow:
+        for window in QGuiApplication.topLevelWindows():
+            if window.title() in ("Nuovo promemoria", "Modifica promemoria"):
+                assert isinstance(window, QQuickWindow)
+                return window
+        raise LookupError("no creation window")
 
 
 def alert(alert_id: int) -> Alert:
@@ -427,3 +465,37 @@ def test_three_alerts_vanish_on_their_own_and_leave_the_focus_alone(
         ("vanished", 103),
     ]
     assert desk.text() == desk.typed
+
+
+@pytest.mark.integration
+def test_the_shortcut_brings_the_creation_window_over_another_app(
+    qtbot: QtBot, screen: Screen, desk: Desk
+) -> None:
+    assert screen.interface.hotkey.registered, "another app holds Win+Shift+N"
+    window = screen.creation()
+    desk.type("prima ", "before the shortcut")
+    press(_VK_LWIN, _VK_SHIFT, ord("N"))
+    qtbot.waitUntil(lambda: foreground() == int(window.winId()))
+    qtbot.waitUntil(lambda: focused(window) == "Quando")
+    type_text("quando apro Figma")
+    press(_VK_TAB)
+    type_text("esportare le icone")
+    press(_VK_RETURN)
+    qtbot.waitUntil(lambda: not window.isVisible())
+    assert screen.changes.made == [("create", "quando apro Figma", "esportare le icone")]
+    qtbot.waitUntil(lambda: foreground() == desk.window)
+    qtbot.wait(300)
+    desk.check("creation window closed")
+    desk.type("dopo ", "after the creation window")
+    qtbot.wait(200)
+    assert desk.moves == []
+    assert desk.text() == desk.typed
+
+
+def focused(window: QQuickWindow) -> object:
+    """The name a screen reader gives the item with the keyboard focus."""
+    item = window.activeFocusItem()
+    context = None if item is None else qmlContext(item)
+    if item is None or context is None:
+        return None
+    return QQmlProperty(item, "Accessible.name", context).read()

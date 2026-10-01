@@ -29,6 +29,7 @@ uv run scripts/fetch_llama_cpp.py     # llama.cpp for the engine, about 575 MB, 
 uv run pytest -m integration          # tests that need the GPU, the browsers or the screen
 uv run python -m jiffin.harness --help  # the evaluation harness
 uv run python -m jiffin.ui --alerts 3   # made-up alerts on screen, to look at the overlay
+uv run python -m jiffin.ui --creation   # and the creation window, which Win+Shift+N opens too
 ```
 
 The harness measures the app against its acceptance thresholds; how it works
