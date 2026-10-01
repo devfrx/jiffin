@@ -28,6 +28,8 @@ SECURITY_HEADERS = {
         "connect-src 'self'; img-src data:; base-uri 'none'; form-action 'none'"
     ),
 }
+BODY_LIMIT = 64 * 1024
+"""The longest body the page reads: an answer takes some 40 bytes."""
 
 
 class LabelServer(HTTPServer):
@@ -102,15 +104,30 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(404, "Not found")
 
     def do_POST(self) -> None:
+        body = self._body()
         if not self._allowed() or urlsplit(self.path).path != "/label":
             return self._send(403, "Forbidden")
+        if body is None:
+            return self._send(400, f"Invalid length: up to {BODY_LIMIT} bytes")
         if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
             return self._send(415, "JSON only")
         try:
-            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
-            if body["key"] not in self._server.keys:
+            answer = json.loads(body)
+            if answer["key"] not in self._server.keys:
                 raise ValueError("a pair outside this page")
-            self._server.labels.answer(body["key"], body["relevant"])
+            self._server.labels.answer(answer["key"], answer["relevant"])
         except (ValueError, KeyError, TypeError) as error:
             return self._send(400, f"Invalid answer: {error}")
         self._send(200, '{"ok": true}', "application/json")
+
+    def _body(self) -> bytes | None:
+        """The whole body, or None if its length is not a number from 0 to `BODY_LIMIT`.
+
+        Read before any answer: closing a connection with part of the request unread resets it,
+        and on Windows the client then loses the answer. A body refused stays unread.
+        """
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            return None
+        return self.rfile.read(length) if 0 <= length <= BODY_LIMIT else None
