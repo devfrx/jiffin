@@ -57,7 +57,7 @@ strict = true
 testpaths = ["tests"]
 addopts = ["--import-mode=importlib", "-m", "not integration and not benchmark"]
 markers = [
-    "integration: needs the owner's machine, with the model on the GPU or the browsers in front; run with `uv run pytest -m integration`",
+    "integration: needs the owner's machine, with the model on the GPU, or the browsers or the alerts in front; run with `uv run pytest -m integration`",
     "benchmark: measures for minutes, alone on the owner's machine; run with `uv run pytest -m benchmark -s`",
 ]
 qt_api = "pyside6"
