@@ -61,6 +61,8 @@ markers = [
     "benchmark: measures for minutes, alone on the owner's machine; run with `uv run pytest -m benchmark -s`",
 ]
 qt_api = "pyside6"
+# A QML binding that breaks only logs a warning: in a test, it fails.
+qt_log_level_fail = "WARNING"
 
 [tool.pyside6-project]
 # What `pyside6-project build` reads (ADR-0016): the QML files, the Python files that register
