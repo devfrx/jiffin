@@ -1,8 +1,8 @@
 """The creation window: a new reminder, or one being edited (#12, #43).
 
-Two boxes, "Quando" and "Ricordami di", the sentence they make, and Salva and Annulla. The
-shortcut and the tray list open it; it shows centred on the screen and takes the focus, and
-saving or cancelling hides it. The texts go to `core` as written, with their spaces tidied: the
+A card like the alerts, with two boxes, "Quando" and "Ricordami di", the sentence they make,
+and Salva and Annulla. The shortcut and the tray list open it; it shows centred on the screen
+and takes the focus, and saving or cancelling hides it. The texts go to `core` as written, with their spaces tidied: the
 judge gets exactly the "Quando" box (#12).
 """
 
@@ -47,6 +47,7 @@ class Creation(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         # dead: whatever Python lets go of first on quitting, none of them reads it gone.
         super().__init__(engine)
         self._changes = changes
+        self._glass = glass
         self._reminder_id: int | None = None
         """The reminder being edited; None for a new one."""
         self._condition = ""
@@ -59,7 +60,7 @@ class Creation(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         if not isinstance(window, QQuickWindow):
             raise TypeError(f"no creation window: {self._component.errorString()}")
         self._window = window
-        glass.add_framed(int(window.winId()))
+        glass.add(int(window.winId()))
 
     def new(self) -> None:
         """A blank reminder; one already being written stays as it is."""
@@ -135,5 +136,6 @@ class Creation(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
             QPoint(area.x() + (area.width() - width) // 2, area.y() + (area.height() - height) // 2)
         )
         window.show()
+        self._glass.shown(int(window.winId()))
         # On Windows, activating the window also brings it to the front.
         window.requestActivate()

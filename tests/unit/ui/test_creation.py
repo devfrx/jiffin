@@ -121,6 +121,14 @@ class Screen:
             )
         ).property("text")
 
+    def shows(self, text: str) -> bool:
+        """A line of the card reads `text`."""
+        try:
+            self._item(lambda item: item.inherits("QQuickText") and item.property("text") == text)
+        except StopIteration:
+            return False
+        return True
+
     def examples(self) -> set[str]:
         """The examples the boxes show in grey."""
         for item in items(self.window.contentItem()):
@@ -165,29 +173,34 @@ def test_the_shortcut_opens_a_blank_reminder_centred_with_the_focus(screen: Scre
     assert window.isVisible()
     assert (window.frameGeometry().x(), window.frameGeometry().y()) == centred(window)
     assert window.title() == "Nuovo promemoria"
+    assert screen.shows("Nuovo promemoria")
     assert (screen.text(WHEN), screen.text(WHAT)) == ("", "")
     assert screen.focused() == WHEN
     assert not screen.button("Salva").isEnabled()
 
 
-def test_the_window_keeps_windows_frame_and_gets_mica(
+def test_the_window_is_a_card_on_the_alerts_glass(
     screen: Screen, dwm: list[tuple[object, ...]]
 ) -> None:
     flags = screen.window.flags()
-    assert not flags & Qt.WindowType.FramelessWindowHint
+    assert flags & Qt.WindowType.FramelessWindowHint
     assert not flags & Qt.WindowType.WindowDoesNotAcceptFocus
     hwnd = int(screen.window.winId())
-    assert ("set_backdrop", hwnd, True, win32.DWMSBT_MAINWINDOW) in dwm
+    assert dwm == [("set_backdrop", hwnd, True, win32.DWMSBT_TRANSIENTWINDOW)]
+    screen.new()
+    screen.creation.cancel()
+    screen.new()
+    assert dwm[1:] == [("activate_frame", hwnd), ("nudge", hwnd), ("activate_frame", hwnd)]
 
 
-def test_without_transparency_mica_is_painted_solid(screen: Screen) -> None:
+def test_without_transparency_the_card_is_painted_solid(screen: Screen) -> None:
     screen.windows.settings = replace(DARK, dark=False, transparency=False)
     screen.look.refresh()
     screen.new()
-    fallback = screen._item(
+    surface = screen._item(
         lambda item: item.inherits("QQuickRectangle") and item.width() == screen.window.width()
     )
-    assert QColor(fallback.property("color")) == QColor("#FFF3F3F3")
+    assert QColor(surface.property("color")) == QColor("#FFF9F9F9")
 
 
 def test_salva_sends_the_two_boxes_with_their_spaces_tidied(screen: Screen) -> None:
@@ -283,6 +296,7 @@ def test_tab_reaches_the_buttons_and_enter_clicks_them(screen: Screen) -> None:
 def test_editing_shows_the_reminder_and_saves_its_new_text(screen: Screen) -> None:
     screen.edit(7, "quando apro Figma", "esportare le icone")
     assert screen.window.title() == "Modifica promemoria"
+    assert screen.shows("Modifica promemoria")
     assert (screen.text(WHEN), screen.text(WHAT)) == ("quando apro Figma", "esportare le icone")
     assert screen.focused() == WHEN
     screen.press(Qt.Key.Key_Tab)

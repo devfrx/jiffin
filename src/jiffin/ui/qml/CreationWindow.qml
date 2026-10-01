@@ -1,6 +1,7 @@
 // The creation window (#12, #43): "Quando" and "Ricordami di", the sentence they make, Annulla
-// and Salva. Windows' own frame and title bar, with Mica under the content (ADR-0010). It takes
-// the focus: Enter saves, or goes to the box still empty; Esc cancels; Tab moves on.
+// and Salva. A card like the alerts, on their material, with its title as its first line
+// (ADR-0010). It takes the focus: Enter saves, or goes to the box still empty; Esc cancels; Tab
+// moves on.
 import QtQuick
 import QtQuick.Layouts
 import Jiffin
@@ -20,26 +21,44 @@ Window {
     }
 
     width: 460
-    height: content.implicitHeight + 36
+    height: content.implicitHeight + 44
     color: "transparent"
     title: creation.editing ? Texts.editReminder : Texts.newReminder
-    flags: Qt.Window | Qt.CustomizeWindowHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint | Qt.MSWindowsFixedSizeDialogHint
+    // No button in the taskbar, as Windows' own panels: the shortcut brings it back.
+    flags: Qt.Tool | Qt.FramelessWindowHint
 
-    // Without glass, Mica's fallback is painted here.
+    // As the alert: without glass, the surface is painted here; with material B, a veil goes
+    // over the glass.
     Rectangle {
         anchors.fill: parent
         visible: Look.solid
-        color: Colors.micaFallback
+        color: Colors.surface
+    }
+    Rectangle {
+        anchors.fill: parent
+        visible: Look.veilOpacity > 0
+        color: Colors.veil
+        opacity: Look.veilOpacity
     }
 
     ColumnLayout {
         id: content
 
         x: 24
-        y: 12
+        y: 20
         width: window.width - 48
         spacing: 16
 
+        Text {
+            Layout.fillWidth: true
+            text: window.title
+            color: Colors.textPrimary
+            font.family: Typography.textFont
+            font.pixelSize: Typography.body
+            font.weight: Font.DemiBold
+            lineHeight: Typography.bodyLine
+            lineHeightMode: Text.FixedHeight
+        }
         FluentTextBox {
             id: whenBox
 

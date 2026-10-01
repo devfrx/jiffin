@@ -24,8 +24,8 @@ def qapp_cls() -> type[QGuiApplication]:
 
 @pytest.fixture
 def dwm(monkeypatch: pytest.MonkeyPatch) -> list[tuple[object, ...]]:
-    """What the glass asks of Windows, recorded instead of done: (function, *arguments)."""
+    """What the glass asks of DWM, recorded instead of done: (function, *arguments)."""
     calls: list[tuple[object, ...]] = []
-    for name in ("set_backdrop", "recreate_backdrop", "activate_frame", "nudge", "erase_to_glass"):
+    for name in ("set_backdrop", "recreate_backdrop", "activate_frame", "nudge"):
         monkeypatch.setattr(win32, name, lambda *args, name=name: calls.append((name, *args)))
     return calls

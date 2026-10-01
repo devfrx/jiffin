@@ -36,19 +36,20 @@ stateDiagram-v2
 
 - Two boxes, "Quando" and "Ricordami di", each showing an example in grey
   while empty, and under them the sentence they make: "Quando apro Figma, ti
-  ricordo di esportare le icone." The user writes
-  the whole condition, "quando …" or "se …"
+  ricordo di esportare le icone." The user writes the whole condition,
+  "quando …" or "se …"
   ([ADR-0008](../adr/0008-rewrite-conditions-english-statements.md)), and the
   judge gets exactly that box, with its spaces tidied (#12).
 - Salva works once both boxes are written. Enter saves, or moves to the box
   still empty; a box never breaks a line. Tab moves from box to box and on to
-  the buttons; Esc, Annulla and the close button drop what was written.
+  the buttons; Esc and Annulla drop what was written.
 - Editing shows the reminder's texts, and Salva sends them to `core` as a new
   revision; `core` ignores a text that did not change.
-- The window is centred on the primary screen and takes the focus. It keeps
-  Windows' own frame and title bar, with only the close button, so moving it
-  and its caption button are Windows'. Mica goes under the content, painted
-  solid when transparency is off. Once the window hides, Windows gives the
+- The window is a card like the alerts, chosen by the owner on screen (#43):
+  the alerts' material and glass, no Windows title bar, "Nuovo promemoria" or
+  "Modifica promemoria" as its first line. Like Windows' own panels it has no
+  taskbar button; Win+Shift+N brings it back to the front. It is centred on
+  the primary screen and takes the focus; once it hides, Windows gives the
   focus back to the app the user was in.
 
 ## Trying it

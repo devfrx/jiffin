@@ -1,13 +1,12 @@
 """The interface on the real screen, while the user types in another app: the alerts never
-take the focus (#31, ADR-0009), and the shortcut brings the creation window to the front (#43),
-with the glass under it.
+take the focus (#31, ADR-0009), and the shortcut brings the creation window to the front (#43).
 
 These tests run only on the owner's machine. `uv run pytest -m integration
 tests/integration/test_ui.py` opens a window with a text box in front of everything, then
 for about two minutes shows alerts, types in the box, moves the mouse over the alerts and
-clicks their buttons, presses Win+Shift+N to write a reminder, and opens the creation window
-twice more to look at its glass. Leave the computer alone meanwhile, and any window or dialog
-that shows up too: a click anywhere moves the focus, which is what these tests watch.
+clicks their buttons, and presses Win+Shift+N to write a reminder. Leave the computer alone
+meanwhile, and any window or dialog that shows up too: a click anywhere moves the focus, which
+is what these tests watch.
 """
 
 import ctypes
@@ -20,7 +19,7 @@ from typing import Any
 
 import pytest
 from PySide6.QtCore import QPointF
-from PySide6.QtGui import QColor, QGuiApplication
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlProperty, qmlContext
 from PySide6.QtQuick import QQuickItem, QQuickWindow
 from pytestqt.qtbot import QtBot
@@ -44,11 +43,6 @@ ON_THE_TEXT = QPointF(100, 20)
 """A point of an alert over its text, away from the buttons."""
 VANISH_MS = 15_000
 """The alerts' 10 s, with room."""
-GLASS_INSET = 12
-"""How far into the creation window's margins, which are 24 px, its glass is looked at."""
-GLASS_TOLERANCE = 16
-"""How far a margin's red, green and blue may be from the title bar's: the white that showed
-there before (#43) is some 220 away."""
 
 
 class _MouseInput(ctypes.Structure):
@@ -496,52 +490,6 @@ def test_the_shortcut_brings_the_creation_window_over_another_app(
     qtbot.wait(200)
     assert desk.moves == []
     assert desk.text() == desk.typed
-
-
-@pytest.mark.integration
-def test_the_creation_window_shows_the_glass_under_its_content(
-    qtbot: QtBot, screen: Screen
-) -> None:
-    creation = screen.interface.creation
-    window = screen.creation()
-    for show in ("one show", "another show"):
-        creation.new()
-        qtbot.waitUntil(window.isVisible)
-        qtbot.wait(500)  # Windows' animation of the show
-        assert_glass(window, show)
-        height = window.height()
-        with qtbot.waitSignal(window.heightChanged):  # the sentence takes two lines
-            creation.setCondition("quando lavoro al progetto Rossi con il cliente di Milano")
-            creation.setAction("aggiornare il changelog prima del rilascio e avvisare il team")
-        qtbot.wait(300)
-        assert window.height() > height
-        assert_glass(window, f"{show}, grown")
-        creation.cancel()
-        qtbot.waitUntil(lambda: not window.isVisible())
-
-
-def assert_glass(window: QQuickWindow, when: str) -> None:
-    """The margins of the content, where the QML draws nothing, show the glass of the title
-    bar: Mica, or its solid colour while the window is not active."""
-    frame = window.frameGeometry()
-    shot = window.screen().grabWindow(0, frame.x(), frame.y(), frame.width(), frame.height())
-    image = shot.toImage()
-    ratio = image.width() / frame.width()
-    left, top = window.x() - frame.x(), window.y() - frame.y()
-
-    def colour(x: float, y: float) -> tuple[int, int, int]:
-        pixel = QColor(image.pixel(round(x * ratio), round(y * ratio)))
-        return pixel.red(), pixel.green(), pixel.blue()
-
-    title = colour(frame.width() / 2, top / 2)
-    margins = {
-        "left": colour(left + GLASS_INSET, top + window.height() / 2),
-        "bottom": colour(left + window.width() / 2, top + window.height() - GLASS_INSET),
-    }
-    for name, found in margins.items():
-        assert all(abs(a - b) <= GLASS_TOLERANCE for a, b in zip(found, title, strict=True)), (
-            f"{when}: the {name} margin is {found}, the title bar {title}"
-        )
 
 
 def focused(window: QQuickWindow) -> object:

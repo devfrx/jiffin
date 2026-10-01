@@ -1,7 +1,7 @@
 """Win32 for the interface: the glass under a window that is never active, the Windows settings
 Qt does not expose (ADR-0010), and the global shortcut, which Qt does not have (#43).
 
-Signatures are transcribed from the Windows SDK headers `winuser.h`, `wingdi.h` and `dwmapi.h`.
+Signatures are transcribed from the Windows SDK headers `winuser.h` and `dwmapi.h`.
 """
 
 import ctypes
@@ -9,7 +9,6 @@ import winreg
 from ctypes import POINTER, wintypes
 from typing import Any
 
-WM_ERASEBKGND = 0x0014
 WM_SETTINGCHANGE = 0x001A
 WM_NCCALCSIZE = 0x0083
 WM_NCACTIVATE = 0x0086
@@ -39,7 +38,6 @@ _DWMWA_USE_IMMERSIVE_DARK_MODE = 20
 _DWMWA_WINDOW_CORNER_PREFERENCE = 33
 _DWMWA_SYSTEMBACKDROP_TYPE = 38
 _DWMWCP_ROUND = 2
-_BLACK_BRUSH = 4
 _SPI_GETCLIENTAREAANIMATION = 0x1042
 _PERSONALIZE = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
 
@@ -70,8 +68,6 @@ _USER32: dict[str, tuple[Any, list[Any]]] = {
         ],
     ),
     "GetWindowRect": (wintypes.BOOL, [wintypes.HWND, POINTER(wintypes.RECT)]),
-    "GetClientRect": (wintypes.BOOL, [wintypes.HWND, POINTER(wintypes.RECT)]),
-    "FillRect": (ctypes.c_int, [wintypes.HDC, POINTER(wintypes.RECT), wintypes.HBRUSH]),
     "MoveWindow": (
         wintypes.BOOL,
         [wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.BOOL],
@@ -98,14 +94,10 @@ _DWMAPI: dict[str, tuple[Any, list[Any]]] = {
     ),
     "DwmExtendFrameIntoClientArea": (ctypes.HRESULT, [wintypes.HWND, POINTER(_Margins)]),
 }
-_GDI32: dict[str, tuple[Any, list[Any]]] = {
-    "GetStockObject": (wintypes.HGDIOBJ, [ctypes.c_int]),
-}
 
 _user32 = ctypes.WinDLL("user32", use_last_error=True)
 _dwmapi = ctypes.WinDLL("dwmapi")
-_gdi32 = ctypes.WinDLL("gdi32")
-for _library, _signatures in ((_user32, _USER32), (_dwmapi, _DWMAPI), (_gdi32, _GDI32)):
+for _library, _signatures in ((_user32, _USER32), (_dwmapi, _DWMAPI)):
     for _name, (_result, _arguments) in _signatures.items():
         _function = getattr(_library, _name)
         _function.restype, _function.argtypes = _result, _arguments
@@ -128,14 +120,6 @@ def set_backdrop(hwnd: int, dark: bool, backdrop: int) -> None:
     _attribute(hwnd, _DWMWA_SYSTEMBACKDROP_TYPE, backdrop)
     flags = _SWP_NOMOVE | _SWP_NOSIZE | _SWP_NOZORDER | _SWP_NOACTIVATE | _SWP_FRAMECHANGED
     _user32.SetWindowPos(hwnd, None, 0, 0, 0, 0, flags)
-
-
-def erase_to_glass(hwnd: int, hdc: int) -> None:
-    """Fill the client area black on the device context of a WM_ERASEBKGND: where the window is
-    black, DWM shows the backdrop of a frame extended into the client area."""
-    rect = wintypes.RECT()
-    if _user32.GetClientRect(hwnd, ctypes.byref(rect)):
-        _user32.FillRect(hdc, ctypes.byref(rect), _gdi32.GetStockObject(_BLACK_BRUSH))
 
 
 def recreate_backdrop(hwnd: int, backdrop: int) -> None:

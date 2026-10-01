@@ -13,10 +13,6 @@ from jiffin.ui.look import Look, Material, Settings
 DARK = Settings(dark=True, accent="#4cc2ff", transparency=True, animations=True)
 OURS, OTHER = 0x1234, 0x5678
 """A window of ours, with the glass, and one that is not."""
-FRAMED = 0x9ABC
-"""The creation window: Windows' own frame, with Mica."""
-HDC = 0xDC
-"""The device context a WM_ERASEBKGND carries."""
 ANSWER = 1
 """What DefWindowProcW answers to the WM_NCACTIVATE the filter passes on."""
 SPI_SETANIMATION = 0x0049
@@ -189,49 +185,3 @@ def test_a_new_look_reaches_every_window(
         ],
         key=str,
     )
-
-
-def test_a_framed_window_gets_mica_whatever_the_material(
-    look: Look, dwm: list[tuple[object, ...]]
-) -> None:
-    look.material = Material.ACRYLIC
-    Glass(look).add_framed(FRAMED)
-    assert dwm == [("set_backdrop", FRAMED, True, win32.DWMSBT_MAINWINDOW)]
-
-
-def test_the_frame_of_a_framed_window_is_left_to_windows(
-    glass: Glass, dwm: list[tuple[object, ...]]
-) -> None:
-    glass.add_framed(FRAMED)
-    dwm.clear()
-    assert send(glass, win32.WM_NCCALCSIZE, hwnd=FRAMED, wparam=1) == (False, 0)
-    assert send(glass, win32.WM_NCACTIVATE, hwnd=FRAMED) == (False, 0)
-    assert dwm == []
-
-
-def test_the_client_area_of_a_framed_window_is_erased_to_the_glass(
-    glass: Glass, dwm: list[tuple[object, ...]]
-) -> None:
-    glass.add_framed(FRAMED)
-    dwm.clear()
-    assert send(glass, win32.WM_ERASEBKGND, hwnd=FRAMED, wparam=HDC) == (True, 1)
-    assert dwm == [("erase_to_glass", FRAMED, HDC)]
-    assert send(glass, win32.WM_ERASEBKGND, hwnd=OURS, wparam=HDC) == (False, 0)
-    assert send(glass, win32.WM_ERASEBKGND, hwnd=OTHER, wparam=HDC) == (False, 0)
-    assert len(dwm) == 1
-
-
-def test_a_framed_window_follows_the_look_and_keeps_mica(
-    qtbot: QtBot, windows: Windows, look: Look, glass: Glass, dwm: list[tuple[object, ...]]
-) -> None:
-    glass.add_framed(FRAMED)
-    dwm.clear()
-    look.material = Material.MICA_ALT
-    assert ("set_backdrop", FRAMED, True, win32.DWMSBT_MAINWINDOW) in dwm
-    dwm.clear()
-    windows.settings = replace(DARK, dark=False, transparency=False)
-    send(glass, win32.WM_SETTINGCHANGE, setting="ImmersiveColorSet")
-    qtbot.waitUntil(lambda: look.property("solid") is True)
-    qtbot.wait(SETTLED_MS)
-    framed = [call for call in dwm if call[1] == FRAMED]
-    assert framed == [("set_backdrop", FRAMED, False, win32.DWMSBT_NONE)]

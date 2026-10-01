@@ -7,7 +7,8 @@
 <!--
   The creation window, as built in src/jiffin/ui/qml (ADR-0010, tickets #12 and #43), ported
   from the board "A — Parte di Windows: scelta" of the visual direction, with the sentence of
-  the board "Creazione — scelta: due campi". Windows' own title bar, Mica under the content.
+  the board "Creazione — scelta: due campi". A card like the alerts, on their material (B by
+  default), without Windows' title bar: the owner chose it on screen in #43.
   Colours are those of Colors.qml; text and icons use Windows 11's system fonts, Segoe UI
   Variable and Segoe Fluent Icons.
 -->
@@ -21,7 +22,7 @@
     --stripe-a: #a259d9;
     --stripe-b: #2f7dd1;
     --stripe-c: #e08a3c;
-    --mica: #f3f3f3;
+    --card: #fcfcfc;
     --window-stroke: rgba(0, 0, 0, 0.1);
     --shadow: 0 32px 64px rgba(0, 0, 0, 0.18);
     --text-primary: rgba(0, 0, 0, 0.894);
@@ -42,7 +43,7 @@
     --stripe-a: #c586c0;
     --stripe-b: #4fc1ff;
     --stripe-c: #ce9178;
-    --mica: #202020;
+    --card: #2c2c2c;
     --window-stroke: rgba(255, 255, 255, 0.08);
     --shadow: 0 32px 64px rgba(0, 0, 0, 0.5);
     --text-primary: #ffffff;
@@ -107,29 +108,19 @@
     overflow: hidden;
     border: 1px solid var(--window-stroke);
     border-radius: 8px;
-    background: var(--mica);
+    background: var(--card);
     box-shadow: var(--shadow);
   }
-  /* Windows' own title bar: the title and the close button only. */
-  .title-bar {
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding-left: 16px;
-    font-size: 12px;
+  /* The card's title, its first line. */
+  .heading {
+    margin: 0;
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 600;
     color: var(--text-primary);
   }
-  .close {
-    width: 46px;
-    height: 32px;
-    display: grid;
-    place-items: center;
-    font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets", sans-serif;
-    font-size: 10px;
-  }
   .content {
-    padding: 12px 24px 24px;
+    padding: 20px 24px 24px;
     display: flex;
     flex-direction: column;
     gap: 16px;
@@ -260,8 +251,8 @@
     <h2>Chiaro</h2>
     <div class="desk">
       <div class="window" role="dialog" aria-label="Nuovo promemoria">
-        <div class="title-bar">Nuovo promemoria<span class="close" aria-hidden="true">&#xE8BB;</span></div>
         <div class="content">
+          <p class="heading">Nuovo promemoria</p>
           <div class="field">
             <label>Quando</label>
             <div class="box focused">quando lavoro al progetto Rossi<span class="caret"></span></div>
@@ -285,8 +276,8 @@
     <h2>Scuro</h2>
     <div class="desk">
       <div class="window" role="dialog" aria-label="Nuovo promemoria">
-        <div class="title-bar">Nuovo promemoria<span class="close" aria-hidden="true">&#xE8BB;</span></div>
         <div class="content">
+          <p class="heading">Nuovo promemoria</p>
           <div class="field">
             <label>Quando</label>
             <div class="box focused">quando lavoro al progetto Rossi<span class="caret"></span></div>
@@ -308,9 +299,9 @@
 </div>
 
 <ul class="notes">
-  <li>Invio salva, oppure porta alla casella ancora vuota; una casella non va mai a capo. Tab passa da una casella all'altra e ai pulsanti; Esc, Annulla e la X chiudono senza salvare.</li>
+  <li>Invio salva, oppure porta alla casella ancora vuota; una casella non va mai a capo. Tab passa da una casella all'altra e ai pulsanti; Esc e Annulla chiudono senza salvare.</li>
   <li>Salva si attiva quando entrambe le caselle sono scritte. Il verificatore riceve esattamente il testo di «Quando», con gli spazi in ordine.</li>
-  <li>Sotto il contenuto c'è Mica, come nella finestra Impostazioni di Windows; con la trasparenza spenta la superficie è piena.</li>
+  <li>È una scheda come gli avvisi, sullo stesso vetro, senza la barra di Windows: il titolo è la prima riga. Come i pannelli di Windows non ha un pulsante nella barra delle applicazioni, e Win+Maiusc+N la riporta davanti. Con la trasparenza spenta la superficie è piena.</li>
 </ul>
 </body>
 </html>

@@ -51,6 +51,4 @@ QtObject {
     // tint is B's veil.
     readonly property color surface: dark ? "#FF2C2C2C" : "#FFF9F9F9"
     readonly property color veil: dark ? "#FF2C2C2C" : "#FFFCFCFC"
-    // SolidBackgroundFillColorBase: Mica's fallback, the creation window without glass.
-    readonly property color micaFallback: dark ? "#FF202020" : "#FFF3F3F3"
 }
