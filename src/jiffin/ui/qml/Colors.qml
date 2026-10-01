@@ -51,4 +51,15 @@ QtObject {
     // tint is B's veil.
     readonly property color surface: dark ? "#FF2C2C2C" : "#FFF9F9F9"
     readonly property color veil: dark ? "#FF2C2C2C" : "#FFFCFCFC"
+
+    // A card inside a surface: an unseen alert in the tray list.
+    readonly property color cardFill: dark ? "#0DFFFFFF" : "#B3FFFFFF"
+
+    // An info bar's severity: its icon in the colour, and the glyph on the icon in textInverse.
+    readonly property color caution: dark ? "#FFFCE100" : "#FF9D5D00"
+    readonly property color critical: dark ? "#FFFF99A4" : "#FFC42B1C"
+    readonly property color textInverse: dark ? "#E4000000" : "#FFFFFFFF"
+
+    // A scroll bar's thumb: ControlStrongFillColorDefault.
+    readonly property color scrollThumb: dark ? "#8BFFFFFF" : "#72000000"
 }

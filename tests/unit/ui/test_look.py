@@ -8,7 +8,14 @@ from PySide6.QtQml import QQmlEngine
 from jiffin.ui import win32
 from jiffin.ui.look import VEIL, Look, Material, Settings
 
-DARK = Settings(dark=True, accent="#4cc2ff", transparency=True, animations=True)
+DARK = Settings(
+    dark=True,
+    accent="#4cc2ff",
+    transparency=True,
+    animations=True,
+    taskbar_dark=True,
+    taskbar_accent="#4cc2ff",
+)
 
 
 class Windows:

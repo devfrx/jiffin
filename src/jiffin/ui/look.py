@@ -50,16 +50,24 @@ class Settings:
     the accent palette in dark and Dark1 in light (checked on the owner's machine)."""
     transparency: bool
     animations: bool
+    taskbar_dark: bool
+    """The taskbar's theme, for the tray icon: Windows' mode, which can differ from the apps'."""
+    taskbar_accent: str
+    """#rrggbb: the accent's shade for the taskbar's theme, Light2 on dark and Dark1 on light."""
 
 
 def read_settings() -> Settings:
     app = QGuiApplication.instance()
     assert isinstance(app, QGuiApplication)
+    taskbar_dark = win32.taskbar_dark()
+    light2, dark1 = win32.accent_shades()
     return Settings(
         dark=app.styleHints().colorScheme() == Qt.ColorScheme.Dark,
         accent=app.palette().color(QPalette.ColorRole.Accent).name(),
         transparency=win32.transparency(),
         animations=win32.animations(),
+        taskbar_dark=taskbar_dark,
+        taskbar_accent=light2 if taskbar_dark else dark1,
     )
 
 

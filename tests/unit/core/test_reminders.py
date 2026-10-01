@@ -24,7 +24,15 @@ from jiffin.core.records import (
     SilencesCleared,
     Snapshot,
 )
-from jiffin.core.reminders import HOUR_MS, MINUTE_MS, THRESHOLD, Reminders, Snooze
+from jiffin.core.reminders import (
+    HOUR_MS,
+    MINUTE_MS,
+    THRESHOLD,
+    ActiveReminder,
+    Reminders,
+    RemindersView,
+    Snooze,
+)
 
 START = 1_790_000_000_000  # 2026-09-21, in UTC milliseconds
 BUILD = EngineBuild(1, "0.1.0", "b11081", "79de5cb8", judge_prompt=1, rewrite_prompt=2)
@@ -79,7 +87,10 @@ class Scene:
         self.model = model or FakeModel()
         self.clock = SimulatedClock(start, zone)
         self.views: list[AlertsView] = []
-        self.reminders = Reminders(self.model, self.clock, self.views.append, saved)
+        self.lists: list[RemindersView] = []
+        self.reminders = Reminders(
+            self.model, self.clock, self.views.append, self.lists.append, saved
+        )
         self.records: list[Record] = []
 
     def create(self, condition: str, action: str = "esportare le icone") -> Reminder:
@@ -97,6 +108,11 @@ class Scene:
     @property
     def view(self) -> AlertsView:
         return self.views[-1] if self.views else AlertsView((), 0, ())
+
+    @property
+    def listed(self) -> tuple[ActiveReminder, ...]:
+        """The active reminders in the tray list."""
+        return self.lists[-1].active if self.lists else ()
 
     def saved[T](self, kind: type[T]) -> list[T]:
         self.records += self.reminders.take_records()
@@ -213,6 +229,7 @@ def test_reminders_go_on_from_what_was_saved() -> None:
     scene = Scene(saved=saved)
     scene.wait(0)
     assert scene.view.unseen == (unseen,)
+    assert scene.listed == (ActiveReminder(Reminder(3, START, revision), silences=1),)
     scene.stay(FIGMA)
     assert (scene.model.calls, scene.outcomes()) == ([], [Outcome.HELD_BACK])
     assert scene.saved(Evaluation)[-1].id == 5
@@ -270,7 +287,7 @@ def test_the_threshold_is_reached_from_its_value_up() -> None:
 
 def test_the_harness_may_judge_at_another_threshold() -> None:
     model, clock = FakeModel(), SimulatedClock(START)
-    reminders = Reminders(model, clock, lambda view: None, threshold=0.5)
+    reminders = Reminders(model, clock, lambda view: None, lambda view: None, threshold=0.5)
     reminders.create("quando apro Figma", "esportare le icone")
     model.says(FIGMA, "quando apro Figma", 0.6)
     reminders.observe(Observation(clock.now(), FIGMA))
@@ -495,3 +512,38 @@ def test_an_unanswered_alert_waits_on_top_of_the_tray_list() -> None:
     assert scene.view.unseen == ()
     assert scene.saved(Reminder)[-1].completed_at == scene.clock.now()
     assert scene.saved(Reminder)[-1].id == reminder.id
+
+
+# The tray list
+
+
+def test_the_tray_list_shows_the_active_reminders_newest_first() -> None:
+    scene = Scene()
+    figma = scene.create("quando apro Figma")
+    bank = scene.create("se sono sul sito della banca", "pagare l'F24")
+    assert [active.reminder for active in scene.listed] == [bank, figma]
+    scene.reminders.edit(figma.id, "quando apro Figma", "esportare i loghi")
+    assert scene.listed[1].reminder.revision.action == "esportare i loghi"
+    scene.reminders.complete(bank.id)
+    assert [active.reminder.id for active in scene.listed] == [figma.id]
+    scene.reminders.delete(figma.id)
+    assert scene.listed == ()
+
+
+def test_the_tray_list_shows_a_snooze_until_the_alert_comes_back_and_the_silences() -> None:
+    scene = Scene()
+    reminder = scene.create("quando apro Figma")
+    scene.model.says(FIGMA, "quando apro Figma")
+    scene.stay(FIGMA)
+    scene.reminders.snooze(scene.alert().id, Snooze.QUARTER_HOUR)
+    [active] = scene.listed
+    assert (active.reminder.snoozed_until, active.silences) == (
+        scene.clock.now() + 15 * MINUTE_MS,
+        0,
+    )
+    scene.wait(15 * MINUTE_MS)
+    assert scene.listed[0].reminder.snoozed_until is None
+    scene.reminders.not_here(scene.alert().id)
+    assert scene.listed[0].silences == 1
+    scene.reminders.edit(reminder.id, "quando apro Figma", "esportare i loghi")
+    assert scene.listed[0].silences == 0

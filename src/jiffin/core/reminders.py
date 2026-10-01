@@ -2,12 +2,14 @@
 
 The worker thread owns `Reminders` and gives it one event at a time: observations, deadlines
 and the user's commands (ADR-0012). It keeps its state in memory, tells the interface about
-the alerts through a callback, and hands the records to save to whoever calls `take_records`.
+the alerts and the reminders through two callbacks, and hands the records to save to whoever
+calls `take_records`.
 """
 
 import itertools
+from collections import Counter
 from collections.abc import Callable, Iterable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import time, timedelta
 from enum import Enum, auto
 
@@ -56,12 +58,30 @@ TOMORROW_AT = time(8)
 DAY_STARTS_AT = time(4)
 
 
+@dataclass(frozen=True, slots=True)
+class ActiveReminder:
+    """A reminder not completed yet, as the tray list shows it."""
+
+    reminder: Reminder
+    silences: int
+    """How many contexts "Non qui" has silenced it in, until its text changes."""
+
+
+@dataclass(frozen=True, slots=True)
+class RemindersView:
+    """What the interface shows of the reminders."""
+
+    active: tuple[ActiveReminder, ...]
+    """Newest first."""
+
+
 class Reminders:
     def __init__(
         self,
         model: Model,
         clock: Clock,
         on_alerts: Callable[[AlertsView], None],
+        on_reminders: Callable[[RemindersView], None],
         saved: Snapshot | None = None,
         *,
         threshold: float = THRESHOLD,
@@ -75,6 +95,7 @@ class Reminders:
         self._threshold = threshold
         self._clock = clock
         self._on_alerts = on_alerts
+        self._on_reminders = on_reminders
         self._debounce = Debounce()
         self._alerts = Alerts(saved.unseen)
         self._reminders = {reminder.id: reminder for reminder in saved.reminders}
@@ -87,7 +108,8 @@ class Reminders:
             if reminder.completed_at is None and reminder.snoozed_until is not None
         }
         self._records: list[Record] = []
-        self._view_changed = bool(saved.unseen)
+        self._alerts_changed = bool(saved.unseen)
+        self._reminders_changed = bool(saved.reminders)
         self._reminder_ids = itertools.count(saved.last_ids.reminder + 1)
         self._revision_ids = itertools.count(saved.last_ids.revision + 1)
         self._evaluation_ids = itertools.count(saved.last_ids.evaluation + 1)
@@ -125,6 +147,7 @@ class Reminders:
         revision = Revision(next(self._revision_ids), reminder_id, 1, condition, action)
         self._save(Reminder(reminder_id, self._clock.now(), revision))
         self._write_statement(reminder_id)
+        self._publish()
         return self._reminders[reminder_id]
 
     def edit(self, reminder_id: int, condition: str, action: str) -> None:
@@ -144,6 +167,7 @@ class Reminders:
         )
         self._save(replace(reminder, revision=revision))
         self._write_statement(reminder_id)
+        self._publish()
 
     def complete(self, reminder_id: int) -> None:
         reminder = self._reminders.get(reminder_id)
@@ -165,6 +189,7 @@ class Reminders:
         self._snooze_deadlines.pop(reminder_id, None)
         self._close_alerts(reminder_id, self._clock.now())
         self._records.append(ReminderDeleted(reminder_id))
+        self._reminders_changed = True
         self._publish()
 
     def done(self, alert_id: int) -> None:
@@ -185,6 +210,7 @@ class Reminders:
         if alert is not None and alert.reminder_id in self._reminders:
             self._silences.add((alert.reminder_id, alert.context))
             self._records.append(Silence(alert.reminder_id, alert.context))
+            self._reminders_changed = True
         self._publish()
 
     def snooze(self, alert_id: int, snooze: Snooze) -> None:
@@ -200,13 +226,13 @@ class Reminders:
     def vanished(self, alert_id: int) -> None:
         """The alert left the screen after 10 s without an answer (the timer is the interface's)."""
         self._records.extend(self._alerts.vanish(alert_id, self._clock.now()))
-        self._view_changed = True
+        self._alerts_changed = True
         self._publish()
 
     def seen(self) -> None:
         """The tray list is open: the alerts that vanished unanswered are seen now."""
         self._records.extend(self._alerts.see(self._clock.now()))
-        self._view_changed = True
+        self._alerts_changed = True
         self._publish()
 
     # Judging
@@ -333,13 +359,14 @@ class Reminders:
         if reminder.snoozed_until is not None:
             self._save(replace(reminder, snoozed_until=None))
         self._records.append(self._alerts.add(alert, now))
-        self._view_changed = True
+        self._alerts_changed = True
 
     # Helpers
 
     def _save(self, reminder: Reminder) -> None:
         self._reminders[reminder.id] = reminder
         self._records.append(reminder)
+        self._reminders_changed = True
 
     def _write_statement(self, reminder_id: int) -> None:
         reminder = self._reminders[reminder_id]
@@ -367,13 +394,13 @@ class Reminders:
         answered = replace(alert, answer=answer, answered_at=now)
         self._records.append(answered)
         self._records.extend(self._alerts.close(alert_id, now))
-        self._view_changed = True
+        self._alerts_changed = True
         return answered
 
     def _close_alerts(self, reminder_id: int, now: int) -> None:
         for alert in self._alerts.of(reminder_id):
             self._records.extend(self._alerts.close(alert.id, now))
-            self._view_changed = True
+            self._alerts_changed = True
 
     def _snooze_end(self, snooze: Snooze) -> int:
         now = self._clock.now()
@@ -390,6 +417,21 @@ class Reminders:
                 return self._clock.instant(day, TOMORROW_AT)
 
     def _publish(self) -> None:
-        if self._view_changed:
-            self._view_changed = False
+        if self._alerts_changed:
+            self._alerts_changed = False
             self._on_alerts(self._alerts.view())
+        if self._reminders_changed:
+            self._reminders_changed = False
+            self._on_reminders(self._reminders_view())
+
+    def _reminders_view(self) -> RemindersView:
+        silences = Counter(reminder_id for reminder_id, _ in self._silences)
+        # Ids grow with each new reminder.
+        newest_first = sorted(self._reminders.values(), key=lambda r: r.id, reverse=True)
+        return RemindersView(
+            tuple(
+                ActiveReminder(reminder, silences[reminder.id])
+                for reminder in newest_first
+                if reminder.completed_at is None
+            )
+        )
