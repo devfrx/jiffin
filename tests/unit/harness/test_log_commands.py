@@ -40,7 +40,7 @@ class FakeModel:
 def a_day(database: Path) -> None:
     """Three reminders, three contexts and three alerts, through the app's own core and store."""
     clock = SimulatedClock(T0, UTC)
-    core = Reminders(FakeModel(), clock, lambda view: None)
+    core = Reminders(FakeModel(), clock, lambda view: None, lambda view: None)
     store = Store.open(database)
     core.create(ICONS, "esportare le icone")
     core.create(RENT, "pagare l'affitto")

@@ -65,7 +65,9 @@ def convert(
         raise HarnessError(f"{copy.name} exists already: forget it first")
     begin = capture.observations[0].at - 1
     clock = SimulatedClock(begin, SystemClock().local(begin).tzinfo or UTC)
-    timeline = Timeline(Reminders(model, clock, lambda view: None), clock, passive)
+    timeline = Timeline(
+        Reminders(model, clock, lambda view: None, lambda view: None), clock, passive
+    )
     for condition, action in reminders:
         timeline.at(begin, new_reminder(condition, action))
     for observation in capture.observations:

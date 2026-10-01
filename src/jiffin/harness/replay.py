@@ -248,7 +248,9 @@ class Replay:
         clock = SimulatedClock(self._begin, self._zone)
         start = self._start()
         model = self._model or Recorded(self._log, self._day, clock)
-        core = Reminders(model, clock, lambda view: None, start, threshold=self._threshold)
+        core = Reminders(
+            model, clock, lambda view: None, lambda view: None, start, threshold=self._threshold
+        )
         timeline = Timeline(core, clock, self._answer if self._answers else passive)
         for condition, action in self._extra:
             timeline.at(self._begin, new_reminder(condition, action))

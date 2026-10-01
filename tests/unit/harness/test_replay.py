@@ -69,7 +69,7 @@ def a_day(path: Path) -> Log:
     mail; the engine down for a while; the mail's reminder created, the bank's edited."""
     fake = FakeEngine()
     clock = SimulatedClock(T0 - HOUR_MS, UTC)
-    core = Reminders(fake, clock, lambda view: None)
+    core = Reminders(fake, clock, lambda view: None, lambda view: None)
     answers: dict[int, list[tuple[str, int]]] = {
         1: [("useful", 4_000), ("done", 2_000)],
         2: [("not_here", 3_000)],

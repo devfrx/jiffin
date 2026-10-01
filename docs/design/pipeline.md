@@ -67,9 +67,13 @@ Only active reminders whose revision has a statement are judged.
   is in [data-model.md](data-model.md).
 - **Interface.** `on_alerts` receives an `AlertsView` after every change, on
   the worker thread: the alerts on screen (at most 3), how many wait, and those
-  that vanished unanswered. The interface answers with `done`, `useful`,
-  `not_here`, `snooze`, `vanished` (its own 10 s timer) and `seen` (the tray
-  list is open). Commands about something already gone do nothing.
+  that vanished unanswered. `on_reminders` receives a `RemindersView` after
+  every change of a reminder or of its silences: the active reminders, newest
+  first, each with how many contexts "Non qui" silenced it in. The interface
+  answers with `done`, `useful`, `not_here`, `snooze`, `vanished` (its own
+  10 s timer) and `seen` (the tray list is open), and changes the reminders
+  with `create`, `edit`, `complete` and `delete`. Commands about something
+  already gone do nothing.
 - **Model port.** `build()` names the engine that answers, also while it
   restarts; `judge()` scores every statement it gets; any failure is a
   `ModelError`.
