@@ -16,8 +16,8 @@ from jiffin.ui import win32
 QML_IMPORT_NAME = "Jiffin"
 QML_IMPORT_MAJOR_VERSION = 1
 
-VEIL = 0.8
-"""The opacity of B's veil: an approximation of Windows' menus, to refine (ADR-0010)."""
+VEIL = 0.9
+"""The opacity of B's veil, set by eye next to Windows' menus (ADR-0010)."""
 
 
 class Material(StrEnum):

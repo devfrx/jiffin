@@ -60,7 +60,7 @@ Window {
 
                 Text {
                     anchors.centerIn: parent
-                    text: "" // Reminder
+                    text: "" // Document
                     color: Colors.textSecondary
                     font.family: Typography.iconFont
                     font.pixelSize: Typography.icon
