@@ -67,7 +67,7 @@ def serve(server: LabelServer, open_browser: bool = True) -> None:
 class _Handler(BaseHTTPRequestHandler):
     timeout = 2
     """Seconds a read or a write may wait: a browser sends its request at once. The page serves one
-    connection at a time, so a client that stops halfway is dropped instead of holding up others."""
+    connection at a time, so a client that goes silent is dropped instead of holding up others."""
 
     def log_message(self, format: str, *args: object) -> None:
         pass  # the console is for whoever labels, not for the requests

@@ -161,6 +161,7 @@ def test_the_page_refuses_a_target_that_is_no_url(server: page.LabelServer, meth
 def test_a_stalled_request_does_not_hold_the_page(server: page.LabelServer) -> None:
     # The page serves one connection at a time: a client that stops in the middle of its
     # request would hold it, and a test waiting on the page would then hang instead of failing.
+    # The page's timeout must stay under the 5 s that `request()` waits.
     with contextlib.closing(send_head(server, "40")):
         assert request(server, "GET", "/data")[0] == 200
 
