@@ -151,6 +151,21 @@ def test_the_page_refuses_a_length_it_will_not_read(server: page.LabelServer, le
     assert labels.load(server.labels.path).owner == {}
 
 
+@pytest.mark.parametrize("method", ["GET", "POST"])
+def test_the_page_refuses_a_target_that_is_no_url(server: page.LabelServer, method: str) -> None:
+    body = {"key": BANK, "relevant": True} if method == "POST" else None
+    assert request(server, method, "http://[::1/label", body)[0] == 400
+    assert labels.load(server.labels.path).owner == {}
+
+
+def test_a_stalled_request_does_not_hold_the_page(server: page.LabelServer) -> None:
+    # The page serves one connection at a time: a client that stops in the middle of its
+    # request would hold it, and a test waiting on the page would then hang instead of failing.
+    # The page's timeout must stay under the 5 s that `request()` waits.
+    with contextlib.closing(send_head(server, "40")):
+        assert request(server, "GET", "/data")[0] == 200
+
+
 def test_texts_reach_the_page_only_as_data(server: page.LabelServer) -> None:
     html = request(server, "GET", "/")[1]
     assert "<script>alert(1)</script>" not in html
