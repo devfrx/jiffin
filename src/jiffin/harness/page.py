@@ -79,6 +79,18 @@ class _Handler(BaseHTTPRequestHandler):
             token.encode(), server.token.encode()
         )
 
+    def _body(self) -> bytes | None:
+        """The whole body, or None if its length is not a number from 0 to `BODY_LIMIT`.
+
+        Read before any answer: closing a connection with part of the request unread resets it,
+        and on Windows the client then loses the answer. A body refused stays unread.
+        """
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            return None
+        return self.rfile.read(length) if 0 <= length <= BODY_LIMIT else None
+
     def _send(
         self, status: int, body: str, content_type: str = "text/plain; charset=utf-8"
     ) -> None:
@@ -119,15 +131,3 @@ class _Handler(BaseHTTPRequestHandler):
         except (ValueError, KeyError, TypeError) as error:
             return self._send(400, f"Invalid answer: {error}")
         self._send(200, '{"ok": true}', "application/json")
-
-    def _body(self) -> bytes | None:
-        """The whole body, or None if its length is not a number from 0 to `BODY_LIMIT`.
-
-        Read before any answer: closing a connection with part of the request unread resets it,
-        and on Windows the client then loses the answer. A body refused stays unread.
-        """
-        try:
-            length = int(self.headers.get("Content-Length", 0))
-        except ValueError:
-            return None
-        return self.rfile.read(length) if 0 <= length <= BODY_LIMIT else None
