@@ -1,5 +1,5 @@
-"""The interface's tests run on Qt's offscreen platform: the windows lay out, animate and take
-the mouse without showing on the screen. Any Qt warning fails a test (`qt_log_level_fail`)."""
+"""The tests that show windows run on Qt's offscreen platform: the windows lay out, animate and
+take the mouse without showing on the screen. Any Qt warning fails a test (`qt_log_level_fail`)."""
 
 import gc
 import os
@@ -24,11 +24,12 @@ def qapp_cls() -> type[QGuiApplication]:
 
 
 @pytest.fixture(autouse=True)
-def collected() -> None:
+def collected(request: pytest.FixtureRequest) -> None:
     """Earlier tests' engines go, with their windows, when the garbage collector runs: at any
     moment, even while a test reads `topLevelWindows()`, whose windows then raise "already
-    deleted". Collected before each test, they go now."""
-    gc.collect()
+    deleted". Collected before each test with Qt, they go now."""
+    if "qapp" in request.fixturenames:
+        gc.collect()
 
 
 @pytest.fixture

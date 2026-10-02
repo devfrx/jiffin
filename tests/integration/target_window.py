@@ -1,11 +1,14 @@
-"""A stand-in for the app the user types in, for the overlay's focus test (#31, ADR-0009).
+"""A stand-in for the app the user types in, for the overlay's focus test (#31, ADR-0009) and
+for the context of the app's whole loop (#44).
 
-A maximized window with a text box, in a process of its own like any other app. It prints its
-window handle and its text box's, then keeps the focus in the box until it gets WM_CLOSE.
-Standard library only, so that it shares no code with the app.
+A maximized window with a text box, in a process of its own like any other app; its title is
+the first argument, when given. It prints its window handle and its text box's, then keeps the
+focus in the box until it gets WM_CLOSE. Standard library only, so that it shares no code with
+the app.
 """
 
 import ctypes
+import sys
 from ctypes import POINTER, wintypes
 from typing import Any
 
@@ -126,7 +129,7 @@ def main() -> None:
     window = _user32.CreateWindowExW(
         0,
         _CLASS,
-        "Jiffin: finestra della prova dell'avviso",
+        sys.argv[1] if len(sys.argv) > 1 else "Jiffin: finestra della prova dell'avviso",
         _WS_OVERLAPPEDWINDOW,
         _CW_USEDEFAULT,
         _CW_USEDEFAULT,

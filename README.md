@@ -27,6 +27,7 @@ uv run pre-commit run --all-files     # run them on the whole repository
 uv run pytest                         # unit tests
 uv run scripts/fetch_llama_cpp.py     # llama.cpp for the engine, about 575 MB, once
 uv run pytest -m integration          # tests that need the GPU, the browsers or the screen
+uv run python -m jiffin               # the app; at its first start it downloads the model, 2.4 GB
 uv run python -m jiffin.harness --help  # the evaluation harness
 uv run python -m jiffin.ui --alerts 3   # made-up alerts and reminders: the overlay, the tray list
 uv run python -m jiffin.ui --creation   # and the creation window, which Win+Shift+N opens too

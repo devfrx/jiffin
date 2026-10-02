@@ -29,7 +29,10 @@ sha256, and the models folder, which the window shows for the file by hand,
 since the interface does not import `client`
 ([ADR-0012](../adr/0012-package-structure-ports.md)). Riprova calls the
 app's `fetch_model`, which runs `ensure` again; it resumes a download from
-what arrived.
+what arrived. A network problem is also tried again on its own, 30 s later
+(`app/model.py`): a connection that comes back resumes the download without
+Riprova, and the window shows it moving again. The other problems wait for
+Riprova, since only the user can mend them.
 
 ## The window
 

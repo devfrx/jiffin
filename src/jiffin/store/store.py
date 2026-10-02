@@ -71,7 +71,12 @@ class Store:
         return cls(open_database(path))
 
     def close(self) -> None:
-        self._db.close()
+        """A last checkpoint, then the connection closes: the write-ahead log is left empty even
+        while the harness reads the file, and SQLite would not checkpoint then on its own."""
+        try:
+            self._checkpoint()
+        finally:
+            self._db.close()
 
     def save(self, records: Iterable[Record]) -> None:
         """Save what `core` changed, all or nothing."""
@@ -329,10 +334,12 @@ class Store:
         )
 
     def _save_alert(self, alert: Alert) -> None:
+        # An alert the daily cleanup deleted while `core` kept it unseen comes back without its
+        # evaluation, which expired with it: as the cleanup leaves an answered alert.
         self._db.execute(
             """INSERT INTO alert (id, revision, evaluation, context, d, created_at, shown_at,
                 vanished_at, seen_at, answer, answered_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, (SELECT id FROM evaluation WHERE id = ?), ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (id) DO UPDATE
             SET shown_at = excluded.shown_at, vanished_at = excluded.vanished_at,
                 seen_at = excluded.seen_at, answer = excluded.answer,
