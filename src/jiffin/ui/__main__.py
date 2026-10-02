@@ -2,9 +2,10 @@
 at the interface without the app.
 
 Answering an alert, or letting it vanish, prints what happened; a new alert comes 2 s later,
-and one that vanished waits in the tray list. Win+Shift+N opens the creation window, and the
-tray icon the list; what they change is printed and kept until the end. No model and no data
-are needed. Esci in the tray icon's menu, or Ctrl+C in the terminal, ends it.
+and one that vanished waits in the tray list. Win+Shift+N opens the creation window, the tray
+icon the list, and Impostazioni in its menu the settings; what they change is printed and kept
+until the end. No model and no data are needed. Esci in the tray icon's menu, or Ctrl+C in the
+terminal, ends it.
 """
 
 import argparse
@@ -131,6 +132,9 @@ class Preview:
         assert self.interface is not None
         self.interface.show_engine(TrayList.Engine.WORKING)
 
+    def keep_material(self, material: Material) -> None:
+        print(f"materiale {material.value}", flush=True)
+
     def _answered(self, alert_id: int, what: str) -> None:
         print(f"avviso {alert_id}: {what}", flush=True)
         self._visible = [alert for alert in self._visible if alert.id != alert_id]
@@ -191,7 +195,7 @@ def main() -> None:
     os.environ.setdefault("QT_FORCE_STDERR_LOGGING", "1")
     app = QGuiApplication(sys.argv[:1])
     preview = Preview(args.alerts)
-    interface = Interface(app, preview, preview.retry)
+    interface = Interface(app, preview, preview.retry, preview.keep_material)
     interface.look.material = Material(args.material)
     if not interface.hotkey.registered:
         print("Win+Maiusc+N è già usata da un'altra app", flush=True)

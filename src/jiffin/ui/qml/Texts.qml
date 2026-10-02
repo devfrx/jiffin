@@ -27,6 +27,20 @@ QtObject {
     readonly property string save: "Salva"
     readonly property string cancel: "Annulla"
 
+    // The settings window
+    readonly property string settings: "Impostazioni"
+    readonly property string material: "Materiale"
+    readonly property string materialHint: "Per gli avvisi, l'elenco e le altre finestre di Jiffin."
+    // By the material's letter (ADR-0010): its name, and what it looks like.
+    readonly property var materials: ({
+            "a": ["Acrilico", "Vetro chiaro: dietro si vede sfocato."],
+            "b": ["Acrilico dei menu", "Quasi pieno, come i menu di Windows. Predefinito."],
+            "c": ["Mica", "Come le Impostazioni di Windows: prende il colore dello sfondo."],
+            "d": ["Mica Alt", "Più scuro, con più colore dello sfondo."]
+        })
+    readonly property string solidSurfaces: "Gli effetti di trasparenza di Windows sono spenti: le finestre sono piene."
+    readonly property string close: "Chiudi"
+
     // The tray icon and its list
     readonly property string appName: "Jiffin"
     readonly property string quit: "Esci"

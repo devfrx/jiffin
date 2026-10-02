@@ -52,12 +52,16 @@ class Scene:
         self.engine = QQmlEngine()
         self.look.provide(self.engine)
         self.clicks = 0
-        self.tray = Tray(self.engine, self.look, self._click)
+        self.settings = 0
+        self.tray = Tray(self.engine, self.look, self._click, self._settings)
         self.changes = 0
         self.tray.changed.connect(self._changed)
 
     def _click(self) -> None:
         self.clicks += 1
+
+    def _settings(self) -> None:
+        self.settings += 1
 
     def _changed(self) -> None:
         self.changes += 1
@@ -112,12 +116,14 @@ def test_the_icon_follows_the_alerts_the_browsers_and_the_taskbar(qtbot: QtBot) 
     assert scene.changes == 5
 
 
-def test_a_click_opens_the_list_and_esci_quits(
+def test_a_click_opens_the_list_impostazioni_the_settings_and_esci_quits(
     qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     scene = Scene()
     scene.tray.click()
-    assert scene.clicks == 1
+    assert (scene.clicks, scene.settings) == (1, 0)
+    scene.tray.settings()
+    assert (scene.clicks, scene.settings) == (1, 1)
     quits: list[str] = []
     monkeypatch.setattr(QGuiApplication, "quit", lambda: quits.append("quit"))
     scene.tray.quit()

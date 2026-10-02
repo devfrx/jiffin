@@ -322,7 +322,7 @@ class Screen:
 
     def __init__(self, app: QGuiApplication) -> None:
         self.core = Core()
-        self.interface = Interface(app, self.core, lambda: None)
+        self.interface = Interface(app, self.core, lambda: None, lambda material: None)
 
     def show(self, *alert_ids: int) -> None:
         alerts = tuple(alert(alert_id) for alert_id in alert_ids)

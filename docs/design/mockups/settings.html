@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jiffin — impostazioni</title>
+<!--
+  The settings window, as built in src/jiffin/ui/qml (ADR-0010, ticket #43): the material of
+  Jiffin's windows, as four radio buttons. A card like the creation window, on the material it
+  sets (B by default), without Windows' title bar. The owner chose the plain list on screen in
+  #43, over the radios in a card, as Windows' Settings, and over four tiles.
+  Colours are those of Colors.qml; text uses Windows 11's system font, Segoe UI Variable. The
+  radio buttons are WinUI's (FluentRadioButton.qml).
+-->
+<style>
+  :root {
+    --page: #d6d9de;
+  }
+  .light {
+    --desk: #ffffff;
+    --desk-side: #f3f3f3;
+    --stripe-a: #a259d9;
+    --stripe-b: #2f7dd1;
+    --stripe-c: #e08a3c;
+    --card: #fcfcfc;
+    --window-stroke: rgba(0, 0, 0, 0.1);
+    --shadow: 0 32px 64px rgba(0, 0, 0, 0.18);
+    --text-primary: rgba(0, 0, 0, 0.894);
+    --text-secondary: rgba(0, 0, 0, 0.62);
+    --text-on-accent: #ffffff;
+    --control-fill: rgba(255, 255, 255, 0.702);
+    --control-stroke: rgba(0, 0, 0, 0.059);
+    --control-strong-stroke: rgba(0, 0, 0, 0.447);
+    --control-alt-fill: rgba(0, 0, 0, 0.024);
+    --control-edge: rgba(0, 0, 0, 0.161);
+    --accent: #005fb8;
+  }
+  .dark {
+    --desk: #1f1f1f;
+    --desk-side: #181818;
+    --stripe-a: #c586c0;
+    --stripe-b: #4fc1ff;
+    --stripe-c: #ce9178;
+    --card: #2c2c2c;
+    --window-stroke: rgba(255, 255, 255, 0.08);
+    --shadow: 0 32px 64px rgba(0, 0, 0, 0.5);
+    --text-primary: #ffffff;
+    --text-secondary: rgba(255, 255, 255, 0.773);
+    --text-on-accent: #000000;
+    --control-fill: rgba(255, 255, 255, 0.059);
+    --control-stroke: rgba(255, 255, 255, 0.071);
+    --control-strong-stroke: rgba(255, 255, 255, 0.545);
+    --control-alt-fill: rgba(0, 0, 0, 0.098);
+    --control-edge: rgba(255, 255, 255, 0.094);
+    --accent: #60cdff;
+  }
+
+  body {
+    margin: 0;
+    padding: 32px 16px;
+    background: var(--page);
+    color: #1a1a1a;
+    font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  }
+  h1 {
+    margin: 0 0 4px;
+    font-size: 20px;
+    font-weight: 600;
+  }
+  .lead {
+    margin: 0 0 24px;
+    max-width: 72ch;
+    font-size: 14px;
+    line-height: 20px;
+  }
+  .themes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 32px;
+  }
+  .theme h2 {
+    margin: 0 0 8px;
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  /* A desk with colourful content, behind the window. */
+  .desk {
+    position: relative;
+    width: min(560px, calc(100vw - 32px));
+    padding: 40px 0;
+    overflow: hidden;
+    border-radius: 8px;
+    background:
+      repeating-linear-gradient(90deg, var(--stripe-a) 0 18px, transparent 18px 64px) 40px 60px / 100% 10px no-repeat,
+      repeating-linear-gradient(90deg, var(--stripe-b) 0 90px, transparent 90px 130px) 40px 90px / 100% 10px no-repeat,
+      repeating-linear-gradient(90deg, var(--stripe-c) 0 60px, transparent 60px 100px) 64px 420px / 100% 10px no-repeat,
+      linear-gradient(90deg, var(--desk-side) 0 140px, var(--desk) 140px);
+  }
+
+  .window {
+    width: min(400px, calc(100% - 24px));
+    margin: 0 auto;
+    overflow: hidden;
+    border: 1px solid var(--window-stroke);
+    border-radius: 8px;
+    background: var(--card);
+    box-shadow: var(--shadow);
+  }
+  /* The card's title, its first line. */
+  .heading {
+    margin: 0;
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .content {
+    padding: 20px 24px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .label {
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--text-primary);
+  }
+  .caption {
+    font-family: "Segoe UI Variable Small", "Segoe UI", system-ui, sans-serif;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--text-secondary);
+  }
+
+  /* Fluent 2 radio buttons (FluentRadioButton.qml): a 20 px circle, the label 8 px after it. */
+  .radio {
+    display: grid;
+    grid-template-columns: 20px 1fr;
+    column-gap: 8px;
+    padding: 6px 0;
+  }
+  .circle {
+    box-sizing: border-box;
+    width: 20px;
+    height: 20px;
+    border: 1px solid var(--control-strong-stroke);
+    border-radius: 50%;
+    background: var(--control-alt-fill);
+  }
+  .checked .circle {
+    border: 0;
+    background: radial-gradient(circle, var(--text-on-accent) 0 6px, var(--accent) 6.5px);
+  }
+
+  /* A Fluent 2 standard button (FluentButton.qml). */
+  .buttons {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 4px;
+  }
+  button {
+    position: relative;
+    min-width: 96px;
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--control-stroke);
+    border-radius: 4px;
+    background: var(--control-fill);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 14px;
+  }
+  /* The edge that makes a button look raised: at the top in dark, at the bottom in light. */
+  button::after {
+    content: "";
+    position: absolute;
+    left: 4px;
+    right: 4px;
+    height: 1px;
+    background: var(--control-edge);
+  }
+  .dark button::after {
+    top: 0;
+  }
+  .light button::after {
+    bottom: 0;
+  }
+
+  .notes {
+    margin: 24px 0 0;
+    padding-left: 20px;
+    max-width: 72ch;
+    font-size: 14px;
+    line-height: 20px;
+  }
+</style>
+</head>
+<body>
+<h1>Impostazioni</h1>
+<p class="lead">Si apre da Impostazioni nel menu dell'icona di Jiffin, al centro dello schermo, e prende il focus. Si sceglie il materiale degli avvisi, dell'elenco e delle altre finestre di Jiffin.</p>
+
+<div class="themes">
+  <section class="theme light" aria-label="Tema chiaro">
+    <h2>Chiaro</h2>
+    <div class="desk">
+      <div class="window" role="dialog" aria-label="Impostazioni">
+        <div class="content">
+          <p class="heading">Impostazioni</p>
+          <div class="group" role="radiogroup" aria-label="Materiale">
+            <div>
+              <div class="label">Materiale</div>
+              <div class="caption">Per gli avvisi, l'elenco e le altre finestre di Jiffin.</div>
+            </div>
+            <div class="radio" role="radio" aria-checked="false"><span class="circle"></span><div><div class="label">Acrilico</div><div class="caption">Vetro chiaro: dietro si vede sfocato.</div></div></div>
+            <div class="radio checked" role="radio" aria-checked="true"><span class="circle"></span><div><div class="label">Acrilico dei menu</div><div class="caption">Quasi pieno, come i menu di Windows. Predefinito.</div></div></div>
+            <div class="radio" role="radio" aria-checked="false"><span class="circle"></span><div><div class="label">Mica</div><div class="caption">Come le Impostazioni di Windows: prende il colore dello sfondo.</div></div></div>
+            <div class="radio" role="radio" aria-checked="false"><span class="circle"></span><div><div class="label">Mica Alt</div><div class="caption">Più scuro, con più colore dello sfondo.</div></div></div>
+          </div>
+          <div class="buttons">
+            <button>Chiudi</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="theme dark" aria-label="Tema scuro">
+    <h2>Scuro</h2>
+    <div class="desk">
+      <div class="window" role="dialog" aria-label="Impostazioni">
+        <div class="content">
+          <p class="heading">Impostazioni</p>
+          <div class="group" role="radiogroup" aria-label="Materiale">
+            <div>
+              <div class="label">Materiale</div>
+              <div class="caption">Per gli avvisi, l'elenco e le altre finestre di Jiffin.</div>
+            </div>
+            <div class="radio" role="radio" aria-checked="false"><span class="circle"></span><div><div class="label">Acrilico</div><div class="caption">Vetro chiaro: dietro si vede sfocato.</div></div></div>
+            <div class="radio checked" role="radio" aria-checked="true"><span class="circle"></span><div><div class="label">Acrilico dei menu</div><div class="caption">Quasi pieno, come i menu di Windows. Predefinito.</div></div></div>
+            <div class="radio" role="radio" aria-checked="false"><span class="circle"></span><div><div class="label">Mica</div><div class="caption">Come le Impostazioni di Windows: prende il colore dello sfondo.</div></div></div>
+            <div class="radio" role="radio" aria-checked="false"><span class="circle"></span><div><div class="label">Mica Alt</div><div class="caption">Più scuro, con più colore dello sfondo.</div></div></div>
+          </div>
+          <div class="buttons">
+            <button>Chiudi</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<ul class="notes">
+  <li>Un clic su un materiale cambia subito tutte le finestre, come nelle Impostazioni di Windows, e la scelta resta per i prossimi avvii. Chiudi o Esc chiudono la finestra.</li>
+  <li>Il focus parte dal materiale in uso; Tab passa al successivo e a Chiudi, Spazio sceglie.</li>
+  <li>Con la trasparenza di Windows spenta tutte le superfici sono piene, e la finestra lo dice sotto i materiali.</li>
+</ul>
+</body>
+</html>

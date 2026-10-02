@@ -1,5 +1,6 @@
-// The tray icon (#12, ADR-0010): a click opens the tray list, a right click its menu. On
-// Windows, Qt draws the menu with Windows' own, since the app is a QGuiApplication.
+// The tray icon (#12, ADR-0010): a click opens the tray list, a right click its menu, with
+// Impostazioni and Esci. On Windows, Qt draws the menu with Windows' own, since the app is a
+// QGuiApplication.
 import QtQuick
 import Qt.labs.platform as Platform
 import Jiffin
@@ -13,6 +14,10 @@ Platform.SystemTrayIcon {
     icon.source: tray.icon
     tooltip: Texts.appName
     menu: Platform.Menu {
+        Platform.MenuItem {
+            text: Texts.settings
+            onTriggered: icon.tray.settings()
+        }
         Platform.MenuItem {
             text: Texts.quit
             onTriggered: icon.tray.quit()

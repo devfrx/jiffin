@@ -41,8 +41,8 @@ The owner chose A. Building it in Qt Quick showed three problems:
 
 **Materials.**
 
-- The alert, the creation window and the tray list use the material chosen in
-  the settings, one of four; the default is B.
+- The alert, the creation window, the tray list and the settings window use
+  the material chosen in the settings, one of four; the default is B.
 
   | | Material | Look |
   |---|---|---|
@@ -115,6 +115,12 @@ and stays light in dark mode unless the app asks for dark menus with uxtheme's
 only by ordinal (135 and 136), called as Notepad++ does; Windows documents no
 other way. Seen dark on the owner's machine
 ([#43](https://github.com/devfrx/jiffin/issues/43)).
+
+**Settings window:** a card like the creation window, with the four materials
+as WinUI's radio buttons; a click applies the material at once, as Windows'
+Settings. The owner chose on screen
+([#43](https://github.com/devfrx/jiffin/issues/43)) the plain list over the
+radios in a card, as Windows' Settings, and over four tiles.
 
 **Tray list:** a card like the alert, over the tray. The owner chose on screen
 ([#43](https://github.com/devfrx/jiffin/issues/43)) its warnings as a line

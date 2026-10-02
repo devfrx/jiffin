@@ -24,7 +24,8 @@ from decision ticket [#12](https://github.com/devfrx/jiffin/issues/12) and
 - The picture reaches the tray through an image provider whose address names
   all it needs: a change of look or state loads a new picture.
 - A click opens or closes the list. The right-click menu is Windows' own, with
-  Esci, and dark when the apps' mode is (ADR-0010).
+  Impostazioni, which opens the [settings](settings.md), and Esci; it is dark
+  when the apps' mode is (ADR-0010).
 - Windows 11 puts a new icon in the ^ overflow, until the user brings it out.
 
 ## The list
