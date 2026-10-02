@@ -1,6 +1,6 @@
 # ADR-0010: Follow the Windows 11 look with our own QML components
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR-0023](0023-window-frame.md) (every window has an X, and all but the alerts drag)
 - **Date:** 2026-09-30
 - **Deciders:** devfrx
 - **Sources:** tickets [#12](https://github.com/devfrx/jiffin/issues/12) (behaviour), [#25](https://github.com/devfrx/jiffin/issues/25) (visual direction) and [#31](https://github.com/devfrx/jiffin/issues/31) (alert prototype)
