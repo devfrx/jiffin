@@ -1,6 +1,8 @@
-// A Fluent 2 info bar, drawn by us (ADR-0010): a warning or an error, its message, and a button
-// under it when it has an action. The glyphs and the severity's colours are WinUI's InfoBar; its
-// box is left out, as the owner chose on screen: a quiet line, where only the icon has colour.
+// A Fluent 2 info bar, drawn by us (ADR-0010): a warning, an error or a piece of news, its
+// message, and a button under it when it has an action; what else it holds goes under the
+// message. The glyphs and the severity's colours are WinUI's InfoBar, except that news takes the
+// accent's shade for the theme, where WinUI takes the base accent in light; its box is left out,
+// as the owner chose on screen: a quiet line, where only the icon has colour.
 import QtQuick
 import QtQuick.Layouts
 
@@ -9,7 +11,8 @@ Item {
 
     enum Severity {
         Warning,
-        Error
+        Error,
+        Informational
     }
 
     property int severity: FluentInfoBar.Warning
@@ -17,6 +20,9 @@ Item {
     // The button's text: no button when empty.
     property string action
     readonly property bool error: severity === FluentInfoBar.Error
+    readonly property bool informational: severity === FluentInfoBar.Informational
+    // Under the message, after the button.
+    default property alias extra: content.data
 
     signal triggered
 
@@ -31,12 +37,12 @@ Item {
 
         Text {
             text: "" // StatusCircleOuter
-            color: bar.error ? Colors.critical : Colors.caution
+            color: bar.error ? Colors.critical : bar.informational ? Colors.accent : Colors.caution
             font.family: Typography.iconFont
             font.pixelSize: Typography.icon
         }
         Text {
-            text: bar.error ? "" : "" // StatusCircleErrorX, StatusCircleExclamation
+            text: bar.error ? "" : bar.informational ? "" : "" // StatusCircleErrorX, StatusCircleInfo, StatusCircleExclamation
             color: Colors.textInverse
             font.family: Typography.iconFont
             font.pixelSize: Typography.icon

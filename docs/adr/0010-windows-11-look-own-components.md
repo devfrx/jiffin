@@ -41,8 +41,9 @@ The owner chose A. Building it in Qt Quick showed three problems:
 
 **Materials.**
 
-- The alert, the creation window, the tray list and the settings window use
-  the material chosen in the settings, one of four; the default is B.
+- Every window of Jiffin, the alert, the creation window, the tray list, the
+  settings and the first-run window, uses the material chosen in the
+  settings, one of four; the default is B.
 
   | | Material | Look |
   |---|---|---|
@@ -121,6 +122,12 @@ as WinUI's radio buttons; a click applies the material at once, as Windows'
 Settings. The owner chose on screen
 ([#43](https://github.com/devfrx/jiffin/issues/43)) the plain list over the
 radios in a card, as Windows' Settings, and over four tiles.
+
+**First-run window:** a card like the creation window, with the model file's
+way in three steps, each with a numbered disc that takes a check once done and
+a bar while it runs. The owner chose the steps on screen
+([#43](https://github.com/devfrx/jiffin/issues/43)) over a plain card and one
+with the app's glyph above a large title.
 
 **Tray list:** a card like the alert, over the tray. The owner chose on screen
 ([#43](https://github.com/devfrx/jiffin/issues/43)) its warnings as a line

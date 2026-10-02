@@ -2,6 +2,7 @@ import gc
 from collections.abc import Callable, Iterator
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QPointF, Qt
@@ -17,6 +18,7 @@ from jiffin.core.context import Context
 from jiffin.core.records import Alert, Reminder, Revision
 from jiffin.core.reminders import HOUR_MS, MINUTE_MS, ActiveReminder, RemindersView, Snooze
 from jiffin.ui import tray_list, win32
+from jiffin.ui.first_run import FirstRun, ModelFile, ModelState
 from jiffin.ui.glass import Glass
 from jiffin.ui.look import Look, Settings
 from jiffin.ui.rows import Rows
@@ -34,6 +36,8 @@ ROME = timezone(timedelta(hours=2))
 START = int(datetime(2026, 10, 1, 10, 0, tzinfo=ROME).timestamp() * 1000)
 """Thursday 1 October 2026, 10:00 in Rome."""
 FIGMA = Context("figma.exe", "Icone - Figma", None)
+SIZE = 2_600_224_416
+MODEL = ModelFile("model.gguf", "https://example.org/model.gguf", SIZE, "0" * 64, Path("models"))
 
 
 class Commands:
@@ -142,13 +146,31 @@ class Screen:
         self.commands = Commands()
         self.writer = Writer()
         self.retries = 0
+        self.fetches = 0
+        self.first_run = FirstRun(self.engine, MODEL, self._fetch, Glass(self.look), self.clock)
         self.list = TrayList(
-            self.engine, self.commands, self.writer, self._retry, Glass(self.look), self.clock
+            self.engine,
+            self.commands,
+            self.writer,
+            self._retry,
+            self.first_run,
+            Glass(self.look),
+            self.clock,
         )
-        # The lists of earlier tests may still be there, until their engines go.
-        (window,) = (w for w in QGuiApplication.topLevelWindows() if qmlEngine(w) is self.engine)
+        # The lists of earlier tests may still be there, until their engines go; the first-run
+        # window is this engine's too.
+        (window,) = (
+            w
+            for w in QGuiApplication.topLevelWindows()
+            if qmlEngine(w) is self.engine and w.title() == "Promemoria"
+        )
         assert isinstance(window, QQuickWindow)
         self.window = window
+
+    def model(self, stage: FirstRun.Stage, done: int = 0) -> None:
+        """What the app says of the model file, with the first-run window closed by the user."""
+        self.first_run.show(ModelState(stage, done, SIZE))
+        self.first_run.close()
 
     def open(self) -> None:
         """What a click on the tray icon does; the list is ready once it has the focus."""
@@ -222,6 +244,9 @@ class Screen:
     def _retry(self) -> None:
         self.retries += 1
 
+    def _fetch(self) -> None:
+        self.fetches += 1
+
 
 @pytest.fixture
 def screen(qtbot: QtBot, dwm: list[tuple[object, ...]]) -> Iterator[Screen]:
@@ -261,9 +286,11 @@ def test_the_list_is_a_card_on_the_alerts_glass(
     assert flags & Qt.WindowType.FramelessWindowHint
     assert not flags & Qt.WindowType.WindowDoesNotAcceptFocus
     hwnd = int(screen.window.winId())
-    assert dwm == [("set_backdrop", hwnd, True, win32.DWMSBT_TRANSIENTWINDOW)]
+    calls = [call for call in dwm if call[1] == hwnd]
+    assert calls == [("set_backdrop", hwnd, True, win32.DWMSBT_TRANSIENTWINDOW)]
     screen.open()
-    assert dwm[1:] == [("activate_frame", hwnd), ("nudge", hwnd)]
+    calls = [call for call in dwm if call[1] == hwnd]
+    assert calls[1:] == [("activate_frame", hwnd), ("nudge", hwnd)]
 
 
 def test_esc_and_the_tray_icon_close_the_list(screen: Screen) -> None:
@@ -576,6 +603,52 @@ def test_an_unreadable_address_shows_a_banner_naming_the_browsers(screen: Screen
     assert screen.lines() == ["Promemoria", "Attivi", "Nessun promemoria attivo."]
 
 
+def test_the_model_on_its_way_shows_on_top_and_dettagli_opens_its_window(
+    screen: Screen,
+) -> None:
+    screen.model(FirstRun.Stage.DOWNLOADING, SIZE // 3)
+    screen.open()
+    assert screen.lines()[:2] == [
+        "Promemoria",
+        "Scarico il modello: 0,8 GB di 2,4 GB. Finché non è pronto, i promemoria non avvisano.",
+    ]
+    assert any(item.inherits("QQuickProgressBar") for item in screen._shown())
+    with pytest.raises(StopIteration):
+        screen.button("Riprova")
+    screen.click("Dettagli")
+    assert not screen.window.isVisible()
+    assert screen.first_run.property("waiting")
+    (first_run,) = (
+        w
+        for w in QGuiApplication.topLevelWindows()
+        if qmlEngine(w) is screen.engine and w.title() == "Benvenuto in Jiffin"
+    )
+    assert first_run.isVisible()
+    screen.first_run.close()
+
+
+def test_a_problem_with_the_model_shows_with_riprova(screen: Screen) -> None:
+    screen.model(FirstRun.Stage.NETWORK, SIZE // 3)
+    screen.open()
+    assert screen.lines()[1] == (
+        "Il download si è fermato: controlla la connessione. Riprova riprende da dove era rimasto."
+    )
+    assert not any(item.inherits("QQuickProgressBar") for item in screen._shown())
+    screen.click("Riprova")
+    assert screen.fetches == 1
+    retrying = screen.button("Riprovo…")
+    assert not retrying.isEnabled()
+    screen.model(FirstRun.Stage.DOWNLOADING, SIZE // 2)
+    assert screen.lines()[1].startswith("Scarico il modello: 1,2 GB di 2,4 GB")
+
+
+@pytest.mark.parametrize("stage", [FirstRun.Stage.CHECKING, FirstRun.Stage.READY])
+def test_the_check_and_a_ready_model_show_no_line(screen: Screen, stage: FirstRun.Stage) -> None:
+    screen.model(stage, SIZE)
+    screen.open()
+    assert screen.lines() == ["Promemoria", "Attivi", "Nessun promemoria attivo."]
+
+
 def test_the_list_goes_with_the_engine_and_no_binding_reads_it_gone(
     qtbot: QtBot, dwm: list[tuple[object, ...]]
 ) -> None:
@@ -584,7 +657,9 @@ def test_the_list_goes_with_the_engine_and_no_binding_reads_it_gone(
     look = Look(lambda: DARK)
     engine = QQmlEngine()
     look.provide(engine)
-    trays = TrayList(engine, Commands(), Writer(), lambda: None, Glass(look), SimulatedClock(0))
+    clock = SimulatedClock(0)
+    first_run = FirstRun(engine, MODEL, lambda: None, Glass(look), clock)
+    trays = TrayList(engine, Commands(), Writer(), lambda: None, first_run, Glass(look), clock)
     trays.show_reminders(RemindersView((active(1, "quando apro Figma", "esportare le icone"),)))
     gone: list[str] = []
     trays.destroyed.connect(lambda: gone.append("list"))

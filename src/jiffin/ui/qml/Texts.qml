@@ -1,6 +1,7 @@
 pragma Singleton
 
 import QtQml
+import Jiffin
 
 // Every string of the interface, in Italian, in one place (#12).
 QtObject {
@@ -40,6 +41,74 @@ QtObject {
         })
     readonly property string solidSurfaces: "Gli effetti di trasparenza di Windows sono spenti: le finestre sono piene."
     readonly property string close: "Chiudi"
+
+    // The first run (ADR-0015)
+    readonly property string welcome: "Benvenuto in Jiffin"
+    readonly property string isReady: "Jiffin è pronto"
+    readonly property string onlyHere: "Jiffin lavora solo su questo PC: niente esce da qui."
+    readonly property string stepDownload: "Scarico il modello"
+    readonly property string stepCheck: "Controllo il file"
+    readonly property string stepReady: "Pronto"
+    readonly property string meanwhile: "Intanto puoi già scrivere i promemoria: premi Win+Maiusc+N."
+    readonly property string meanwhileTray: "Intanto puoi già scrivere i promemoria: Nuovo, nell'elenco dell'icona di Jiffin."
+    readonly property string readyShortcut: "Premi Win+Maiusc+N, da qualsiasi app, per un nuovo promemoria."
+    readonly property string shortcutTaken: "Win+Maiusc+N è già di un'altra app: un nuovo promemoria si scrive da Nuovo, nell'elenco."
+    readonly property string readyTray: "L'icona di Jiffin nella barra apre l'elenco. Windows la mette sotto ^: trascinala sulla barra per vederla sempre."
+    readonly property string start: "Inizia"
+    readonly property string retrying: "Riprovo…"
+    readonly property string details: "Dettagli"
+    readonly property string byHand: "Mettilo a mano"
+    readonly property string byHandOffline: "Senza rete? Mettilo a mano"
+    readonly property string byHandFetch: "1. Scarica il file da questo indirizzo, anche da un altro PC:"
+    readonly property string copyAddress: "Copia l'indirizzo"
+    readonly property string openFolder: "Apri la cartella"
+
+    // The model's size, as Windows' Explorer shows it: gigabytes of 1,024³ bytes, one decimal.
+    function gigabytes(bytes: real): string {
+        return (bytes / 1073741824).toFixed(1).replace(".", ",") + " GB";
+    }
+
+    // Under the download's bar: "0,8 GB di 2,4 GB · circa 4 min".
+    function downloaded(done: real, total: real, minutes: int): string {
+        const left = minutes > 0 ? " · circa " + minutes + " min" : minutes === 0 ? " · meno di un minuto" : "";
+        return gigabytes(done) + " di " + gigabytes(total) + left;
+    }
+
+    function stopped(done: real, total: real): string {
+        return gigabytes(done) + " di " + gigabytes(total) + " · fermo";
+    }
+
+    // The tray list's line while the model downloads.
+    function downloading(done: real, total: real, minutes: int): string {
+        return "Scarico il modello: " + downloaded(done, total, minutes) + ". Finché non è pronto, i promemoria non avvisano.";
+    }
+
+    // What a problem with the model file means; `missing` in bytes, for SPACE.
+    function modelTrouble(stage: int, missing: real): string {
+        switch (stage) {
+        case FirstRun.NETWORK:
+            return "Il download si è fermato: controlla la connessione. Riprova riprende da dove era rimasto.";
+        case FirstRun.SPACE:
+            // In tenths, rounded up, so that freeing what it says is enough; the division by a
+            // power of two is exact.
+            return "Il disco è pieno: libera altri " + gigabytes(Math.ceil(missing * 10 / 1073741824) * 107374182.4) + ", poi riprova.";
+        case FirstRun.DISK:
+            return "Non riesco a scrivere nella cartella dei modelli, o a leggerla. Controlla il disco, poi riprova.";
+        case FirstRun.MISMATCH:
+            return "Il file del modello non è quello giusto. Se l'hai messo tu, sostituiscilo o eliminalo; poi premi Riprova.";
+        }
+        return "";
+    }
+
+    function byHandPlace(name: string): string {
+        return "2. Mettilo nella cartella dei modelli, con il nome " + name + ":";
+    }
+
+    // The size in bytes, with Italian thousands: "2.600.224.416".
+    function byHandCheck(size: real, sha256: string): string {
+        const bytes = size.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+        return "3. Premi Riprova: lo controllo. Deve pesare " + bytes + " byte, con sha256 " + sha256 + ".";
+    }
 
     // The tray icon and its list
     readonly property string appName: "Jiffin"

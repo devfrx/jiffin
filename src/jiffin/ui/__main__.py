@@ -4,8 +4,9 @@ at the interface without the app.
 Answering an alert, or letting it vanish, prints what happened; a new alert comes 2 s later,
 and one that vanished waits in the tray list. Win+Shift+N opens the creation window, the tray
 icon the list, and Impostazioni in its menu the settings; what they change is printed and kept
-until the end. No model and no data are needed. Esci in the tray icon's menu, or Ctrl+C in the
-terminal, ends it.
+until the end. `--model` plays a first run: a download of a minute and its check, or a problem
+first, which Riprova mends. No model and no data are needed. Esci in the tray icon's menu, or
+Ctrl+C in the terminal, ends it.
 """
 
 import argparse
@@ -13,7 +14,9 @@ import itertools
 import os
 import signal
 import sys
+import tempfile
 from dataclasses import replace
+from pathlib import Path
 
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QGuiApplication
@@ -23,6 +26,7 @@ from jiffin.core.clock import SystemClock
 from jiffin.core.context import Context
 from jiffin.core.records import Alert, Reminder, Revision
 from jiffin.core.reminders import MINUTE_MS, ActiveReminder, RemindersView, Snooze
+from jiffin.ui.first_run import FirstRun, ModelFile, ModelState
 from jiffin.ui.interface import Interface
 from jiffin.ui.look import Material
 from jiffin.ui.tray_list import TrayList
@@ -40,13 +44,78 @@ REMINDERS = (
 """Condition, action, minutes until the snooze ends, and silences."""
 NEXT_MS = 2000
 BROWSERS = ("vivaldi.exe", "chrome.exe", "brave.exe")
+_NAME = "spark-x2.5-4b-rizzo-flow-lora-q4_k_m.gguf"
+MODEL = ModelFile(
+    name=_NAME,
+    url=f"https://huggingface.co/rizzoaiacademy/rizzo-flow/resolve/55633c8cbd2b826bd3eefdeb05310450996649df/{_NAME}",
+    size=2_600_224_416,
+    sha256="79de5cb8dbfd1a1f5cb3037252251594352841fe5e3dc1ae8cead053010fcd54",
+    folder=Path(tempfile.gettempdir()) / "jiffin-preview" / "models",
+)
+"""The real pin's look, since the interface does not import `client` (ADR-0012), in a folder of
+its own: Apri la cartella never makes the app's."""
+TICK_MS = 200
+DOWNLOAD_TICKS = 300
+"""A minute of download."""
+CHECK_TICKS = 20
+PROBLEMS = {
+    "network": FirstRun.Stage.NETWORK,
+    "space": FirstRun.Stage.SPACE,
+    "disk": FirstRun.Stage.DISK,
+    "mismatch": FirstRun.Stage.MISMATCH,
+}
+
+
+class Download:
+    """Plays the model file's part: a download of a minute, then its check, then ready; or a
+    problem first, which Riprova mends."""
+
+    def __init__(self, start: str) -> None:
+        self._start = start
+        self._done = MODEL.size * 31 // 100 if start in PROBLEMS else 0
+        self._checked = 0
+        self._timer = QTimer(interval=TICK_MS)
+        self._timer.timeout.connect(self._tick)
+        self.interface: Interface | None = None
+
+    def begin(self, interface: Interface) -> None:
+        self.interface = interface
+        if self._start == "ready":
+            self._show(FirstRun.Stage.READY)
+        elif self._start in PROBLEMS:
+            missing = 1_717_986_919 if self._start == "space" else 0
+            self._show(PROBLEMS[self._start], missing)
+        else:
+            self._timer.start()
+
+    def fetch(self) -> None:
+        print("Riprova, sul modello", flush=True)
+        # A moment, as the real check of the network or the disk takes.
+        QTimer.singleShot(1000, self._timer.start)
+
+    def _tick(self) -> None:
+        if self._done < MODEL.size:
+            self._done = min(MODEL.size, self._done + MODEL.size // DOWNLOAD_TICKS)
+            self._show(FirstRun.Stage.DOWNLOADING)
+        elif self._checked < MODEL.size:
+            self._checked = min(MODEL.size, self._checked + MODEL.size // CHECK_TICKS)
+            self._show(FirstRun.Stage.CHECKING)
+        else:
+            self._timer.stop()
+            self._show(FirstRun.Stage.READY)
+
+    def _show(self, stage: FirstRun.Stage, missing: int = 0) -> None:
+        assert self.interface is not None
+        done = self._checked if stage is FirstRun.Stage.CHECKING else self._done
+        self.interface.show_model(ModelState(stage, done, MODEL.size, missing))
 
 
 class Preview:
     """Plays `core`'s part: the alerts on screen, a new one after each answer, those that
     vanished in the tray list, and the reminders, printed and kept in memory."""
 
-    def __init__(self, count: int) -> None:
+    def __init__(self, count: int, download: "Download | None" = None) -> None:
+        self._download = download
         self._clock = SystemClock()
         self._ids = itertools.count(1)
         self._texts = itertools.cycle(SAMPLES)
@@ -127,10 +196,14 @@ class Preview:
         self._reminders.pop(reminder_id, None)
         QTimer.singleShot(0, self._show_reminders)
 
-    def retry(self) -> None:
+    def restart_engine(self) -> None:
         print("Riprova", flush=True)
         assert self.interface is not None
         self.interface.show_engine(TrayList.Engine.WORKING)
+
+    def fetch_model(self) -> None:
+        if self._download is not None:
+            self._download.fetch()
 
     def keep_material(self, material: Material) -> None:
         print(f"materiale {material.value}", flush=True)
@@ -184,6 +257,12 @@ def main() -> None:
         help="browsers whose address cannot be read: the '!' and the banner",
     )
     parser.add_argument(
+        "--model",
+        choices=["ready", "download", *PROBLEMS],
+        default="ready",
+        help="a first run: the download, or a problem first; ready shows nothing",
+    )
+    parser.add_argument(
         "--engine",
         choices=[engine.name.lower() for engine in TrayList.Engine],
         default=TrayList.Engine.WORKING.name.lower(),
@@ -194,12 +273,14 @@ def main() -> None:
     # Qt's warnings, in the terminal: on Windows they go to the debugger when stderr is a pipe.
     os.environ.setdefault("QT_FORCE_STDERR_LOGGING", "1")
     app = QGuiApplication(sys.argv[:1])
-    preview = Preview(args.alerts)
-    interface = Interface(app, preview, preview.retry, preview.keep_material)
+    download = Download(args.model)
+    preview = Preview(args.alerts, download)
+    interface = Interface(app, preview, preview, MODEL)
     interface.look.material = Material(args.material)
     if not interface.hotkey.registered:
         print("Win+Maiusc+N è già usata da un'altra app", flush=True)
     preview.start(interface)
+    download.begin(interface)
     interface.show_unreadable(frozenset(args.unreadable))
     interface.show_engine(TrayList.Engine[args.engine.upper()])
     if args.creation:
