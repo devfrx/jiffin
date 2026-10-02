@@ -1,6 +1,6 @@
 # ADR-0014: Keep evaluations for 30 days and answered alerts until the reminder is deleted
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR-0021](0021-one-alert-per-unit.md) (the outcomes and answers of 0.2)
 - **Date:** 2026-09-29
 - **Deciders:** devfrx
 - **Sources:** tickets [#15](https://github.com/devfrx/jiffin/issues/15) (feedback data), [#6](https://github.com/devfrx/jiffin/issues/6) (scope) and [#12](https://github.com/devfrx/jiffin/issues/12) (alert behaviour)
