@@ -10,6 +10,8 @@ dependencies = [
     "jinja2>=3.1.6",
     "pydantic>=2.13.5",
     "pyside6-essentials>=6.11.2",
+    # Pinned exactly: scripts/package.py packs with the vpk of the same version (ADR-0015).
+    "velopack==1.2.161",
 ]
 
 [build-system]
@@ -31,6 +33,10 @@ dev = [
 ]
 harness = [
     "psutil>=7.2.2",
+]
+# Only to build the installer: `uv run --group package scripts/package.py` (ADR-0015).
+package = [
+    "pyinstaller==6.22.3",
 ]
 
 [tool.uv]
@@ -116,6 +122,21 @@ source_modules = [
     "jiffin.harness",
 ]
 forbidden_modules = ["PySide6"]
+
+[[tool.importlinter.contracts]]
+name = "Only app imports velopack"
+type = "forbidden"
+source_modules = [
+    "jiffin.core",
+    "jiffin.protocol",
+    "jiffin.engine",
+    "jiffin.client",
+    "jiffin.platform",
+    "jiffin.store",
+    "jiffin.ui",
+    "jiffin.harness",
+]
+forbidden_modules = ["velopack"]
 
 [[tool.importlinter.contracts]]
 name = "core imports nothing else from jiffin"

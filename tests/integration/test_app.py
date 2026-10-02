@@ -1,12 +1,15 @@
-"""The app as the owner starts it, `python -m jiffin`, with the real engine on the GPU, the real
-context capture and the real screen (#44): a reminder written with Win+Shift+N alerts once a
-window it is about has stayed in front for 5 s, and Fatto on the alert completes it.
+"""The app as the owner starts it, `python -m jiffin` (#44) or the installed `Jiffin.exe` (#45),
+with the real engine on the GPU, the real context capture and the real screen: a reminder written
+with Win+Shift+N alerts once a window it is about has stayed in front for 5 s, and Fatto on the
+alert completes it.
 
 It runs only on the owner's machine, with `uv run pytest -m integration
 tests/integration/test_app.py`, and skips without the model in the `NO_GIT` folder beside the
-repository. For about a minute it shows a window in front of everything, presses Win+Shift+N,
-types a reminder and clicks the alert: leave the computer alone meanwhile, and any window or
-dialog that shows up too. The app keeps its data in a temporary folder, never in the owner's.
+repository, or for the installed app when Jiffin is not installed. A Jiffin already running, the
+installed one started at login among them, must be closed with Esci first. For about a minute
+per app it shows a window in front of everything, presses Win+Shift+N, types a reminder and
+clicks the alert: leave the computer alone meanwhile, and any window or dialog that shows up too.
+The app keeps its data in a temporary folder, never in the owner's.
 """
 
 import ctypes
@@ -24,6 +27,7 @@ from typing import Any
 import comtypes.client
 import pytest
 
+from jiffin.app.root import INSTANCE
 from jiffin.client.model_file import MODEL
 from jiffin.core.reminders import THRESHOLD
 
@@ -32,6 +36,8 @@ pytestmark = pytest.mark.integration
 PINNED = (
     Path(__file__).resolve().parents[3] / "NO_GIT" / "rizzo-flow" / "models" / "rizzo-flow"
 ) / MODEL.name
+INSTALLED = Path(os.environ["LOCALAPPDATA"]) / "devfrx.Jiffin" / "current"
+"""Where Velopack installs the app (ADR-0015)."""
 TITLE = "Lista della spesa"
 CONDITION, ACTION = "quando scrivo la lista della spesa", "comprare il latte"
 """The real judge gives this reminder d = 3.1 in a window with that title (measured for #44)."""
@@ -101,6 +107,10 @@ _user32 = ctypes.WinDLL("user32", use_last_error=True)
 for _name, (_result, _arguments) in _USER32.items():
     _function = getattr(_user32, _name)
     _function.restype, _function.argtypes = _result, _arguments
+_kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+_kernel32.OpenMutexW.restype = wintypes.HANDLE
+_kernel32.OpenMutexW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
+_kernel32.CloseHandle.restype, _kernel32.CloseHandle.argtypes = wintypes.BOOL, [wintypes.HANDLE]
 
 _UIA: Any = comtypes.client.GetModule("UIAutomationCore.dll")
 
@@ -112,6 +122,7 @@ _MOUSEEVENTF_VIRTUALDESK, _MOUSEEVENTF_ABSOLUTE = 0x4000, 0x8000
 _SM_XVIRTUALSCREEN, _SM_YVIRTUALSCREEN = 76, 77
 _SM_CXVIRTUALSCREEN, _SM_CYVIRTUALSCREEN = 78, 79
 _WM_CLOSE = 0x0010
+_SYNCHRONIZE = 0x00100000
 _HWND_TOPMOST, _HWND_NOTOPMOST = -1, -2
 _SWP_NOSIZE, _SWP_NOMOVE, _SWP_NOACTIVATE = 0x0001, 0x0002, 0x0010
 _GA_ROOT = 2
@@ -189,6 +200,14 @@ def class_name(hwnd: int) -> str:
     return name.value
 
 
+def running() -> bool:
+    """A Jiffin holds its mutex: one the test starts would leave at once."""
+    handle = _kernel32.OpenMutexW(_SYNCHRONIZE, False, INSTANCE)
+    if handle:
+        _kernel32.CloseHandle(handle)
+    return bool(handle)
+
+
 def wait_for(what: str, condition: Callable[[], bool]) -> None:
     deadline = time.monotonic() + WAIT_S
     while not condition():
@@ -224,15 +243,16 @@ def button(process: int, name: str) -> tuple[int, int, int] | None:
 
 
 class App:
-    """`python -m jiffin`, with its data in a folder of its own and the pinned model in place."""
+    """The app, started by `command`, with its data in a folder of its own and the pinned model
+    in place."""
 
-    def __init__(self, data: Path) -> None:
+    def __init__(self, data: Path, command: list[str]) -> None:
         self.folder = data / "Jiffin"
         models = self.folder / "models"
         models.mkdir(parents=True)
         os.link(PINNED, models / MODEL.name)  # the same file, without a copy of 2.4 GB
         self._process = subprocess.Popen(
-            [sys.executable, "-m", "jiffin"],
+            command,
             env={**os.environ, "LOCALAPPDATA": str(data)},
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -249,7 +269,8 @@ class App:
             return int(db.execute(f"SELECT count(*) FROM {table} WHERE {where}").fetchone()[0])
 
     def end(self) -> None:
-        """The app, its interpreter and the engine: `uv`'s python.exe starts the real one."""
+        """The app and the engine, with the interpreter that `uv`'s python.exe starts in a
+        checkout."""
         subprocess.run(
             ["taskkill", "/T", "/F", "/PID", str(self._process.pid)],
             stdout=subprocess.DEVNULL,
@@ -285,11 +306,18 @@ class Target:
             self._process.kill()
 
 
-@pytest.fixture
-def app(tmp_path: Path) -> Iterator[App]:
+@pytest.fixture(params=["checkout", "installed"])
+def app(request: pytest.FixtureRequest, tmp_path: Path) -> Iterator[App]:
     if not PINNED.is_file():
         pytest.skip(f"the model is not in {PINNED.parent}")
-    started = App(tmp_path)
+    command = [sys.executable, "-m", "jiffin"]
+    if request.param == "installed":
+        installed = INSTALLED / "Jiffin.exe"
+        if not installed.is_file():
+            pytest.skip(f"Jiffin is not installed in {INSTALLED}")
+        command = [str(installed)]
+    assert not running(), "a Jiffin is running: close it with Esci from its tray icon's menu"
+    started = App(tmp_path, command)
     yield started
     started.end()
 
