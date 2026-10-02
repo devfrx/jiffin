@@ -6,11 +6,13 @@
 """Pinned llama.cpp runtime: the official Windows CUDA package, verified by sha256 (ADR-0011).
 
 Nothing is compiled. `scripts/fetch_llama_cpp.py` fetches the release archives from
-github.com/ggml-org/llama.cpp and unpacks them under `runtimes/`. The ctypes layouts in
+github.com/ggml-org/llama.cpp and unpacks them under `runtimes/`; `scripts/jiffin.spec` copies
+the libraries the engine loads into the packaged app (ADR-0015). The ctypes layouts in
 `llama_cpp.py` are transcribed from the header of exactly this release, so changing `RELEASE`
 means checking `llama.h` field by field, and measuring again (ADR-0006).
 """
 
+import sys
 from pathlib import Path
 
 RELEASE = "b11081"
@@ -30,9 +32,13 @@ PACKAGE = (
 LIBRARY_NAME = "llama.dll"
 # In a checkout, `src/jiffin/engine` sits three levels below the repository.
 RUNTIMES = Path(__file__).resolve().parents[3] / "runtimes"
+PACKAGED = "llama"
+"""The runtime's folder among the packaged app's libraries."""
 
 
 def install_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS) / PACKAGED  # type: ignore[attr-defined]  # set by PyInstaller
     return RUNTIMES / f"llama-{RELEASE}-win32-x64-cuda"
 
 

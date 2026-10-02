@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import pytest
@@ -15,3 +16,12 @@ def test_a_missing_runtime_says_how_to_fetch_it(
     directory.mkdir()
     (directory / "llama.dll").touch()
     assert llama_release.locate() == directory
+
+
+def test_the_packaged_engine_finds_the_runtime_among_its_libraries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    libraries = r"C:\Users\u\AppData\Local\devfrx.Jiffin\current\_internal"
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", libraries, raising=False)
+    assert llama_release.install_dir() == Path(libraries) / "llama"

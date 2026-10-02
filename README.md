@@ -32,7 +32,14 @@ uv run python -m jiffin.harness --help  # the evaluation harness
 uv run python -m jiffin.ui --alerts 3   # made-up alerts and reminders: the overlay, the tray list
 uv run python -m jiffin.ui --creation   # and the creation window, which Win+Shift+N opens too
 uv run python -m jiffin.ui --model download  # and a first run, with a made-up download
+uv run --group package scripts/package.py    # the installer, into releases/; needs the .NET SDK
 ```
+
+The installer, `releases\devfrx.Jiffin-win-Setup.exe`, installs Jiffin for
+the current user, with a Start menu entry and start at login; the data stays
+in `%LOCALAPPDATA%\Jiffin` through updates and uninstalls. A newer release
+built into `releases/` is applied at Jiffin's next start
+([ADR-0015](docs/adr/0015-package-pyinstaller-velopack.md)).
 
 The harness measures the app against its acceptance thresholds; how it works
 is in [docs/design/harness.md](docs/design/harness.md).

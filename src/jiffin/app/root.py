@@ -1,7 +1,8 @@
 """The composition root (ADR-0012): it makes the adapters, connects the ports, and starts the
 threads and Qt. `python -m jiffin` in a checkout, `Jiffin.exe` once packaged (ADR-0015).
 
-The start goes in this order: the database, migrated and cleaned up; the model file, checked or
+The start goes in this order: in the packaged app, Velopack's hooks and a newer release, applied
+before anything opens; the database, migrated and cleaned up; the model file, checked or
 downloaded; the engine; then the context capture. Esci shuts down in order: the capture, the
 engine with `shutdown` and its input closed, then the database with a last checkpoint.
 """
@@ -18,7 +19,7 @@ from types import TracebackType
 from PySide6.QtCore import QMessageLogContext, QtMsgType, qInstallMessageHandler
 from PySide6.QtGui import QGuiApplication
 
-from jiffin.app import win32
+from jiffin.app import updates, win32
 from jiffin.app.model import ModelFetch
 from jiffin.app.relay import Relay
 from jiffin.app.worker import QueuedCore, Source, Worker
@@ -114,11 +115,13 @@ class Jiffin:
 
 
 def main() -> None:
+    updates.hooks()
     if not win32.first_instance(INSTANCE):
         return
     folders = Folders.app()
     folders.logs.mkdir(parents=True, exist_ok=True)
     keep_log(folders.logs)
+    updates.update()
     # Ctrl+C in the terminal ends it at once, as it does the interface's preview.
     signal.signal(signal.SIGINT, signal.SIG_DFL)
     app = QGuiApplication(sys.argv)

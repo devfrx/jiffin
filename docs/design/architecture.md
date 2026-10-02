@@ -90,7 +90,9 @@ sequenceDiagram
     participant E as engine process
     participant C as context thread
 
+    I->>I: packaged: Velopack's hooks
     I->>I: hold the session's mutex, open the log
+    I->>I: packaged: a newer release applied, and a new start
     I->>I: make the interface: windows hidden, tray icon, shortcut
     I->>W: start
     W->>W: open the database: migrations, cleanup, what it holds
@@ -111,6 +113,11 @@ sequenceDiagram
     W->>W: a last checkpoint, and the database closes
 ```
 
+- **The packaged app** (`app/updates.py`, [ADR-0015](../adr/0015-package-pyinstaller-velopack.md))
+  hands its start to Velopack first: on install, update and uninstall,
+  Velopack's hooks end the process there. Then, before anything opens, it
+  looks for a newer release in the folder the build wrote it to; Velopack's
+  updater applies it once the process has ended, and starts Jiffin again.
 - **One Jiffin per session.** A second start exits at once: two would share
   the database, the GPU's memory and the shortcut.
 - **A database that cannot be opened**, from a later version after a

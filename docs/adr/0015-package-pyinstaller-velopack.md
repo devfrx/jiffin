@@ -40,7 +40,15 @@ Facts checked on 2026-09-30:
 - **Velopack 1.2.161** (MIT): per-user install without administrator rights,
   Start menu, start at login, updates. The packId is **`devfrx.Jiffin`**, so
   the install folder never overlaps the data folder `%LOCALAPPDATA%\Jiffin`
-  ([ADR-0013](0013-sqlite-storage.md)).
+  ([ADR-0013](0013-sqlite-storage.md)). Start at login is Velopack's shortcut
+  in the Startup folder.
+- **Updates come from the folder the releases are built into**, for personal
+  use ([#45](https://github.com/devfrx/jiffin/issues/45)): `scripts/package.py`
+  writes each release to the repository's `releases/`, ignored by git, and
+  leaves that folder's path in the app. At its start, before anything opens,
+  the installed app looks there and applies a newer release, then starts
+  again. A GitHub source was ruled out: the repository is private, so the app
+  would carry a token.
 - **The CUDA 13.4 runtime ships in the installer**, about 575 MB compressed.
 - **The model does not ship in the installer.** It is downloaded on first run
   from `rizzoaiacademy/rizzo-flow` at the pinned revision, with resume and
@@ -76,4 +84,5 @@ VC++ Redistributable in the installer.
 
 - The first packaged build checks that the engine starts from the bundle and
   answers `initialize`.
-- The update source is chosen with the packaging work.
+- The update source is chosen with the packaging work: the releases' folder,
+  above ([#45](https://github.com/devfrx/jiffin/issues/45)).

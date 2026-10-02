@@ -1,10 +1,12 @@
 """The client with the real model: its file against the pin (ADR-0006), and the real engine
-under the client's supervision, on the GPU (ADR-0011).
+under the client's supervision, on the GPU (ADR-0011), from the checkout and from the installed
+app (ADR-0015).
 
 These tests run only on the owner's machine, with `uv run pytest -m integration`; they skip
-when the model is not in the `NO_GIT` folder beside the repository.
+when the model is not in the `NO_GIT` folder beside the repository, or Jiffin is not installed.
 """
 
+import os
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -29,6 +31,8 @@ MODEL = (
     / "spark-x2.5-4b-rizzo-flow-lora-q4_k_m.gguf"
 )
 MODEL_SHA256 = model_file.MODEL.sha256
+INSTALLED = Path(os.environ["LOCALAPPDATA"]) / "devfrx.Jiffin" / "current"
+"""Where Velopack installs the app (ADR-0015)."""
 CHANGELOG = Context(
     "vivaldi.exe",
     "CHANGELOG.md at main · rossi/gestionale",
@@ -54,9 +58,24 @@ def test_the_model_on_this_machine_is_the_pinned_one(model: Path) -> None:
     assert progress[-1] == Progress(Phase.CHECKING, size, size)
 
 
-def test_the_engine_starts_judges_rewrites_and_shuts_down(model: Path) -> None:
+@pytest.fixture(params=["checkout", "installed"])
+def engine(request: pytest.FixtureRequest) -> list[str] | None:
+    """The engine's command: the module in the checkout, or the installed `jiffin-engine.exe`."""
+    if request.param == "checkout":
+        return None
+    installed = INSTALLED / "jiffin-engine.exe"
+    if not installed.is_file():
+        pytest.skip(f"Jiffin is not installed in {INSTALLED}")
+    return [str(installed)]
+
+
+def test_the_engine_starts_judges_rewrites_and_shuts_down(
+    model: Path, engine: list[str] | None
+) -> None:
     statuses: list[Status] = []
-    supervisor = Supervisor(model, MODEL_SHA256, SystemClock(), statuses.append, lambda: None)
+    supervisor = Supervisor(
+        model, MODEL_SHA256, SystemClock(), statuses.append, lambda: None, command=engine
+    )
     try:
         supervisor.start()
         build = supervisor.build()
