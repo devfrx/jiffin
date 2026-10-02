@@ -1,6 +1,6 @@
 """The tray icon: Jiffin's glyph, with a dot for an alert not seen yet and "!" while a browser's
 address cannot be read (#12, ADR-0010). A click opens the tray list; the right-click menu has
-Esci.
+Impostazioni and Esci (#43).
 
 The icon follows the taskbar's theme, which can differ from the apps' one: a dark glyph on a
 light taskbar, a white one on a dark taskbar. It is drawn here at the exact size Windows shows
@@ -114,7 +114,13 @@ class Tray(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has no _
 
     changed = Signal()
 
-    def __init__(self, engine: QQmlEngine, look: Look, on_click: Callable[[], None]) -> None:
+    def __init__(
+        self,
+        engine: QQmlEngine,
+        look: Look,
+        on_click: Callable[[], None],
+        on_settings: Callable[[], None],
+    ) -> None:
         # The engine owns this object, as the creation window's: the icon's bindings never
         # read it gone.
         super().__init__(engine)
@@ -122,6 +128,7 @@ class Tray(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has no _
         self._engine = engine
         self._look = look
         self._on_click = on_click
+        self._on_settings = on_settings
         self._dot = False
         self._warning = False
         self._icon: QObject | None = None
@@ -163,6 +170,10 @@ class Tray(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has no _
     @Slot()
     def click(self) -> None:
         self._on_click()
+
+    @Slot()
+    def settings(self) -> None:
+        self._on_settings()
 
     @Slot()
     def quit(self) -> None:

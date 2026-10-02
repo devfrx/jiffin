@@ -1,5 +1,5 @@
 """The pieces of the interface that share one QML engine: the look, the glass, the overlay, the
-creation window and its shortcut, the tray icon and its list."""
+creation window and its shortcut, the tray icon and its list, and the settings window."""
 
 from collections.abc import Callable
 from typing import Protocol
@@ -15,8 +15,9 @@ from jiffin.ui.alert import Answers
 from jiffin.ui.creation import Changes, Creation
 from jiffin.ui.glass import Glass
 from jiffin.ui.hotkey import Hotkey
-from jiffin.ui.look import Look
+from jiffin.ui.look import Look, Material
 from jiffin.ui.overlay import Overlay
+from jiffin.ui.preferences import Preferences
 from jiffin.ui.tray import Tray
 from jiffin.ui.tray_list import Commands, TrayList
 
@@ -28,13 +29,15 @@ class Core(Answers, Changes, Commands, Protocol):
 class Interface:
     """Make it on the interface thread, after the application and before any window. The
     `show_` methods take, on this thread, what `core`, the context capture and the engine say;
-    `retry` starts the engine again."""
+    `retry` starts the engine again, and `keep_material` keeps the material the user chose. Set
+    the kept one on `look.material` before anything shows."""
 
     def __init__(
         self,
         app: QGuiApplication,
         core: Core,
         retry: Callable[[], None],
+        keep_material: Callable[[Material], None],
         clock: Clock | None = None,
     ) -> None:
         # The app lives in the tray: hiding its last window must not end it.
@@ -52,7 +55,8 @@ class Interface:
         self.tray_list = TrayList(
             self.engine, core, self.creation, retry, self.glass, clock or SystemClock()
         )
-        self.tray = Tray(self.engine, self.look, self.tray_list.toggle)
+        self.preferences = Preferences(self.engine, self.look, keep_material, self.glass)
+        self.tray = Tray(self.engine, self.look, self.tray_list.toggle, self.preferences.open)
         self.tray.install()
         self.hotkey = Hotkey(self.creation.new)
         app.installNativeEventFilter(self.hotkey)

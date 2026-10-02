@@ -32,6 +32,11 @@ QtObject {
     readonly property bool controlEdgeAtBottom: !dark
     readonly property color subtleFillHover: dark ? "#0FFFFFFF" : "#09000000"
     readonly property color subtleFillPressed: dark ? "#0AFFFFFF" : "#06000000"
+    // A radio button's circle, unchecked: at rest, under the mouse, pressed; its edge pressed.
+    readonly property color controlAltFill: dark ? "#19000000" : "#06000000"
+    readonly property color controlAltFillHover: dark ? "#0BFFFFFF" : "#0F000000"
+    readonly property color controlAltFillPressed: dark ? "#12FFFFFF" : "#18000000"
+    readonly property color controlStrongStrokeDisabled: dark ? "#28FFFFFF" : "#37000000"
 
     // The user's accent, in the shade Windows makes for the theme; hover and pressed are it at
     // 90% and 80%.
