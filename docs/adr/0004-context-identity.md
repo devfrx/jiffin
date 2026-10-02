@@ -59,7 +59,7 @@ contexts evaluated with a 20 s debounce and the cache):
 normalized address are all equal. The same rule drives the three mechanisms:
 
 - **Debounce:** the context is stable while its key does not change for the
-  debounce interval, 20 s ([ADR-0007](0007-single-stage-pipeline.md)).
+  debounce interval, 5 s ([ADR-0019](0019-five-second-debounce.md)).
 - **Pair cache:** the key is exactly the text the model sees, so a cached
   score is the one the model would give again. It is invalidated only by a new
   revision of the reminder or a different engine build

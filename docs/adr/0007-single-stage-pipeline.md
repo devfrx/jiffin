@@ -1,6 +1,6 @@
 # ADR-0007: Judge every active reminder in one stage, without retrieval
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR-0019](0019-five-second-debounce.md) (the debounce is 5 s)
 - **Date:** 2026-09-29
 - **Deciders:** devfrx
 - **Sources:** tickets [#14](https://github.com/devfrx/jiffin/issues/14) (pipeline), [#13](https://github.com/devfrx/jiffin/issues/13), [#18](https://github.com/devfrx/jiffin/issues/18) and [#24](https://github.com/devfrx/jiffin/issues/24) (measurements), [#16](https://github.com/devfrx/jiffin/issues/16) (cost with 20 reminders)
@@ -31,14 +31,15 @@ took 12 of the former while erring on 1 of the latter.
 
 ## Decision
 
-**Pipeline:** context change → 20 s debounce → pair cache → the judge scores
+**Pipeline:** context change → 5 s debounce → pair cache → the judge scores
 all active reminders in one call → hand-set threshold on d → alert and
 feedback.
 
 - **No retrieval and no embedding model** in the first version.
-- **Debounce: 20 s.** It fits the p95 ≤ 30 s delay
-  ([ADR-0003](0003-acceptance-thresholds.md)); a 5 s debounce nearly doubles
-  the evaluations (72 instead of 37 on the real day).
+- **Debounce: 5 s** ([ADR-0019](0019-five-second-debounce.md)). It was 20 s,
+  to fit the p95 ≤ 30 s delay ([ADR-0003](0003-acceptance-thresholds.md))
+  with half the evaluations (37 instead of 72 on the real day); the owner
+  found the wait too long on the installed app.
 - **Threshold on d, set by hand.** The starting value is d ≈ 0.97, the highest
   with recall ≥ 0.80 on the sample (0.094 false alarms per evaluated context).
   The final value is fixed on the acceptance day, after the rewriting prompt is

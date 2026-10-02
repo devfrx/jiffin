@@ -16,7 +16,7 @@ sequenceDiagram
 
     P->>W: Observation(at, context)
     W->>R: observe(observation)
-    Note over R: every change of context starts the 20 s debounce again
+    Note over R: every change of context starts the 5 s debounce again
     W->>R: poll(), once the clock reaches R.deadline
     R->>R: write the statements still missing (rewrite)
     R->>R: look up the cache: (context, revision, engine build)

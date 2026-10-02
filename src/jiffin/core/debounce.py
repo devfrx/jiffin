@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 from jiffin.core.context import Context, Observation
 
-DEBOUNCE_MS = 20_000
-"""How long a context must stay unchanged before it is evaluated (ADR-0007)."""
+DEBOUNCE_MS = 5_000
+"""How long a context must stay unchanged before it is evaluated (ADR-0019)."""
 
 
 @dataclass(frozen=True, slots=True)

@@ -75,10 +75,11 @@ class Quiet:
 
 
 def test_the_day_of_2026_09_28_replays_to_its_evaluations(tmp_path: Path) -> None:
-    """The ticket's check (#46): the captured day, converted and replayed with the 20 s debounce.
+    """The ticket's check (#46): the captured day, converted and replayed with the debounce.
 
-    Ticket #11 counted 37 contexts evaluated; the app evaluates 36. The 37th was a Vivaldi window
-    whose privacy the capture could not tell, which the app ignores since #41.
+    With the 20 s debounce of ADR-0007 it gave 116 evaluations of 36 contexts: ticket #11 counted
+    37, the 37th being a Vivaldi window whose privacy the capture could not tell, which the app
+    ignores since #41. With the 5 s of ADR-0019 it gives about twice as many.
     """
     if not (CAPTURE.is_file() and folders.SAMPLE.is_file()):
         pytest.skip(f"the capture of 2026-09-28 is not in {folders.NO_GIT}")
@@ -90,5 +91,5 @@ def test_the_day_of_2026_09_28_replays_to_its_evaluations(tmp_path: Path) -> Non
     contexts = {evaluation.context for evaluation in replayed.evaluations}
     print(f"\n{len(replayed.evaluations)} evaluations of {len(contexts)} contexts")
     assert day.day.isoformat() == "2026-09-28"
-    assert (len(replayed.evaluations), len(contexts)) == (116, 36)
-    assert (len(day.evaluations), len({e.context for e in day.evaluations})) == (116, 36)
+    assert (len(replayed.evaluations), len(contexts)) == (234, 69)
+    assert (len(day.evaluations), len({e.context for e in day.evaluations})) == (234, 69)
