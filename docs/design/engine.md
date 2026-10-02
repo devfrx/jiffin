@@ -45,11 +45,11 @@ flowchart TD
   the login page of a public Wi-Fi, is refused before a byte is written.
 - **Every failure names one problem** for the interface: the network (the next
   call resumes), the space (the rest of the download and 1 GiB more must be
-  free), the disk, or a mismatch. The messages name files and numbers, never a
-  folder.
+  free, and the error carries the bytes missing), the disk, or a mismatch. The
+  messages name files and numbers, never a folder.
 - **Offline**, the interface tells the user where to put the file, with its
-  address, size and sha256. The file gets the same check, and a wrong one is
-  refused, never deleted.
+  address, size and sha256 ([first run](first-run.md)). The file gets the same
+  check, and a wrong one is refused, never deleted.
 - **Progress** comes in bytes after every MiB, for the download and for the
   check.
 - On 2026-09-30 the pinned address redirected to Hugging Face's CDN, which

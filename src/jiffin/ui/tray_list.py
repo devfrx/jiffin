@@ -1,5 +1,6 @@
 """The tray list: what keeps Jiffin from working fully, the alerts that vanished unanswered, and
-the active reminders (#12, #43, ADR-0010).
+the active reminders (#12, #43, ADR-0010). The model file on its way is one of the first: its
+line shows the download or the problem, and Dettagli opens the first-run window.
 
 A card on the alerts' material, at the bottom right of the screen over the tray. The tray icon
 opens it, and it takes the focus; Esc or a click elsewhere closes it. While it is open, the
@@ -31,6 +32,7 @@ from jiffin.core.alerts import AlertsView
 from jiffin.core.clock import Clock
 from jiffin.core.records import Alert
 from jiffin.core.reminders import MINUTE_MS, ActiveReminder, RemindersView, Snooze
+from jiffin.ui.first_run import FirstRun
 from jiffin.ui.glass import Glass
 from jiffin.ui.rows import Row, Rows
 from jiffin.ui.words import sentence
@@ -97,6 +99,7 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         commands: Commands,
         writer: Writer,
         retry: Callable[[], None],
+        first_run: FirstRun,
         glass: Glass,
         clock: Clock,
     ) -> None:
@@ -106,6 +109,7 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         self._commands = commands
         self._writer = writer
         self._retry = retry
+        self._first_run = first_run
         self._glass = glass
         self._clock = clock
         self._alerts = AlertsView((), 0, ())
@@ -130,7 +134,9 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         self._component = QQmlComponent(engine, QUrl.fromLocalFile(QML / "TrayListWindow.qml"))
         if self._component.isError():
             raise RuntimeError(self._component.errorString())
-        window = self._component.createWithInitialProperties({"trayList": self})
+        window = self._component.createWithInitialProperties(
+            {"trayList": self, "firstRun": first_run}
+        )
         if not isinstance(window, QQuickWindow):
             raise TypeError(f"no tray list window: {self._component.errorString()}")
         self._window = window
@@ -234,6 +240,16 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
     @Slot()
     def retry(self) -> None:
         self._retry()
+
+    @Slot()
+    def retryModel(self) -> None:
+        self._first_run.retry()
+
+    @Slot()
+    def details(self) -> None:
+        """The model's line: its window, with the steps and the file by hand."""
+        self.close()
+        self._first_run.open()
 
     @Slot()
     def close(self) -> None:

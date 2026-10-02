@@ -57,9 +57,10 @@ stateDiagram-v2
   - **Promemoria**, and **Nuovo**, which opens the creation window
     ([creation](creation.md));
   - what keeps Jiffin from working fully, each as a quiet line where only the
-    icon has colour: the engine (below) and the browsers whose address cannot
-    be read. The owner chose the line on screen, over WinUI's yellow box and a
-    neutral card;
+    icon has colour: the model file on its way, with its bar, Riprova on a
+    problem and Dettagli ([first run](first-run.md)); the engine (below); and
+    the browsers whose address cannot be read. The owner chose the line on
+    screen, over WinUI's yellow box and a neutral card;
   - **Non visti**: the alerts that vanished unanswered, newest first, each with
     its condition, when it appeared, Fatto and Rimanda; Rimanda opens 15 min,
     1 ora and Domani inside the card;

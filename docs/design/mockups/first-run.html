@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jiffin — primo avvio</title>
+<!--
+  The first-run window, as built in src/jiffin/ui/qml (ADR-0010, ADR-0015, ticket #43): the
+  model file on its way in three steps, a problem with Riprova and the file by hand, and ready.
+  A card like the creation window, on the alerts' material (B by default), without Windows'
+  title bar. The owner chose the steps on screen in #43, over a plain card and one with the
+  app's glyph above a large title.
+  Colours are those of Colors.qml; text and icons use Windows 11's system fonts, Segoe UI
+  Variable and Segoe Fluent Icons. The bars are WinUI's ProgressBar (FluentProgressBar.qml).
+-->
+<style>
+  :root {
+    --page: #d6d9de;
+  }
+  .light {
+    --desk: #ffffff;
+    --desk-side: #f3f3f3;
+    --stripe-a: #a259d9;
+    --stripe-b: #2f7dd1;
+    --stripe-c: #e08a3c;
+    --card: #fcfcfc;
+    --window-stroke: rgba(0, 0, 0, 0.1);
+    --shadow: 0 32px 64px rgba(0, 0, 0, 0.18);
+    --text-primary: rgba(0, 0, 0, 0.894);
+    --text-secondary: rgba(0, 0, 0, 0.62);
+    --text-on-accent: #ffffff;
+    --text-inverse: #ffffff;
+    --control-fill: rgba(255, 255, 255, 0.702);
+    --control-stroke: rgba(0, 0, 0, 0.059);
+    --control-strong-stroke: rgba(0, 0, 0, 0.447);
+    --control-edge: rgba(0, 0, 0, 0.161);
+    --subtle-hover: rgba(0, 0, 0, 0.035);
+    --accent: #005fb8;
+    --accent-stroke: rgba(255, 255, 255, 0.078);
+    --accent-edge: rgba(0, 0, 0, 0.4);
+    --caution: #9d5d00;
+    --critical: #c42b1c;
+  }
+  .dark {
+    --desk: #1f1f1f;
+    --desk-side: #181818;
+    --stripe-a: #c586c0;
+    --stripe-b: #4fc1ff;
+    --stripe-c: #ce9178;
+    --card: #2c2c2c;
+    --window-stroke: rgba(255, 255, 255, 0.08);
+    --shadow: 0 32px 64px rgba(0, 0, 0, 0.5);
+    --text-primary: #ffffff;
+    --text-secondary: rgba(255, 255, 255, 0.773);
+    --text-on-accent: #000000;
+    --text-inverse: rgba(0, 0, 0, 0.894);
+    --control-fill: rgba(255, 255, 255, 0.059);
+    --control-stroke: rgba(255, 255, 255, 0.071);
+    --control-strong-stroke: rgba(255, 255, 255, 0.545);
+    --control-edge: rgba(255, 255, 255, 0.094);
+    --subtle-hover: rgba(255, 255, 255, 0.059);
+    --accent: #60cdff;
+    --accent-stroke: rgba(255, 255, 255, 0.078);
+    --accent-edge: rgba(0, 0, 0, 0.137);
+    --caution: #fce100;
+    --critical: #ff99a4;
+  }
+
+  body {
+    margin: 0;
+    padding: 32px 16px;
+    background: var(--page);
+    color: #1a1a1a;
+    font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  }
+  h1 {
+    margin: 0 0 4px;
+    font-size: 20px;
+    font-weight: 600;
+  }
+  .lead {
+    margin: 0 0 24px;
+    max-width: 72ch;
+    font-size: 14px;
+    line-height: 20px;
+  }
+  .themes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 32px;
+  }
+  .theme h2 {
+    margin: 0 0 8px;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  p {
+    margin: 0;
+  }
+  .glyph {
+    font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets", sans-serif;
+    font-size: 16px;
+    line-height: 16px;
+  }
+
+  /* A desk with colourful content, behind the windows. */
+  .desk {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+    width: min(560px, calc(100vw - 32px));
+    padding: 40px 0;
+    overflow: hidden;
+    border-radius: 8px;
+    background:
+      repeating-linear-gradient(90deg, var(--stripe-a) 0 18px, transparent 18px 64px) 40px 60px / 100% 10px no-repeat,
+      repeating-linear-gradient(90deg, var(--stripe-b) 0 90px, transparent 90px 130px) 40px 90px / 100% 10px no-repeat,
+      repeating-linear-gradient(90deg, var(--stripe-c) 0 60px, transparent 60px 100px) 64px 620px / 100% 10px no-repeat,
+      linear-gradient(90deg, var(--desk-side) 0 140px, var(--desk) 140px);
+  }
+  .window {
+    width: min(440px, calc(100% - 24px));
+    margin: 0 auto;
+    overflow: hidden;
+    border: 1px solid var(--window-stroke);
+    border-radius: 8px;
+    background: var(--card);
+    box-shadow: var(--shadow);
+  }
+  .content {
+    padding: 20px 24px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .heading {
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .body {
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--text-primary);
+  }
+  .caption {
+    font-family: "Segoe UI Variable Small", "Segoe UI", system-ui, sans-serif;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--text-secondary);
+    overflow-wrap: anywhere;
+  }
+  .one-line {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  /* The steps: a disc with the number, or a check once done; the running one has a bar. */
+  .steps {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .step {
+    display: grid;
+    grid-template-columns: 20px 1fr;
+    column-gap: 12px;
+  }
+  .disc {
+    box-sizing: border-box;
+    width: 20px;
+    height: 20px;
+    border: 1px solid var(--control-strong-stroke);
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-family: "Segoe UI Variable Small", "Segoe UI", system-ui, sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+  .now .disc {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .stuck .disc {
+    border-color: var(--caution);
+    color: var(--caution);
+  }
+  .done .disc {
+    border: 0;
+    background: var(--accent);
+    color: var(--text-on-accent);
+    font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets", sans-serif;
+    font-size: 10px;
+  }
+  .step .label {
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--text-secondary);
+  }
+  .now .label,
+  .done .label {
+    color: var(--text-primary);
+  }
+  .step .more {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  /* Fluent 2 progress bar: a 1 px track and a 3 px bar. */
+  .bar {
+    position: relative;
+    height: 3px;
+    margin-top: 4px;
+  }
+  .bar::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 1px;
+    height: 1px;
+    background: var(--control-strong-stroke);
+  }
+  .bar span {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 3px;
+    border-radius: 1.5px;
+    background: var(--accent);
+  }
+  .stuck .bar span {
+    background: var(--caution);
+  }
+
+  /* A problem: a quiet line, where only the icon has colour (FluentInfoBar.qml). */
+  .problem {
+    display: grid;
+    grid-template-columns: 16px 1fr;
+    column-gap: 10px;
+    row-gap: 8px;
+  }
+  .problem .icon {
+    position: relative;
+    width: 16px;
+    height: 16px;
+    margin-top: 2px;
+  }
+  .problem .icon span {
+    position: absolute;
+    inset: 0;
+  }
+  .problem .icon .disc-glyph {
+    color: var(--critical);
+  }
+  .problem .icon .mark {
+    color: var(--text-inverse);
+  }
+  .problem .message {
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--text-secondary);
+  }
+  .problem .actions {
+    grid-column: 2;
+  }
+  .by-hand {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-left: 12px;
+  }
+  .with-button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* Fluent 2 buttons (FluentButton.qml). */
+  .buttons {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 4px;
+  }
+  button {
+    position: relative;
+    min-width: 96px;
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--control-stroke);
+    border-radius: 4px;
+    background: var(--control-fill);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 14px;
+  }
+  button.small {
+    min-width: 0;
+  }
+  button.square {
+    min-width: 0;
+    width: 32px;
+    padding: 0;
+  }
+  /* The edge that makes a button look raised: at the top in dark, at the bottom in light. */
+  button::after {
+    content: "";
+    position: absolute;
+    left: 4px;
+    right: 4px;
+    height: 1px;
+    background: var(--control-edge);
+  }
+  .dark button::after {
+    top: 0;
+  }
+  .light button::after {
+    bottom: 0;
+  }
+  button.subtle {
+    align-self: flex-start;
+    min-width: 0;
+    border-color: transparent;
+    background: transparent;
+  }
+  button.subtle::after {
+    display: none;
+  }
+  button.accent {
+    border-color: var(--accent-stroke);
+    background: var(--accent);
+    color: var(--text-on-accent);
+  }
+  .theme button.accent::after {
+    top: auto;
+    bottom: 0;
+    background: var(--accent-edge);
+  }
+
+  .notes {
+    margin: 24px 0 0;
+    padding-left: 20px;
+    max-width: 72ch;
+    font-size: 14px;
+    line-height: 20px;
+  }
+</style>
+</head>
+<body>
+<h1>Primo avvio</h1>
+<p class="lead">Al primo avvio Jiffin scarica il modello, 2,4 GB in qualche minuto, e lo controlla. La finestra si apre da sola durante il download o quando c'è un problema, al centro dello schermo, e prende il focus. Il controllo veloce a ogni avvio non apre niente.</p>
+
+<div class="themes">
+  <section class="theme light" aria-label="Tema chiaro">
+    <h2>Chiaro</h2>
+    <div class="desk">
+      <div class="window" role="dialog" aria-label="Benvenuto in Jiffin">
+        <div class="content">
+          <p class="heading">Benvenuto in Jiffin</p>
+          <p class="body">Jiffin lavora solo su questo PC: niente esce da qui.</p>
+          <div class="steps">
+            <div class="step now"><span class="disc">1</span><div class="more"><span class="label">Scarico il modello</span><div class="bar" role="progressbar" aria-valuenow="34"><span style="width: 34%"></span></div><span class="caption">0,8 GB di 2,4 GB · circa 4 min</span></div></div>
+            <div class="step"><span class="disc">2</span><span class="label">Controllo il file</span></div>
+            <div class="step"><span class="disc">3</span><span class="label">Pronto</span></div>
+          </div>
+          <p class="body">Intanto puoi già scrivere i promemoria: premi Win+Maiusc+N.</p>
+          <div class="buttons"><button>Chiudi</button></div>
+        </div>
+      </div>
+
+      <div class="window" role="dialog" aria-label="Benvenuto in Jiffin">
+        <div class="content">
+          <p class="heading">Benvenuto in Jiffin</p>
+          <p class="body">Jiffin lavora solo su questo PC: niente esce da qui.</p>
+          <div class="steps">
+            <div class="step now stuck"><span class="disc">1</span><div class="more"><span class="label">Scarico il modello</span><div class="bar" role="progressbar" aria-valuenow="34"><span style="width: 34%"></span></div><span class="caption">0,8 GB di 2,4 GB · fermo</span></div></div>
+            <div class="step"><span class="disc">2</span><span class="label">Controllo il file</span></div>
+            <div class="step"><span class="disc">3</span><span class="label">Pronto</span></div>
+          </div>
+          <div class="problem">
+            <span class="icon glyph"><span class="disc-glyph">&#xF136;</span><span class="mark">&#xF13D;</span></span>
+            <p class="message">Il download si è fermato: controlla la connessione. Riprova riprende da dove era rimasto.</p>
+            <div class="actions"><button class="small">Riprova</button></div>
+          </div>
+          <button class="subtle">Senza rete? Mettilo a mano <span class="glyph" style="font-size: 12px">&#xE70D;</span></button>
+          <div class="by-hand">
+            <p class="caption">1. Scarica il file da questo indirizzo, anche da un altro PC:</p>
+            <div class="with-button"><span class="caption one-line">https://huggingface.co/rizzoaiacademy/rizzo-flow/resolve/55633c8cbd2b826bd3eefdeb05310450996649df/spark-x2.5-4b-rizzo-flow-lora-q4_k_m.gguf</span><button class="square glyph" aria-label="Copia l'indirizzo">&#xE8C8;</button></div>
+            <p class="caption">2. Mettilo nella cartella dei modelli, con il nome spark-x2.5-4b-rizzo-flow-lora-q4_k_m.gguf:</p>
+            <div class="with-button"><span class="caption one-line">C:\Users\Giulia\AppData\Local\Jiffin\models</span><button class="square glyph" aria-label="Apri la cartella">&#xE838;</button></div>
+            <p class="caption">3. Premi Riprova: lo controllo. Deve pesare 2.600.224.416 byte, con sha256 79de5cb8dbfd1a1f5cb3037252251594352841fe5e3dc1ae8cead053010fcd54.</p>
+          </div>
+          <div class="buttons"><button>Chiudi</button></div>
+        </div>
+      </div>
+
+      <div class="window" role="dialog" aria-label="Jiffin è pronto">
+        <div class="content">
+          <p class="heading">Jiffin è pronto</p>
+          <p class="body">Premi Win+Maiusc+N, da qualsiasi app, per un nuovo promemoria.</p>
+          <p class="body">L'icona di Jiffin nella barra apre l'elenco. Windows la mette sotto ^: trascinala sulla barra per vederla sempre.</p>
+          <div class="buttons"><button class="accent">Inizia</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="theme dark" aria-label="Tema scuro">
+    <h2>Scuro</h2>
+    <div class="desk">
+      <div class="window" role="dialog" aria-label="Benvenuto in Jiffin">
+        <div class="content">
+          <p class="heading">Benvenuto in Jiffin</p>
+          <p class="body">Jiffin lavora solo su questo PC: niente esce da qui.</p>
+          <div class="steps">
+            <div class="step done"><span class="disc">&#xE73E;</span><span class="label">Scarico il modello</span></div>
+            <div class="step now"><span class="disc">2</span><div class="more"><span class="label">Controllo il file</span><div class="bar" role="progressbar" aria-valuenow="60"><span style="width: 60%"></span></div></div></div>
+            <div class="step"><span class="disc">3</span><span class="label">Pronto</span></div>
+          </div>
+          <p class="body">Intanto puoi già scrivere i promemoria: premi Win+Maiusc+N.</p>
+          <div class="buttons"><button>Chiudi</button></div>
+        </div>
+      </div>
+
+      <div class="window" role="dialog" aria-label="Benvenuto in Jiffin">
+        <div class="content">
+          <p class="heading">Benvenuto in Jiffin</p>
+          <p class="body">Jiffin lavora solo su questo PC: niente esce da qui.</p>
+          <div class="steps">
+            <div class="step done"><span class="disc">&#xE73E;</span><span class="label">Scarico il modello</span></div>
+            <div class="step now stuck"><span class="disc">2</span><span class="label">Controllo il file</span></div>
+            <div class="step"><span class="disc">3</span><span class="label">Pronto</span></div>
+          </div>
+          <div class="problem">
+            <span class="icon glyph"><span class="disc-glyph">&#xF136;</span><span class="mark">&#xF13D;</span></span>
+            <p class="message">Il file del modello non è quello giusto. Se l'hai messo tu, sostituiscilo o eliminalo; poi premi Riprova.</p>
+            <div class="actions"><button class="small">Riprova</button></div>
+          </div>
+          <button class="subtle">Mettilo a mano <span class="glyph" style="font-size: 12px">&#xE70D;</span></button>
+          <div class="buttons"><button>Chiudi</button></div>
+        </div>
+      </div>
+
+      <div class="window" role="dialog" aria-label="Jiffin è pronto">
+        <div class="content">
+          <p class="heading">Jiffin è pronto</p>
+          <p class="body">Premi Win+Maiusc+N, da qualsiasi app, per un nuovo promemoria.</p>
+          <p class="body">L'icona di Jiffin nella barra apre l'elenco. Windows la mette sotto ^: trascinala sulla barra per vederla sempre.</p>
+          <div class="buttons"><button class="accent">Inizia</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<ul class="notes">
+  <li>Chiusa con Chiudi o Esc, la finestra resta chiusa fino al prossimo avvio: il download continua, e l'elenco della tray mostra in cima una riga con la barra, o il problema con Riprova, e Dettagli, che riapre la finestra.</li>
+  <li>Un problema lascia ferma la barra del passo dove si è fermato. Riprova diventa «Riprovo…» finché l'app non risponde; il download riprende da dove era rimasto.</li>
+  <li>Il tempo che manca viene dagli ultimi 30 secondi di download, e compare dopo 5 secondi. Le dimensioni sono in GB da 1024³ byte, come in Esplora file.</li>
+  <li>Se un'altra app tiene Win+Maiusc+N, la finestra dice di scrivere i promemoria da Nuovo, nell'elenco.</li>
+</ul>
+</body>
+</html>

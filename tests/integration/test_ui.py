@@ -29,7 +29,9 @@ from jiffin.core.context import Context
 from jiffin.core.records import Alert, Revision
 from jiffin.core.reminders import Snooze
 from jiffin.ui.alert import AlertSlot
+from jiffin.ui.first_run import ModelFile
 from jiffin.ui.interface import Interface
+from jiffin.ui.look import Material
 
 TARGET = [sys.executable, str(Path(__file__).with_name("target_window.py"))]
 ROUNDS = 20
@@ -317,12 +319,26 @@ class Core:
         self.made.append(("delete", reminder_id))
 
 
+class Upkeep:
+    """The app's part around core: nothing here asks for it."""
+
+    def restart_engine(self) -> None:
+        pass
+
+    def fetch_model(self) -> None:
+        pass
+
+    def keep_material(self, material: Material) -> None:
+        pass
+
+
 class Screen:
     """The app's interface, made as the app makes it, with core's part played by the test."""
 
-    def __init__(self, app: QGuiApplication) -> None:
+    def __init__(self, app: QGuiApplication, tmp: Path) -> None:
         self.core = Core()
-        self.interface = Interface(app, self.core, lambda: None, lambda material: None)
+        model = ModelFile("model.gguf", "https://example.org/model.gguf", 1, "0" * 64, tmp)
+        self.interface = Interface(app, self.core, Upkeep(), model)
 
     def show(self, *alert_ids: int) -> None:
         alerts = tuple(alert(alert_id) for alert_id in alert_ids)
@@ -388,9 +404,9 @@ def qapp_cls() -> type[QGuiApplication]:
 
 
 @pytest.fixture(scope="module")
-def screen(qapp: QGuiApplication) -> Screen:
+def screen(qapp: QGuiApplication, tmp_path_factory: pytest.TempPathFactory) -> Screen:
     assert qapp.platformName() == "windows", "run the integration tests apart from the unit tests"
-    return Screen(qapp)
+    return Screen(qapp, tmp_path_factory.mktemp("models"))
 
 
 @pytest.fixture

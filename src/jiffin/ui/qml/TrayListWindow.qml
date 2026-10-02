@@ -1,6 +1,6 @@
-// The tray list (#12, #43): what keeps Jiffin from working fully, the alerts that vanished
-// unanswered, with Fatto and Rimanda, and the active reminders, with Nuovo, Modifica, Completa
-// and Elimina. A card on the alerts' material, over the tray (ADR-0010). It takes the focus;
+// The tray list (#12, #43): what keeps Jiffin from working fully, the model file on its way
+// first, the alerts that vanished unanswered, with Fatto and Rimanda, and the active reminders,
+// with Nuovo, Modifica, Completa and Elimina. A card on the alerts' material, over the tray (ADR-0010). It takes the focus;
 // Tab moves from button to button, and Esc or a click elsewhere closes it.
 // Bound: the rows take their data as required properties, and reach the list by its id.
 pragma ComponentBehavior: Bound
@@ -14,6 +14,7 @@ Window {
     id: window
 
     required property TrayList trayList
+    required property FirstRun firstRun
 
     // Scrolls the list to the item Tab has reached.
     function reveal(item: Item): void {
@@ -100,6 +101,38 @@ Window {
                     }
                 }
 
+                // The model file on its way (ADR-0015): the download, or what stopped it.
+                FluentInfoBar {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 8
+                    Layout.rightMargin: 8
+                    visible: window.firstRun.waiting
+                    severity: window.firstRun.problem ? FluentInfoBar.Error : FluentInfoBar.Informational
+                    message: window.firstRun.problem ? Texts.modelTrouble(window.firstRun.stage, window.firstRun.missing) : Texts.downloading(window.firstRun.done, window.firstRun.total, window.firstRun.minutes)
+
+                    FluentProgressBar {
+                        Layout.fillWidth: true
+                        visible: !window.firstRun.problem
+                        value: window.firstRun.total > 0 ? window.firstRun.done / window.firstRun.total : 0
+                        Accessible.name: Texts.stepDownload
+                    }
+                    Row {
+                        spacing: 8
+
+                        FluentButton {
+                            visible: window.firstRun.problem
+                            text: window.firstRun.retrying ? Texts.retrying : Texts.retry
+                            enabled: !window.firstRun.retrying
+                            focusPolicy: Qt.StrongFocus
+                            onClicked: window.trayList.retryModel()
+                        }
+                        FluentButton {
+                            text: Texts.details
+                            focusPolicy: Qt.StrongFocus
+                            onClicked: window.trayList.details()
+                        }
+                    }
+                }
                 FluentInfoBar {
                     Layout.fillWidth: true
                     Layout.leftMargin: 8

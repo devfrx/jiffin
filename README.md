@@ -30,6 +30,7 @@ uv run pytest -m integration          # tests that need the GPU, the browsers or
 uv run python -m jiffin.harness --help  # the evaluation harness
 uv run python -m jiffin.ui --alerts 3   # made-up alerts and reminders: the overlay, the tray list
 uv run python -m jiffin.ui --creation   # and the creation window, which Win+Shift+N opens too
+uv run python -m jiffin.ui --model download  # and a first run, with a made-up download
 ```
 
 The harness measures the app against its acceptance thresholds; how it works

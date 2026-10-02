@@ -31,9 +31,10 @@ from [#43](https://github.com/devfrx/jiffin/issues/43); the
 ## Keeping the choice
 
 The interface does not store anything ([ADR-0012](../adr/0012-package-structure-ports.md)):
-each new choice goes to the `keep_material` the app gives `Interface`, and the
-app keeps it in the `setting` table ([data model](data-model.md)) and sets it
-on `Interface.look.material` at the next start, before any window shows
+each new choice goes to `keep_material`, of the `Upkeep` the app gives
+`Interface`, and the app keeps it in the `setting` table
+([data model](data-model.md)) and sets it on `Interface.look.material` at the
+next start, before any window shows
 ([#44](https://github.com/devfrx/jiffin/issues/44)).
 
 ## Trying it

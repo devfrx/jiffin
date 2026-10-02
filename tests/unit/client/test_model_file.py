@@ -262,8 +262,9 @@ def test_a_download_needs_room_for_the_rest_and_a_reserve(
     (tmp_path / "model.gguf.part").write_bytes(DATA[:CUT])
     usage = shutil.disk_usage(tmp_path)
     needed = len(DATA) - CUT + model_file.RESERVE
-    monkeypatch.setattr(shutil, "disk_usage", lambda path: usage._replace(free=needed - 1))
-    assert failure(pin(source.url), tmp_path).problem is Problem.SPACE
+    monkeypatch.setattr(shutil, "disk_usage", lambda path: usage._replace(free=needed - 1000))
+    error = failure(pin(source.url), tmp_path)
+    assert (error.problem, error.missing) == (Problem.SPACE, 1000)
     assert source.ranges == []
     monkeypatch.setattr(shutil, "disk_usage", lambda path: usage._replace(free=needed))
     assert ensure(pin(source.url), tmp_path, lambda progress: None).read_bytes() == DATA

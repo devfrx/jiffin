@@ -84,9 +84,11 @@ class Problem(Enum):
 class ModelFileError(Exception):
     """The model file cannot be had, or is not the pinned one."""
 
-    def __init__(self, problem: Problem, detail: str) -> None:
+    def __init__(self, problem: Problem, detail: str, missing: int = 0) -> None:
         super().__init__(detail)
         self.problem = problem
+        self.missing = missing
+        """For SPACE: the bytes to free on the disk, for the interface to name."""
 
 
 def ensure(file: PinnedFile, directory: Path, on_progress: Callable[[Progress], None]) -> Path:
@@ -131,7 +133,9 @@ def _download(file: PinnedFile, part: Path, on_progress: Callable[[Progress], No
         return
     needed = file.size - offset + RESERVE
     if free < needed:
-        raise ModelFileError(Problem.SPACE, f"{needed:,} bytes are needed, {free:,} are free")
+        raise ModelFileError(
+            Problem.SPACE, f"{needed:,} bytes are needed, {free:,} are free", needed - free
+        )
     headers = {"Range": f"bytes={offset}-"} if offset else {}
     log.info("model download starts at byte %d of %d", offset, file.size)
     try:
