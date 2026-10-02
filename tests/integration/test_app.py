@@ -1,6 +1,6 @@
 """The app as the owner starts it, `python -m jiffin`, with the real engine on the GPU, the real
 context capture and the real screen (#44): a reminder written with Win+Shift+N alerts once a
-window it is about has stayed in front for 20 s, and Fatto on the alert completes it.
+window it is about has stayed in front for 5 s, and Fatto on the alert completes it.
 
 It runs only on the owner's machine, with `uv run pytest -m integration
 tests/integration/test_app.py`, and skips without the model in the `NO_GIT` folder beside the
@@ -37,7 +37,7 @@ CONDITION, ACTION = "quando scrivo la lista della spesa", "comprare il latte"
 """The real judge gives this reminder d = 3.1 in a window with that title (measured for #44)."""
 TARGET = [sys.executable, str(Path(__file__).with_name("target_window.py")), TITLE]
 WAIT_S = 90.0
-"""The longest any step may take; the alert alone comes 20 s after the window is in front."""
+"""The longest any step may take: the engine's start is the slowest."""
 
 
 class _MouseInput(ctypes.Structure):

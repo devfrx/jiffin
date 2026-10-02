@@ -103,7 +103,7 @@ Why these choices:
 
 **Negative (accepted)**
 
-- One worker serializes everything; with a 20 s debounce this costs nothing
+- One worker serializes everything; with the debounce this costs nothing
   measurable.
 - Signals and slots add boilerplate between the worker and the interface.
 

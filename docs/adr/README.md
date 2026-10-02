@@ -17,7 +17,7 @@ record links the tickets it comes from.
 | [0004](0004-context-identity.md) | Define a context as app, window title and tab address | Accepted; amended by [0018](0018-keep-exe-in-the-app-name.md) |
 | [0005](0005-browser-address-ui-automation.md) | Read the browser address with UI Automation | Accepted |
 | [0006](0006-judge-rizzo-flow-q4.md) | Judge conditions with Rizzo Flow 4B in Q4_K_M | Accepted |
-| [0007](0007-single-stage-pipeline.md) | Judge every active reminder in one stage, without retrieval | Accepted |
+| [0007](0007-single-stage-pipeline.md) | Judge every active reminder in one stage, without retrieval | Accepted; amended by [0019](0019-five-second-debounce.md) |
 | [0008](0008-rewrite-conditions-english-statements.md) | Rewrite conditions as English statements with the judge model | Accepted |
 | [0009](0009-qt-quick-pyside6-interface.md) | Build the interface with Qt Quick and PySide6 | Accepted |
 | [0010](0010-windows-11-look-own-components.md) | Follow the Windows 11 look with our own QML components | Accepted |
@@ -29,3 +29,4 @@ record links the tickets it comes from.
 | [0016](0016-quality-tooling.md) | Enforce quality with Ruff, mypy, pytest and import-linter, in pre-commit and Windows CI | Accepted |
 | [0017](0017-evaluation-harness-subpackage.md) | Ship the evaluation harness as a subpackage, outside the app bundle | Accepted |
 | [0018](0018-keep-exe-in-the-app-name.md) | Keep `.exe` in the app name the judge sees | Accepted |
+| [0019](0019-five-second-debounce.md) | Evaluate a context after 5 s in the foreground | Accepted |

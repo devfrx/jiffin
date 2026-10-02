@@ -88,7 +88,7 @@ at stderr, so a stray print from a DLL cannot break the protocol.
   incompatible change; `initialize` fails on a mismatch. App and engine ship
   together, so the version serves the harness and the records.
 - **One request at a time**, in order. No cancellation in the first version:
-  the 20 s debounce makes it unnecessary.
+  the debounce makes it unnecessary.
 - **Errors:** the standard JSON-RPC codes (−32700, −32600, −32601, −32602,
   −32603) and five of ours: −32001 not initialized, −32002 protocol mismatch,
   −32003 model cannot be loaded, −32004 GPU out of memory, −32005 text too long
