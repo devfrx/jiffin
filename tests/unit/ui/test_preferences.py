@@ -113,21 +113,28 @@ def screen(qtbot: QtBot, dwm: list[tuple[object, ...]]) -> Iterator[Screen]:
     screen.preferences.close()
 
 
-def centred(window: QWindow) -> tuple[int, int]:
+def centred(window: QWindow) -> bool:
     area = QGuiApplication.primaryScreen().availableGeometry()
     frame = window.frameGeometry()
-    return (
+    return (frame.x(), frame.y()) == (
         area.x() + (area.width() - frame.width()) // 2,
         area.y() + (area.height() - frame.height()) // 2,
     )
 
 
+def stays_centred(qtbot: QtBot, window: QWindow) -> None:
+    """The window grows as soon as its layout runs, and moves when Windows says it grew: Qt
+    emits heightChanged from its window-system queue, after `height()` already reads the new
+    height."""
+    qtbot.waitUntil(lambda: centred(window))
+
+
 def test_impostazioni_opens_the_window_centred_with_the_focus_on_the_material_in_use(
-    screen: Screen,
+    screen: Screen, qtbot: QtBot
 ) -> None:
     screen.open()
     window = screen.window
-    assert (window.frameGeometry().x(), window.frameGeometry().y()) == centred(window)
+    stays_centred(qtbot, window)
     assert window.title() == "Impostazioni"
     assert screen.shows("Impostazioni")
     assert [accessible(choice, "name") for choice in screen.choices()] == NAMES
@@ -218,13 +225,19 @@ def test_opening_again_puts_the_focus_back_on_the_material_in_use(screen: Screen
     assert screen.focused() == "Acrilico dei menu"
 
 
-def test_without_transparency_the_window_says_why_every_surface_is_solid(screen: Screen) -> None:
+def test_without_transparency_the_window_says_why_every_surface_is_solid_and_stays_centred(
+    screen: Screen, qtbot: QtBot
+) -> None:
     note = "Gli effetti di trasparenza di Windows sono spenti: le finestre sono piene."
     screen.open()
+    stays_centred(qtbot, screen.window)
     assert not screen.shows(note)
+    height = screen.window.frameGeometry().height()
     screen.windows.settings = replace(DARK, transparency=False)
     screen.look.refresh()
     assert screen.shows(note)
+    qtbot.waitUntil(lambda: screen.window.frameGeometry().height() > height)
+    stays_centred(qtbot, screen.window)
 
 
 def test_the_settings_go_with_the_engine_and_no_binding_reads_them_gone(

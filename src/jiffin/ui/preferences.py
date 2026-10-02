@@ -51,22 +51,16 @@ class Preferences(QObject):  # type: ignore[operator]  # QmlUncreatable's stub h
         if not isinstance(window, QQuickWindow):
             raise TypeError(f"no settings window: {self._component.errorString()}")
         self._window = window
+        # A line that wraps once the layout gives it its width, or the note on solid surfaces,
+        # makes the window taller after it is placed: it stays centred.
+        window.heightChanged.connect(self._centre)
         glass.add(int(window.winId()))
 
     def open(self) -> None:
         """Centred on the screen, with the focus; an open window comes to the front."""
         window = self._window
         if not window.isVisible():
-            area = QGuiApplication.primaryScreen().availableGeometry()
-            frame = window.frameMargins()
-            width = window.width() + frame.left() + frame.right()
-            height = window.height() + frame.top() + frame.bottom()
-            window.setFramePosition(
-                QPoint(
-                    area.x() + (area.width() - width) // 2,
-                    area.y() + (area.height() - height) // 2,
-                )
-            )
+            self._centre()
             self.opened.emit()
         window.show()
         self._glass.shown(int(window.winId()))
@@ -94,3 +88,13 @@ class Preferences(QObject):  # type: ignore[operator]  # QmlUncreatable's stub h
     @Slot()
     def close(self) -> None:
         self._window.hide()
+
+    def _centre(self) -> None:
+        window = self._window
+        area = QGuiApplication.primaryScreen().availableGeometry()
+        frame = window.frameMargins()
+        width = window.width() + frame.left() + frame.right()
+        height = window.height() + frame.top() + frame.bottom()
+        window.setFramePosition(
+            QPoint(area.x() + (area.width() - width) // 2, area.y() + (area.height() - height) // 2)
+        )
