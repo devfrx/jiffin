@@ -72,9 +72,23 @@ Facts checked on 2026-09-30:
   first run.
 - Unsigned binaries: SmartScreen warnings; the antivirus risk is lower, not
   gone.
-- llama.cpp's DLLs use the system `msvcp140.dll`, and an old one has a known
-  crash. The same llama.cpp build already runs on the owner's machine, where
-  all the measurements were taken.
+- In a checkout, llama.cpp's DLLs use the system `msvcp140.dll`, and an old
+  one has a known crash. The packaged engine loads the one PyInstaller ships
+  beside its libraries instead, 14.51 in 0.1.0 (checked on the running
+  process, [#45](https://github.com/devfrx/jiffin/issues/45)).
+
+**Measured on 0.1.0** ([#45](https://github.com/devfrx/jiffin/issues/45)), on
+the owner's machine:
+
+- `devfrx.Jiffin-win-Setup.exe` is 652 MB; installed, the app takes 855 MB,
+  and Velopack keeps its last full package, 645 MB, for updates.
+- A clean install takes about 20 s; then the model downloads, 2.5 min on the
+  owner's line, and the engine is ready about 10 s later.
+- An update applied at the start through a 1 MB delta took 2 min 19 s until
+  the engine was ready: 71 s to rebuild the full package from the delta, 47 s
+  to apply it. Jiffin shows nothing meanwhile.
+- No SmartScreen warning, since an installer built on the same machine carries
+  no mark of the web; Microsoft Defender reported nothing.
 
 **Out of scope for the first version** — distribution to others: code
 signing, a Vulkan build for non-NVIDIA GPUs, a mirror of the model, and the
@@ -83,6 +97,7 @@ VC++ Redistributable in the installer.
 **Follow-up**
 
 - The first packaged build checks that the engine starts from the bundle and
-  answers `initialize`.
+  answers `initialize`: done in [#45](https://github.com/devfrx/jiffin/issues/45),
+  and `tests/integration/test_client.py` checks it on the installed app.
 - The update source is chosen with the packaging work: the releases' folder,
   above ([#45](https://github.com/devfrx/jiffin/issues/45)).
