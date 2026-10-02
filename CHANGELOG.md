@@ -19,9 +19,10 @@ The first installable version, for the owner's Windows 11 machine.
   address, read through UI Automation.
 - A local judge, Rizzo Flow 4B on llama.cpp with CUDA, in a process of its own:
   it rewrites each condition as a statement and scores it against the context.
-- Alerts in an overlay when a condition holds, with Fatto, Rimanda, and Utile
-  or Non qui as feedback; a tray icon with the list of reminders and alerts;
-  settings for the windows' material.
+- Alerts in an overlay when a condition holds, about 5 s after the window comes
+  to the front, with Fatto, Rimanda, and Utile or Non qui as feedback; a tray
+  icon with the list of reminders and alerts; settings for the windows'
+  material.
 - The model downloaded and verified at the first start, shown in a first-run
   window; local storage in SQLite under `%LOCALAPPDATA%\Jiffin`.
 - An evaluation harness that measures the app against its acceptance
