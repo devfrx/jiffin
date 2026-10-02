@@ -64,8 +64,10 @@ styles, the desktop and the shell's windows as Chromium and WebRTC do, and
 checks again when the window in front moves or resizes (F11 changes the
 rectangle, not the window). `SHQueryUserNotificationState` is not used.
 
-**The pause** is away too, for `core`, until it ends: an hour later, or
-08:00 of the next day, as Rimanda's "Domani" ([#83](https://github.com/devfrx/jiffin/issues/83)).
+**The pause** is away too, for `core`, until it ends: an hour later, or at
+the same 08:00 as Rimanda's "Domani", the next Jiffin day's
+([#83](https://github.com/devfrx/jiffin/issues/83)): paused at 01:00, before
+the day turns at 04:00, it ends at 08:00 of that same morning.
 While paused, the tray menu has "Riprendi", and the tray list says so at the
 top ("In pausa fino alle 15:30"). The pause is saved with the settings and
 survives a restart of the app. How the tray icon shows it is chosen on live
