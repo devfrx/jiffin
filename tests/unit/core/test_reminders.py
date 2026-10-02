@@ -322,6 +322,40 @@ def test_an_engine_failure_is_an_error_and_not_a_silence() -> None:
     assert scene.view.visible == ()
 
 
+def test_once_the_engine_is_back_the_stable_context_is_judged_again() -> None:
+    scene = Scene()
+    reminder = scene.create("quando apro Figma")
+    scene.model.says(FIGMA, "quando apro Figma")
+    scene.model.down = True
+    scene.stay(FIGMA)
+    scene.model.down = False
+    scene.reminders.model_ready()
+    assert [evaluation.failed for evaluation in scene.saved(Evaluation)] == [True, False]
+    assert scene.outcomes() == [Outcome.ALERT]
+    assert scene.alert().reminder_id == reminder.id
+
+
+def test_once_the_engine_is_back_the_statements_it_missed_are_written() -> None:
+    scene = Scene()
+    scene.model.down = True
+    scene.create("quando apro Figma")
+    scene.model.down = False
+    scene.reminders.model_ready()
+    assert scene.saved(Reminder)[-1].revision.statement == english("quando apro Figma")
+    assert scene.saved(Evaluation) == []
+
+
+def test_once_the_engine_is_back_what_it_judged_comes_from_the_cache() -> None:
+    scene = Scene()
+    scene.create("quando apro Figma")
+    scene.model.says(FIGMA, "quando apro Figma")
+    scene.stay(FIGMA)
+    scene.reminders.model_ready()
+    assert len(scene.model.calls) == 1
+    assert scene.outcomes() == [Outcome.HELD_BACK]
+    assert len(scene.saved(Alert)) == 1
+
+
 def test_a_model_that_leaves_a_statement_out_fails() -> None:
     class Forgetful(FakeModel):
         def judge(self, context: Context, statements: Mapping[int, str]) -> dict[int, float]:

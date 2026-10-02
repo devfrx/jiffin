@@ -26,6 +26,7 @@ from jiffin.harness import (
 )
 from jiffin.harness import day as days
 from jiffin.harness.errors import HarnessError
+from jiffin.store.folders import Folders
 
 log = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ def parser() -> argparse.ArgumentParser:
     engine_options.add_argument(
         "--models",
         type=Path,
-        default=folders.app_folder() / "models",
+        default=Folders.app().models,
         help="the folder with the model file (default: the app's, %(default)s)",
     )
 
@@ -102,7 +103,7 @@ def parser() -> argparse.ArgumentParser:
     copy.add_argument(
         "--database",
         type=Path,
-        default=folders.app_folder() / "jiffin.db",
+        default=Folders.app().database,
         help="(default: the app's, %(default)s)",
     )
     copy.set_defaults(command=_snapshot)

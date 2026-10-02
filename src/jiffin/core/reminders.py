@@ -139,6 +139,17 @@ class Reminders:
         self._catch_up(self._clock.now())
         self._publish()
 
+    def model_ready(self) -> None:
+        """The model answers again, after a start or a restart (ADR-0011): the statements it
+        missed are written, and the stable context, if any, is judged again. The cache spares
+        what was judged already, and the once-an-hour rule a second alert."""
+        stable = self._debounce.stable
+        if stable is None:
+            self._write_missing_statements()
+        else:
+            self._evaluate(stable.context, stable.context_since, None)
+        self._publish()
+
     # Commands from the interface. The interface does not wait for them, so a command about a
     # reminder or an alert that is gone meanwhile does nothing.
 

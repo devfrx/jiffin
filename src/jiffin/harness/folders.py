@@ -5,7 +5,6 @@ The harness runs from a checkout, never from the packaged app: the private worki
 the data folder there.
 """
 
-import os
 from pathlib import Path
 
 from jiffin.harness.errors import HarnessError
@@ -16,11 +15,6 @@ DATA = NO_GIT / "jiffin-prove"
 """The default data folder; `--data` changes it."""
 SAMPLE = NO_GIT / "sibyl-campione" / "etichette.json"
 """The labelled sample of the prototype: 106 contexts, 9 reminders (ADR-0007)."""
-
-
-def app_folder() -> Path:
-    """The app's own data: its database and the models folder (ADR-0013)."""
-    return Path(os.environ["LOCALAPPDATA"]) / "Jiffin"
 
 
 def data_folder(path: Path) -> Path:

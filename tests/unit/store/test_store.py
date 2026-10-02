@@ -147,6 +147,21 @@ def test_retention_keeps_30_days(store: Store, path: Path) -> None:
     assert count(path, "engine_build") == 1
 
 
+def test_an_alert_answered_after_the_cleanup_took_it_comes_back_without_its_evaluation(
+    store: Store, path: Path
+) -> None:
+    # A running app keeps an unseen alert in memory while the daily cleanup deletes its row.
+    figma = reminder(1)
+    expired = evaluation(1, NOW - RETENTION_MS - 1, FIGMA, figma)
+    unseen = replace(alert(1, figma, expired), shown_at=expired.at, vanished_at=expired.at)
+    store.save([figma, expired, unseen])
+    store.cleanup(NOW)
+    assert count(path, "alert") == 0
+    store.save([replace(figma, completed_at=NOW), replace(unseen, answer=Answer.DONE)])
+    assert count(path, "alert", "answer = 'fatto' AND evaluation IS NULL") == 1
+    assert count(path, "reminder", "completed_at IS NOT NULL") == 1
+
+
 def test_contexts_nothing_uses_are_deleted(store: Store, path: Path) -> None:
     kept = reminder(1)
     store.save([kept, evaluation(1, NOW - RETENTION_MS - 1, FIGMA, kept), Silence(1, BANK)])
@@ -191,6 +206,16 @@ def test_settings_keep_json(store: Store) -> None:
     assert store.setting("material") is None
     store.set_setting("material", {"alert": "B", "tray": "A"})
     assert store.setting("material") == {"alert": "B", "tray": "A"}
+
+
+def test_closing_empties_the_write_ahead_log_while_the_harness_reads(path: Path) -> None:
+    store = Store.open(path)
+    store.save([reminder(1)])
+    with closing(sqlite3.connect(path)) as reader:
+        assert reader.execute("SELECT count(*) FROM reminder").fetchall() == [(1,)]
+        store.close()
+        assert path.with_name(f"{path.name}-wal").stat().st_size == 0
+        assert reader.execute("SELECT count(*) FROM reminder").fetchall() == [(1,)]
 
 
 def test_logs_hold_ids_and_numbers_only(store: Store, caplog: pytest.LogCaptureFixture) -> None:
