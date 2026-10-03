@@ -49,10 +49,11 @@ stateDiagram-v2
   corner of the work area, as Windows' flyouts, and like them without a
   taskbar button. It is as tall as what it shows, up to the work area, and
   then it scrolls; when it grows or shrinks, it keeps its bottom.
-- It drags from any point no control takes ([ADR-0023](../adr/0023-window-frame.md)). While it shows
-  it stays where it was left, and keeps its top left corner as it grows; it
-  always opens again over the tray. The mouse does not scroll it by dragging,
-  as in Windows' own lists: the wheel and the bar do.
+- It drags from any point no control takes
+  ([ADR-0023](../adr/0023-window-frame.md)). While it shows it stays where it
+  was left, and keeps its top left corner as it grows; it always opens again
+  over the tray. The mouse does not scroll it by dragging, as in Windows' own
+  lists: the wheel and the bar do.
 - It takes the focus. Tab moves from button to button and scrolls the list to
   the one it reaches. Esc, the X, or a click anywhere else, closes it; so does
   a click on the icon, which first takes the focus away from the list: a click

@@ -79,10 +79,10 @@ stateDiagram-v2
   drag it onto the taskbar. Inizia closes it.
 - It is a card like the creation window, with the focus, without Windows'
   title bar or a taskbar button, and with the X on its title's line
-  ([ADR-0023](../adr/0023-window-frame.md)). It drags from any point no control takes, and
-  opens at the centre or where the user left it, also after a restart: a
-  centred window stays centred as steps and lines come and go, a moved one
-  keeps its top left corner.
+  ([ADR-0023](../adr/0023-window-frame.md)). It drags from any point no
+  control takes, and opens at the centre or where the user left it, also
+  after a restart: a centred window stays centred as steps and lines come and
+  go, a moved one keeps its top left corner.
 
 ## In the tray list
 

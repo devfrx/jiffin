@@ -12,8 +12,9 @@ from [#43](https://github.com/devfrx/jiffin/issues/43); the
 ## The window
 
 - **Impostazioni** in the tray icon's menu opens it, at the centre of the
-  primary screen or where the user left it ([ADR-0023](../adr/0023-window-frame.md)), with the focus
-  on the material in use; an open one comes to the front where it is.
+  primary screen or where the user left it
+  ([ADR-0023](../adr/0023-window-frame.md)), with the focus on the material in
+  use; an open one comes to the front where it is.
 - The four materials are radio buttons, each with its name and what it looks
   like; B, Acrilico dei menu, is the default. The owner chose the plain list on
   screen, over the radios in a card, as Windows' Settings, and over four tiles.
@@ -41,10 +42,11 @@ each new choice goes to `keep_material`, of the `Upkeep` the app gives
 next start, before any window shows
 ([#44](https://github.com/devfrx/jiffin/issues/44)).
 
-The windows' places go the same way ([ADR-0023](../adr/0023-window-frame.md)). `ui/places.py` follows
-the creation window, the settings and the first-run window: a place the user
-moved one to is kept half a second after the window stops moving, once a drag
-ends, and all of them go to `keep_places`. The app keeps them as one `places`
+The windows' places go the same way
+([ADR-0023](../adr/0023-window-frame.md)). `ui/places.py` follows the creation
+window, the settings and the first-run window: a place the user moved one to is
+kept half a second after the window stops moving, once a drag ends, and all of
+them go to `keep_places`. The app keeps them as one `places`
 setting, `{"creation": [x, y], ...}`, and gives them to `Interface.places` at
 the next start; an entry of another shape is left out, and that window opens at
 the centre.
