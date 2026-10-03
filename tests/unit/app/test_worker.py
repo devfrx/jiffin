@@ -21,9 +21,9 @@ from jiffin.core.clock import Clock, SimulatedClock, SystemClock
 from jiffin.core.context import Context, Observation
 from jiffin.core.debounce import DEBOUNCE_MS
 from jiffin.core.records import Evaluation, Record, Snooze
-from jiffin.core.reminders import Reminders, RemindersView
+from jiffin.core.reminders import RETURN_PAUSE_MS, Reminders, RemindersView
 from jiffin.store.migrate import StoreError
-from jiffin.store.store import RETENTION_MS, Store
+from jiffin.store.store import RETENTION_MS, Json, Store
 
 FAKE_ENGINE = [sys.executable, str(Path(__file__).parents[1] / "client" / "fake_engine.py")]
 START = 1_790_000_000_000  # 2026-09-21, in UTC milliseconds
@@ -50,10 +50,18 @@ class Contexts:
         self.closed = True
 
 
+class RefusedContexts(Contexts):
+    def start(self) -> None:
+        raise OSError("SetWinEventHook refused the event 0x0003")
+
+
 class Scene:
     """A worker on a database in a temporary folder, with what it said."""
 
-    def __init__(self, folder: Path, clock: Clock, model: str) -> None:
+    def __init__(
+        self, folder: Path, clock: Clock, model: str, contexts: type[Contexts] = Contexts
+    ) -> None:
+        self._kind = contexts
         self.clock = clock
         self.database = folder / "jiffin.db"
         self.alerts: list[AlertsView] = []
@@ -73,7 +81,7 @@ class Scene:
         self.core = QueuedCore(self.worker)
 
     def _contexts(self, observe: Callable[[Observation], None]) -> Contexts:
-        self.contexts = Contexts(observe)
+        self.contexts = self._kind(observe)
         return self.contexts
 
     def enter(self, context: Context | None) -> None:
@@ -110,6 +118,12 @@ class Scene:
         with closing(sqlite3.connect(self.database)) as db:
             return cast(str | None, db.execute("SELECT statement FROM revision").fetchone()[0])
 
+    def return_pause(self) -> int:
+        """The return pause `core` holds now, in milliseconds."""
+        seen: Future[int] = Future()
+        self.worker.command(lambda core: seen.set_result(core.return_pause))
+        return seen.result(WAIT_S)
+
 
 type MakeScene = Callable[..., Scene]
 
@@ -118,8 +132,10 @@ type MakeScene = Callable[..., Scene]
 def make_scene(tmp_path: Path) -> Iterator[MakeScene]:
     scenes: list[Scene] = []
 
-    def make(clock: Clock | None = None, model: str = "model.gguf") -> Scene:
-        scenes.append(Scene(tmp_path, clock or SimulatedClock(START), model))
+    def make(
+        clock: Clock | None = None, model: str = "model.gguf", contexts: type[Contexts] = Contexts
+    ) -> Scene:
+        scenes.append(Scene(tmp_path, clock or SimulatedClock(START), model, contexts))
         return scenes[-1]
 
     yield make
@@ -154,12 +170,38 @@ def test_what_the_database_holds_shows_at_the_start(make_scene: MakeScene) -> No
     assert active.reminder.revision.condition == "quando apro Figma"
 
 
-def test_the_engine_starts_once_the_model_file_is_checked_then_the_capture(scene: Scene) -> None:
+def test_the_capture_starts_with_the_worker_and_the_engine_once_the_model_file_is_checked(
+    scene: Scene,
+) -> None:
     scene.settle()
-    assert (scene.statuses, scene.contexts.started) == ([], False)
+    assert (scene.statuses, scene.contexts.started) == ([], True)
     scene.worker.model_ready()
     scene.settle()
-    assert (scene.statuses, scene.contexts.started) == ([STARTING, READY], True)
+    assert scene.statuses == [STARTING, READY]
+
+
+def test_a_reminder_with_only_a_time_rings_before_the_engine_starts(scene: Scene) -> None:
+    """While the model downloads, say (ADR-0021)."""
+    scene.core.create("oggi", "pagare la bolletta")
+    scene.enter(FIGMA)
+    scene.advance(DEBOUNCE_MS)
+    scene.enter(None)
+    scene.settle()
+    [alert] = scene.alerts[-1].visible
+    assert (alert.revision.condition, scene.statuses) == ("oggi", [])
+
+
+def test_a_capture_that_cannot_start_is_logged_and_the_worker_goes_on(
+    make_scene: MakeScene, caplog: pytest.LogCaptureFixture
+) -> None:
+    scene = make_scene(contexts=RefusedContexts)
+    scene.worker.start()
+    scene.core.create("quando apro Figma", "esportare le icone")
+    scene.settle()
+    assert "the context capture cannot start" in caplog.text
+    assert [active.reminder.revision.condition for active in scene.lists[-1].active] == [
+        "quando apro Figma"
+    ]
 
 
 def test_a_reminder_written_before_the_engine_gets_its_statement_once_it_is_up(
@@ -231,6 +273,36 @@ def test_places_of_another_shape_are_left_out(make_scene: MakeScene) -> None:
     with closing(Store.open(scene.database)) as store:
         store.set_setting("places", [30, 40])
     assert make_scene().worker.start().places == {}
+
+
+def test_the_return_pause_is_read_at_the_start_and_a_new_one_is_in_force_at_once(
+    make_scene: MakeScene,
+) -> None:
+    first = make_scene()
+    first.worker.start()
+    assert first.return_pause() == RETURN_PAUSE_MS
+    first.worker.keep_return_pause(30)
+    assert first.return_pause() == 30_000
+    first.worker.close()
+    second = make_scene()
+    second.worker.start()
+    assert second.return_pause() == 30_000
+
+
+@pytest.mark.parametrize(
+    ("kept", "return_pause"),
+    [(10, 10_000), (7200, 7_200_000), (9, RETURN_PAUSE_MS), (7201, RETURN_PAUSE_MS)]
+    + [(kept, RETURN_PAUSE_MS) for kept in (120.5, "120", True, [120])],
+)
+def test_a_return_pause_out_of_the_range_or_of_another_shape_is_the_default(
+    make_scene: MakeScene, kept: Json, return_pause: int
+) -> None:
+    """From a later version, after a downgrade."""
+    scene = make_scene()
+    with closing(Store.open(scene.database)) as store:
+        store.set_setting("return_pause", kept)
+    scene.worker.start()
+    assert scene.return_pause() == return_pause
 
 
 def test_a_database_from_a_later_version_is_refused(make_scene: MakeScene) -> None:

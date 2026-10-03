@@ -7,6 +7,7 @@ clock is simulated.
 """
 
 import hashlib
+import sqlite3
 import sys
 from collections.abc import Callable, Iterator
 from contextlib import closing
@@ -107,6 +108,12 @@ class Desk:
         assert isinstance(window, QQuickWindow)
         return window
 
+    def statement_written(self) -> bool:
+        """Whether the reminder has its statement, read through a second connection."""
+        with closing(sqlite3.connect(self.folders.database)) as db:
+            row = db.execute("SELECT statement FROM revision").fetchone()
+        return row is not None and row[0] is not None
+
     def log(self) -> Log:
         """What the database keeps, once the app has closed."""
         store = Store.open(self.folders.database)
@@ -141,13 +148,14 @@ def desk(
 
 def test_a_reminder_alerts_in_its_context_and_its_answer_is_kept(qtbot: QtBot, desk: Desk) -> None:
     desk.jiffin.start()
-    # The model file is checked, the engine starts, then the context capture.
-    qtbot.waitUntil(lambda: desk.contexts.started)
     creation = desk.jiffin.interface.creation
     creation.new()
     creation.setCondition("quando apro Figma")
     creation.setAction("esportare le icone")
     creation.save()
+    # The capture starts with the worker; the engine once the model file is checked, and it
+    # writes the statement. A context judged before then would only fail.
+    qtbot.waitUntil(desk.statement_written)
     desk.contexts.enter(FIGMA)
     desk.clock.advance(DEBOUNCE_MS)
     desk.contexts.enter(None)

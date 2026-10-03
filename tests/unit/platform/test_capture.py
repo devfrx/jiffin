@@ -19,7 +19,9 @@ from jiffin.platform.capture import (
 )
 
 START = 1_790_000_000_000  # 2026-09-21, in UTC milliseconds
-NOTEPAD, VIVALDI, POPUP, JIFFIN, SYSTEM = 1, 2, 3, 4, 5
+NOTEPAD, VIVALDI, POPUP, JIFFIN, SYSTEM, GAME = 1, 2, 3, 4, 5, 6
+NOTES = Context("notepad.exe", "appunti.txt - Blocco note", None)
+INVOICES = Context("vivaldi.exe", "Fatture", "fatture.example.it/elenco")
 
 
 @dataclass
@@ -27,6 +29,7 @@ class Window:
     pid: int
     program: str | None
     title: str
+    full_screen: bool = False
 
 
 @dataclass
@@ -34,6 +37,18 @@ class FakeHook:
     event: int
     handler: Callable[[int, int | None, int, int], None]
     process: int
+    last: int | None
+    closed: bool = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+@dataclass
+class FakeNotices:
+    handler: Callable[[win32.Notice], None]
+    thread: str
+    """Where it was made."""
     closed: bool = False
 
     def close(self) -> None:
@@ -62,6 +77,7 @@ class Scene:
             POPUP: Window(20, "vivaldi.exe", "Salva con nome"),
             JIFFIN: Window(os.getpid(), "python.exe", "Jiffin"),
             SYSTEM: Window(30, None, "Protected"),
+            GAME: Window(40, "Game.exe", "Game", full_screen=True),
         }
         self.front: int | None = NOTEPAD
         self.hooks: list[FakeHook] = []
@@ -77,6 +93,7 @@ class Scene:
         monkeypatch.setattr(win32, "process_id", lambda hwnd: self.windows[hwnd].pid)
         monkeypatch.setattr(win32, "program", lambda hwnd: self.windows[hwnd].program)
         monkeypatch.setattr(win32, "title", lambda hwnd: self.windows[hwnd].title)
+        monkeypatch.setattr(win32, "full_screen", lambda hwnd: self.windows[hwnd].full_screen)
         monkeypatch.setattr(win32, "Hook", self._hook)
         self.foreground = Foreground(
             self.clock,
@@ -90,12 +107,14 @@ class Scene:
         return [observation.context for observation in self.observations]
 
     @property
-    def titles(self) -> list[FakeHook]:
-        """The hooks on title changes still open."""
+    def changes(self) -> list[FakeHook]:
+        """The hooks on changes of title, place and size still open."""
         return [
             hook
             for hook in self.hooks
-            if hook.event == win32.EVENT_OBJECT_NAMECHANGE and not hook.closed
+            if (hook.event, hook.last)
+            == (win32.EVENT_OBJECT_LOCATIONCHANGE, win32.EVENT_OBJECT_NAMECHANGE)
+            and not hook.closed
         ]
 
     def switch(self, window: int | None) -> None:
@@ -110,10 +129,21 @@ class Scene:
             win32.EVENT_OBJECT_NAMECHANGE, window, win32.OBJID_WINDOW, win32.CHILDID_SELF
         )
 
+    def resize(self, window: int, full_screen: bool) -> None:
+        """Move or resize a window, into full screen or not, as Windows would report it."""
+        self.windows[window].full_screen = full_screen
+        self.foreground.on_event(
+            win32.EVENT_OBJECT_LOCATIONCHANGE, window, win32.OBJID_WINDOW, win32.CHILDID_SELF
+        )
+
     def _hook(
-        self, event: int, handler: Callable[[int, int | None, int, int], None], process: int = 0
+        self,
+        event: int,
+        handler: Callable[[int, int | None, int, int], None],
+        process: int = 0,
+        last: int | None = None,
     ) -> FakeHook:
-        hook = FakeHook(event, handler, process)
+        hook = FakeHook(event, handler, process, last)
         self.hooks.append(hook)
         return hook
 
@@ -125,9 +155,7 @@ def scene(monkeypatch: pytest.MonkeyPatch) -> Scene:
 
 def test_an_app_is_observed_with_its_normalized_title_and_the_time(scene: Scene) -> None:
     scene.foreground.refresh()
-    assert scene.observations == [
-        Observation(START, Context("notepad.exe", "appunti.txt - Blocco note", None))
-    ]
+    assert scene.observations == [Observation(START, NOTES)]
 
 
 def test_only_a_change_of_context_is_sent(scene: Scene) -> None:
@@ -178,17 +206,17 @@ def test_nothing_in_front_jiffin_and_unknown_programs_are_not_contexts(scene: Sc
     ]
 
 
-def test_titles_are_followed_in_the_process_in_front_only(scene: Scene) -> None:
+def test_changes_are_followed_in_the_process_in_front_only(scene: Scene) -> None:
     scene.foreground.refresh()
-    assert [hook.process for hook in scene.titles] == [10]
+    assert [hook.process for hook in scene.changes] == [10]
     scene.switch(VIVALDI)
-    assert [hook.process for hook in scene.titles] == [20]
+    assert [hook.process for hook in scene.changes] == [20]
     scene.switch(POPUP)  # the same process: the same hook
     assert len(scene.hooks) == 2
     scene.switch(JIFFIN)
-    assert scene.titles == []
+    assert scene.changes == []
     scene.switch(None)
-    assert scene.titles == []
+    assert scene.changes == []
     scene.foreground.close()
     assert all(hook.closed for hook in scene.hooks)
 
@@ -202,6 +230,90 @@ def test_a_title_change_elsewhere_is_ignored(scene: Scene) -> None:
     scene.foreground.on_event(win32.EVENT_OBJECT_NAMECHANGE, VIVALDI, win32.OBJID_WINDOW, 7)
     assert len(scene.observations) == 1
     assert scene.bars.reads == [VIVALDI]
+
+
+def test_a_window_in_full_screen_is_not_a_context_until_it_leaves_it(scene: Scene) -> None:
+    scene.switch(VIVALDI)
+    scene.clock.advance(1_000)
+    scene.resize(VIVALDI, full_screen=True)  # F11, or a video
+    scene.clock.advance(1_000)
+    scene.resize(VIVALDI, full_screen=False)
+    assert scene.observations == [
+        Observation(START, INVOICES),
+        Observation(START + 1_000, None),
+        Observation(START + 2_000, INVOICES),
+    ]
+
+
+def test_a_window_that_comes_in_front_in_full_screen_is_not_a_context(scene: Scene) -> None:
+    scene.foreground.refresh()
+    scene.switch(GAME)
+    scene.switch(NOTEPAD)
+    assert scene.contexts == [NOTES, None, NOTES]
+
+
+def test_a_move_that_keeps_the_window_out_of_full_screen_reads_nothing(scene: Scene) -> None:
+    scene.switch(VIVALDI)
+    for _ in range(3):
+        scene.resize(VIVALDI, full_screen=False)  # dragged around
+    assert scene.contexts == [INVOICES]
+    assert scene.bars.reads == [VIVALDI]
+
+
+def test_a_move_elsewhere_is_ignored(scene: Scene) -> None:
+    scene.switch(VIVALDI)
+    scene.windows[POPUP].full_screen = True
+    scene.foreground.on_event(win32.EVENT_OBJECT_LOCATIONCHANGE, POPUP, win32.OBJID_WINDOW, 0)
+    scene.windows[VIVALDI].full_screen = True
+    scene.foreground.on_event(win32.EVENT_OBJECT_LOCATIONCHANGE, VIVALDI, -8, 0)  # OBJID_CARET
+    assert scene.contexts == [INVOICES]
+
+
+def test_nothing_is_in_front_from_a_lock_to_the_unlock(scene: Scene) -> None:
+    scene.foreground.refresh()
+    scene.clock.advance(1_000)
+    scene.foreground.on_notice(win32.Notice.LOCKED)
+    scene.switch(VIVALDI)  # as the lock screen comes in front, a context any other time
+    scene.clock.advance(1_000)
+    scene.front = NOTEPAD
+    scene.foreground.on_notice(win32.Notice.UNLOCKED)
+    assert scene.observations == [
+        Observation(START, NOTES),
+        Observation(START + 1_000, None),
+        Observation(START + 2_000, NOTES),
+    ]
+
+
+def test_nothing_is_in_front_from_sleep_to_both_the_wake_and_the_unlock(scene: Scene) -> None:
+    scene.foreground.refresh()
+    for notice in (win32.Notice.SLEEPING, win32.Notice.LOCKED, win32.Notice.AWAKE):
+        scene.clock.advance(1_000)
+        scene.foreground.on_notice(notice)
+    assert scene.contexts == [NOTES, None]
+    scene.clock.advance(1_000)
+    scene.foreground.on_notice(win32.Notice.UNLOCKED)
+    assert scene.observations[-1] == Observation(START + 4_000, NOTES)
+
+
+def test_a_pc_that_does_not_lock_is_back_when_it_wakes(scene: Scene) -> None:
+    scene.foreground.refresh()
+    scene.foreground.on_notice(win32.Notice.SLEEPING)
+    scene.clock.advance(60_000)
+    scene.foreground.on_notice(win32.Notice.AWAKE)
+    assert scene.observations == [
+        Observation(START, NOTES),
+        Observation(START, None),
+        Observation(START + 60_000, NOTES),
+    ]
+
+
+def test_a_failure_while_reading_after_a_notice_is_logged(
+    scene: Scene, caplog: pytest.LogCaptureFixture
+) -> None:
+    del scene.windows[NOTEPAD]  # it closed before it could be read
+    with caplog.at_level(logging.ERROR):
+        scene.foreground.on_notice(win32.Notice.UNLOCKED)
+    assert "the foreground could not be read" in caplog.text
 
 
 def test_a_failure_while_reading_is_logged_and_the_hook_goes_on(
@@ -271,6 +383,24 @@ def test_the_capture_thread_observes_at_once_and_closes() -> None:
     finally:
         capture.close()
     assert not any(thread.name == "context" for thread in threading.enumerate())
+
+
+def test_the_capture_thread_takes_windows_notices_and_ends_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    made: list[FakeNotices] = []
+
+    def make(handler: Callable[[win32.Notice], None]) -> FakeNotices:
+        made.append(FakeNotices(handler, threading.current_thread().name))
+        return made[-1]
+
+    monkeypatch.setattr(win32, "Notices", make)
+    capture = Capture(SystemClock(), lambda observation: None, lambda apps: None)
+    capture.start()
+    capture.close()
+    [notices] = made
+    assert (notices.thread, notices.closed) == ("context", True)
+    assert getattr(notices.handler, "__func__", None) is Foreground.on_notice
 
 
 def test_a_capture_that_cannot_start_says_why(monkeypatch: pytest.MonkeyPatch) -> None:

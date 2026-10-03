@@ -332,7 +332,6 @@ def target() -> Iterator[Target]:
 def test_python_m_jiffin_runs_the_whole_loop(app: App, target: Target) -> None:
     wait_for("engine", lambda: " ready: llama.cpp " in app.log())
     assert "the shortcut is not registered" not in app.log(), "another app holds Win+Shift+N"
-    time.sleep(1)  # the context capture starts right after the engine
     target.front()
     wait_for("target window in front", lambda: foreground() == target.window)
     press(_VK_LWIN, _VK_SHIFT, ord("N"))

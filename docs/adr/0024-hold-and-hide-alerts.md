@@ -110,3 +110,9 @@ that shows, and its error code goes to the log.
   Quick alert window with its glass, also after hiding and showing it again,
   sharing in Meet in a browser and with the Snipping Tool; full screen
   recognised with a video, F11 and PowerPoint.
+- Full screen measured on the owner's machine
+  ([#99](https://github.com/devfrx/jiffin/issues/99)): a video and F11 in
+  Vivaldi, and a game, cover the monitor without caption and sizing frame,
+  and are seen at once, in and out; maximized windows and the desktop are not
+  ([context capture](../design/context.md)). PowerPoint was not tried: the
+  owner has none to use.
