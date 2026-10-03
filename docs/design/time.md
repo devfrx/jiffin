@@ -36,8 +36,9 @@ flowchart LR
    what they mean ("lunedì" is the next Monday, "il lunedì" every Monday).
 3. **Left over.** Time words outside the matches ("verso sera", "a dicembre",
    "il 15" without its month), or a word beside a match that changes it
-   ("prima di lunedì", "il weekend prossimo"), make the time not understood:
-   it is never guessed.
+   ("prima di lunedì", "il weekend prossimo", an ordinal as in "il secondo
+   lunedì" or "l'ultimo venerdì", also across "e": "prima e dopo cena"), make
+   the time not understood: it is never guessed.
 4. **Agree.** One label of each kind: days, hours, a period, a frequency. Two
    of a kind, or kinds that do not go together (a date and a period, "tra 2
    ore" and anything else), make the time not understood.

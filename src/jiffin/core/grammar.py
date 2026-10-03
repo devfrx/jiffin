@@ -616,18 +616,19 @@ PATTERNS: list[tuple[str, Handler]] = [
         ),
         on_date,
     ),
-    (
-        (
-            rf"\bogni\s+(?:(?P<n>{NUMBER})\s+|(?P<pair>{PAIR}))?"
-            r"(?P<u>giorni|settimane|settimana|mesi|mese|anni|anno)(?!\w)"
-        ),
-        on_every,
-    ),
+    # "una volta ogni due settimane" before "ogni due settimane", or "una volta" would stay.
     (
         (
             rf"\buna\s+volta\s+(?:a(?:l|lla|ll')?\s*"
             rf"|ogni\s+(?:(?P<n>{NUMBER})\s+|(?P<pair>{PAIR}))?)"
             r"(?P<u>giorno|giorni|settimana|settimane|mese|mesi|anno|anni)(?!\w)"
+        ),
+        on_every,
+    ),
+    (
+        (
+            rf"\bogni\s+(?:(?P<n>{NUMBER})\s+|(?P<pair>{PAIR}))?"
+            r"(?P<u>giorni|settimane|settimana|mesi|mese|anni|anno)(?!\w)"
         ),
         on_every,
     ),
@@ -725,18 +726,21 @@ LEFTOVER = re.compile(
 )
 MODIFIERS_BEFORE = {
     "verso", "intorno", "circa", "attorno", "questo", "questa", "quel", "quella", "prossimo",
-    "prossima", "scorso", "scorsa", "ultimo", "ultima", "primo", "prima", "tardo", "tarda",
-    "fine", "inizio", "metà", "da", "dal", "dalla", "fino", "entro", "oltre", "dopo",
+    "prossima", "scorso", "scorsa", "ultimo", "ultima", "primo", "prima", "secondo", "seconda",
+    "terzo", "terza", "quarto", "quarta", "quinto", "quinta", "tardo", "tarda", "fine",
+    "inizio", "metà", "da", "dal", "dalla", "fino", "entro", "oltre", "dopo",
 }  # fmt: skip
+"""Words before a time that change it: "verso sera", "il secondo lunedì", "un quarto alle 9"."""
 MODIFIERS_AFTER = {
     "circa", "prossimo", "prossima", "scorso", "scorsa", "inoltrata", "tardi", "presto",
     "passate", "precise", "esatte",
 }  # fmt: skip
 LINKS = {
     "di", "del", "della", "dello", "dell'", "dei", "degli", "delle", "il", "lo", "la", "l'",
-    "i", "gli", "le", "a", "al", "alla", "all'", "ai", "alle", "in", "nel", "nella",
+    "i", "gli", "le", "a", "al", "alla", "all'", "ai", "alle", "in", "nel", "nella", "e", "ed",
 }  # fmt: skip
-"""Words a modifier reaches across: "prima del 20 ottobre", "dopo il 5 ottobre"."""
+"""Words a modifier reaches across: "prima del 20 ottobre", "dopo il 5 ottobre", "prima e dopo
+cena", "il primo e il terzo lunedì del mese"."""
 WORD_BEFORE = re.compile(r"([\w']+)\s*$")
 WORD_AFTER = re.compile(r"\s*([\w']+)")
 
@@ -921,10 +925,15 @@ def _modifier_before(text: str, start: int) -> int | None:
     found = WORD_BEFORE.search(text, 0, start)
     if found is None:
         return None
-    if found[1] in MODIFIERS_BEFORE:
+    if _modifies(found[1]):
         return found.start(1)
     if found[1] in LINKS:
         further = WORD_BEFORE.search(text, 0, found.start(1))
-        if further is not None and further[1] in MODIFIERS_BEFORE:
+        if further is not None and _modifies(further[1]):
             return further.start(1)
     return None
+
+
+def _modifies(word: str) -> bool:
+    """Whether a word before a time changes it, also behind an elided article: "l'ultimo"."""
+    return word.rpartition("'")[2] in MODIFIERS_BEFORE
