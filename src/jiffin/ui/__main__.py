@@ -24,8 +24,8 @@ from PySide6.QtGui import QGuiApplication
 from jiffin.core.alerts import AlertsView
 from jiffin.core.clock import SystemClock
 from jiffin.core.context import Context
-from jiffin.core.records import Alert, Reminder, Revision
-from jiffin.core.reminders import MINUTE_MS, ActiveReminder, RemindersView, Snooze
+from jiffin.core.records import Alert, Reminder, Revision, Snooze
+from jiffin.core.reminders import MINUTE_MS, ActiveReminder, RemindersView
 from jiffin.ui.first_run import FirstRun, ModelFile, ModelState
 from jiffin.ui.interface import Interface
 from jiffin.ui.look import Material
@@ -128,7 +128,7 @@ class Preview:
             reminder = Reminder(
                 reminder_id,
                 now,
-                Revision(reminder_id, reminder_id, 1, condition, action),
+                Revision(reminder_id, reminder_id, 1, condition, action, condition),
                 snoozed_until=now + minutes * MINUTE_MS if minutes else None,
             )
             self._reminders[reminder_id] = ActiveReminder(reminder, silences)
@@ -172,7 +172,7 @@ class Preview:
     def create(self, condition: str, action: str) -> None:
         print(f"nuovo promemoria: {condition!r}, {action!r}", flush=True)
         reminder_id = next(self._ids)
-        revision = Revision(reminder_id, reminder_id, 1, condition, action)
+        revision = Revision(reminder_id, reminder_id, 1, condition, action, condition)
         reminder = Reminder(reminder_id, self._clock.now(), revision)
         self._reminders[reminder_id] = ActiveReminder(reminder, 0)
         QTimer.singleShot(0, self._show_reminders)
@@ -231,10 +231,10 @@ class Preview:
     def _alert(self) -> Alert:
         alert_id = next(self._ids)
         condition, action = next(self._texts)
-        revision = Revision(alert_id, alert_id, 1, condition, action)
+        revision = Revision(alert_id, alert_id, 1, condition, action, condition)
         context = Context("code.exe", "changelog.md - rossi", None)
         now = self._clock.now()
-        return Alert(alert_id, alert_id, revision, alert_id, context, 2.0, now, shown_at=now)
+        return Alert(alert_id, alert_id, revision, alert_id, context, 2.0, now, now, shown_at=now)
 
 
 def main() -> None:

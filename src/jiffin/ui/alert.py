@@ -12,7 +12,7 @@ from typing import Protocol
 from PySide6.QtCore import Property, QEnum, QObject, Signal, Slot
 from PySide6.QtQml import QmlElement, QmlUncreatable
 
-from jiffin.core.reminders import Snooze
+from jiffin.core.records import Snooze
 from jiffin.ui.words import sentence
 
 QML_IMPORT_NAME = "Jiffin"

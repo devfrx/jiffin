@@ -5,11 +5,15 @@ from jiffin.core.context import Context
 from jiffin.core.records import Alert, Revision
 
 NOW = 1_790_000_000_000
-REVISION = Revision(1, 1, 1, "quando apro Figma", "esportare le icone", "The user opens Figma.")
+REVISION = Revision(
+    1, 1, 1, "quando apro Figma", "esportare le icone", "quando apro Figma", "The user opens Figma."
+)
 
 
-def alert(alert_id: int) -> Alert:
-    return Alert(alert_id, alert_id, REVISION, 1, Context("figma.exe", "Icone", None), 2.0, NOW)
+def alert(alert_id: int, reminder_id: int | None = None) -> Alert:
+    context = Context("figma.exe", "Icone", None)
+    reminder_id = alert_id if reminder_id is None else reminder_id
+    return Alert(alert_id, reminder_id, REVISION, 1, context, 2.0, NOW, NOW)
 
 
 def test_an_alert_is_shown_at_once_when_there_is_room() -> None:
@@ -69,3 +73,25 @@ def test_open_alerts_are_found_wherever_they_are() -> None:
     alerts.vanish(1, NOW)
     assert [alerts.find(i) is not None for i in range(1, 6)] == [True, True, True, True, False]
     assert [a.id for a in alerts.of(4)] == [4]
+
+
+def test_the_tray_list_keeps_the_newest_unseen_alert_of_each_reminder() -> None:
+    alerts = Alerts()
+    alerts.add(alert(1, reminder_id=7), NOW)
+    alerts.vanish(1, NOW + 10_000)
+    alerts.add(alert(2, reminder_id=8), NOW + 20_000)
+    alerts.vanish(2, NOW + 30_000)
+    alerts.add(alert(3, reminder_id=7), NOW + 200_000)
+    assert [a.id for a in alerts.view().unseen] == [2]
+    alerts.vanish(3, NOW + 210_000)
+    assert [a.id for a in alerts.view().unseen] == [3, 2]
+
+
+def test_an_older_alert_that_vanishes_late_leaves_the_newer_one_in_the_tray_list() -> None:
+    alerts = Alerts()
+    alerts.add(alert(1, reminder_id=7), NOW)
+    alerts.add(alert(2, reminder_id=7), NOW + 200_000)
+    alerts.vanish(2, NOW + 210_000)
+    [vanished] = alerts.vanish(1, NOW + 220_000)
+    assert vanished.vanished_at == NOW + 220_000
+    assert [a.id for a in alerts.view().unseen] == [2]

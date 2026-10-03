@@ -2,7 +2,7 @@ from collections.abc import Callable
 
 import pytest
 
-from jiffin.core.reminders import Snooze
+from jiffin.core.records import Snooze
 from jiffin.ui.alert import AlertSlot
 
 

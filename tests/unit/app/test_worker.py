@@ -20,8 +20,8 @@ from jiffin.core.alerts import AlertsView
 from jiffin.core.clock import Clock, SimulatedClock, SystemClock
 from jiffin.core.context import Context, Observation
 from jiffin.core.debounce import DEBOUNCE_MS
-from jiffin.core.records import Evaluation, Record
-from jiffin.core.reminders import Reminders, RemindersView, Snooze
+from jiffin.core.records import Evaluation, Record, Snooze
+from jiffin.core.reminders import Reminders, RemindersView
 from jiffin.store.migrate import StoreError
 from jiffin.store.store import RETENTION_MS, Store
 
@@ -237,6 +237,18 @@ def test_the_worker_wakes_on_its_own_when_the_engine_starts_again(make_scene: Ma
     assert scene.statuses[:5] == [STARTING, READY, Status(State.RESTARTING), STARTING, READY]
 
 
+def test_closing_tells_when_the_context_in_front_left(scene: Scene) -> None:
+    scene.worker.model_ready()
+    scene.enter(FIGMA)
+    scene.advance(DEBOUNCE_MS)
+    scene.settle()
+    scene.advance(60_000)
+    scene.worker.close()
+    with closing(sqlite3.connect(scene.database)) as db:
+        until = {row[0] for row in db.execute("SELECT context_until FROM evaluation")}
+    assert until == {START + DEBOUNCE_MS + 60_000}  # on every evaluation of that stretch
+
+
 def test_closing_ends_the_capture_and_shuts_the_engine_down(scene: Scene) -> None:
     scene.worker.model_ready()
     scene.settle()
@@ -263,7 +275,6 @@ class Recorded:
     ("name", "arguments"),
     [
         ("done", (7,)),
-        ("useful", (7,)),
         ("not_here", (7,)),
         ("snooze", (7, Snooze.HOUR)),
         ("vanished", (7,)),
@@ -280,6 +291,12 @@ def test_each_command_of_the_interface_reaches_core_as_given(
     recorded = Recorded()
     getattr(QueuedCore(cast(Worker, recorded)), name)(*arguments)
     assert recorded.made == [(name, *arguments)]
+
+
+def test_utile_is_alla_prossima_volta_until_the_alert_of_0_2(scene: Scene) -> None:
+    recorded = Recorded()
+    QueuedCore(cast(Worker, recorded)).useful(7)
+    assert recorded.made == [("snooze", 7, Snooze.NEXT_TIME)]
 
 
 def test_the_worker_is_its_own_thread(scene: Scene) -> None:

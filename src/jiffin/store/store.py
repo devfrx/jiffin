@@ -21,6 +21,7 @@ from jiffin.core.records import (
     Candidate,
     Evaluation,
     LastIds,
+    Left,
     Outcome,
     Record,
     Reminder,
@@ -29,7 +30,9 @@ from jiffin.core.records import (
     Silence,
     SilencesCleared,
     Snapshot,
+    Snooze,
 )
+from jiffin.store import schedules
 from jiffin.store.database import open_database
 
 log = logging.getLogger(__name__)
@@ -43,6 +46,13 @@ type Json = None | bool | int | float | str | list[Json] | dict[str, Json]
 _CURRENT = (
     "revision.number = (SELECT max(number) FROM revision AS r WHERE r.reminder = revision.reminder)"
 )
+# The columns of a revision, in the order `Store._revision` reads them.
+_REVISION = """revision.id, revision.reminder, revision.number, revision.condition, revision.action,
+    revision.remainder, revision.statement, revision.statement_build, revision.schedule,
+    revision.written_at, revision.perennial, revision.created_at"""
+# The latest alert of the reminder of `revision`, among those `which` keeps.
+_LAST_ALERT = """(SELECT max(a.id) FROM alert AS a JOIN revision AS r ON r.id = a.revision
+    WHERE r.reminder = revision.reminder AND {which})"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,8 +66,12 @@ class Log:
     evaluations: tuple[Evaluation, ...]
     """The oldest first, with their candidates."""
     alerts: tuple[Alert, ...]
-    """The oldest first. An alert whose evaluation has expired is left out."""
+    """The oldest first. An alert whose evaluation has expired is left out; one of a reminder
+    with only a time, which has none, is not."""
     silences: tuple[Silence, ...]
+    left: tuple[Left, ...]
+    """When each evaluated context left the foreground, the earliest first: none for the one
+    still in front, and none in version 0.1."""
 
 
 class Store:
@@ -102,6 +116,8 @@ class Store:
                         self._save_cache_entry(record)
                     case Evaluation():
                         self._save_evaluation(record)
+                    case Left():
+                        self._save_left(record)
                     case Alert():
                         self._save_alert(record)
                     case _:
@@ -116,9 +132,8 @@ class Store:
             reminders = tuple(
                 Reminder(row[0], row[1], self._revision(row[4:], builds), row[2], row[3])
                 for row in self._db.execute(
-                    f"""SELECT reminder.id, created_at, completed_at, snoozed_until,
-                        revision.id, reminder, number, condition, action, statement,
-                        statement_build
+                    f"""SELECT reminder.id, reminder.created_at, completed_at, snoozed_until,
+                        {_REVISION}
                     FROM reminder JOIN revision ON revision.reminder = reminder.id
                     WHERE {_CURRENT} ORDER BY reminder.id"""
                 )
@@ -133,12 +148,14 @@ class Store:
                     ORDER BY revision, context.id, engine_build"""
                 )
             )
+            # The alert that counts in each reminder's unit: "Non qui" takes it back (ADR-0021).
+            counted = _LAST_ALERT.format(which="a.answer IS NOT 'non_qui'")
             last_alerts = tuple(
-                (row[0], row[1])
+                (row[0], row[1], row[2])
                 for row in self._db.execute(
-                    """SELECT revision.reminder, max(alert.created_at)
+                    f"""SELECT revision.reminder, alert.id, alert.created_at
                     FROM alert JOIN revision ON revision.id = alert.revision
-                    GROUP BY revision.reminder ORDER BY revision.reminder"""
+                    WHERE alert.id = {counted} ORDER BY revision.reminder"""
                 )
             )
             return Snapshot(
@@ -151,15 +168,13 @@ class Store:
             builds = self._builds()
             revisions = {
                 row[0]: self._revision(row, builds)
-                for row in self._db.execute(
-                    """SELECT id, reminder, number, condition, action, statement, statement_build
-                    FROM revision ORDER BY id"""
-                )
+                for row in self._db.execute(f"SELECT {_REVISION} FROM revision ORDER BY id")
             }
             reminders = tuple(
                 Reminder(row[0], row[1], revisions[row[4]], row[2], row[3])
                 for row in self._db.execute(
-                    f"""SELECT reminder.id, created_at, completed_at, snoozed_until, revision.id
+                    f"""SELECT reminder.id, reminder.created_at, completed_at, snoozed_until,
+                        revision.id
                     FROM reminder JOIN revision ON revision.reminder = reminder.id
                     WHERE {_CURRENT} ORDER BY reminder.id"""
                 )
@@ -182,37 +197,33 @@ class Store:
                     None if row[8] is None else builds[row[8]],
                     tuple(candidates.get(row[0], ())),
                     failed=row[6] == "error",
+                    return_pause=row[9],
                 )
                 for row in self._db.execute(
                     """SELECT evaluation.id, at, app, title, address, context_since, outcome,
-                        threshold, engine_build
+                        threshold, engine_build, return_pause
                     FROM evaluation JOIN context ON context.id = evaluation.context
                     ORDER BY at, evaluation.id"""
                 )
             )
             alerts = tuple(
-                Alert(
-                    row[0],
-                    revisions[row[1]].reminder_id,
-                    revisions[row[1]],
-                    row[2],
-                    Context(*row[3:6]),
-                    d=row[6],
-                    created_at=row[7],
-                    shown_at=row[8],
-                    vanished_at=row[9],
-                    seen_at=row[10],
-                    answer=None if row[11] is None else Answer(row[11]),
-                    answered_at=row[12],
-                )
+                self._alert(row, revisions[row[1]])
                 for row in self._db.execute(
                     """SELECT alert.id, revision, evaluation, app, title, address, d, created_at,
-                        shown_at, vanished_at, seen_at, answer, answered_at
+                        due_at, shown_at, vanished_at, seen_at, answer, answered_at, snooze
                     FROM alert JOIN context ON context.id = alert.context
-                    WHERE evaluation IS NOT NULL ORDER BY created_at, alert.id"""
+                    WHERE evaluation IS NOT NULL OR d IS NULL ORDER BY created_at, alert.id"""
                 )
             )
-            return Log(reminders, revisions, evaluations, alerts, self._silences())
+            left = tuple(
+                Left(Context(*row[:3]), row[3], row[4])
+                for row in self._db.execute(
+                    """SELECT DISTINCT app, title, address, context_since, context_until
+                    FROM evaluation JOIN context ON context.id = evaluation.context
+                    WHERE context_until IS NOT NULL ORDER BY context_since, context_until"""
+                )
+            )
+            return Log(reminders, revisions, evaluations, alerts, self._silences(), left)
 
     def cleanup(self, now: int) -> None:
         """Delete what the retention rules of ADR-0014 no longer keep, at startup and daily."""
@@ -259,9 +270,9 @@ class Store:
         )
         revision = reminder.revision
         self._db.execute(
-            """INSERT INTO revision
-            (id, reminder, number, condition, action, statement, statement_build)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """INSERT INTO revision (id, reminder, number, condition, action, remainder,
+                statement, statement_build, schedule, written_at, perennial, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (id) DO UPDATE
             SET statement = excluded.statement, statement_build = excluded.statement_build""",
             (
@@ -270,8 +281,13 @@ class Store:
                 revision.number,
                 revision.condition,
                 revision.action,
+                revision.remainder,
                 revision.statement,
                 self._build_id(revision.statement_build),
+                None if revision.schedule is None else schedules.dumps(revision.schedule),
+                revision.written_at,
+                int(revision.perennial),
+                revision.created_at,
             ),
         )
 
@@ -312,8 +328,8 @@ class Store:
     def _save_evaluation(self, evaluation: Evaluation) -> None:
         self._db.execute(
             """INSERT INTO evaluation
-            (id, at, context, context_since, outcome, threshold, engine_build)
-            VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (id, at, context, context_since, outcome, threshold, engine_build, return_pause)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 evaluation.id,
                 evaluation.at,
@@ -322,6 +338,7 @@ class Store:
                 "error" if evaluation.failed else "ok",
                 evaluation.threshold,
                 self._build_id(evaluation.build),
+                evaluation.return_pause,
             ),
         )
         self._db.executemany(
@@ -333,16 +350,27 @@ class Store:
             ],
         )
 
+    def _save_left(self, left: Left) -> None:
+        """When the context left goes on the evaluations of its stretch in front (ADR-0021)."""
+        self._db.execute(
+            """UPDATE evaluation SET context_until = ?
+            WHERE context_since = ? AND context_until IS NULL AND context = (
+                SELECT id FROM context
+                WHERE app = ? AND title = ? AND ifnull(address, '') = ifnull(?, '')
+            )""",
+            (left.until, left.since, left.context.app, left.context.title, left.context.address),
+        )
+
     def _save_alert(self, alert: Alert) -> None:
         # An alert the daily cleanup deleted while `core` kept it unseen comes back without its
         # evaluation, which expired with it: as the cleanup leaves an answered alert.
         self._db.execute(
-            """INSERT INTO alert (id, revision, evaluation, context, d, created_at, shown_at,
-                vanished_at, seen_at, answer, answered_at)
-            VALUES (?, ?, (SELECT id FROM evaluation WHERE id = ?), ?, ?, ?, ?, ?, ?, ?, ?)
+            """INSERT INTO alert (id, revision, evaluation, context, d, created_at, due_at,
+                shown_at, vanished_at, seen_at, answer, snooze, answered_at)
+            VALUES (?, ?, (SELECT id FROM evaluation WHERE id = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (id) DO UPDATE
             SET shown_at = excluded.shown_at, vanished_at = excluded.vanished_at,
-                seen_at = excluded.seen_at, answer = excluded.answer,
+                seen_at = excluded.seen_at, answer = excluded.answer, snooze = excluded.snooze,
                 answered_at = excluded.answered_at""",
             (
                 alert.id,
@@ -351,10 +379,12 @@ class Store:
                 self._context_id(alert.context),
                 alert.d,
                 alert.created_at,
+                alert.due_at,
                 alert.shown_at,
                 alert.vanished_at,
                 alert.seen_at,
                 None if alert.answer is None else alert.answer.value,
+                None if alert.snooze is None else alert.snooze.value,
                 alert.answered_at,
             ),
         )
@@ -420,37 +450,60 @@ class Store:
 
     @staticmethod
     def _revision(row: Sequence[Any], builds: Mapping[int, EngineBuild]) -> Revision:
-        """A revision from its columns: id, reminder, number, condition, action, statement, build."""
-        build = None if row[6] is None else builds[row[6]]
-        return Revision(row[0], row[1], row[2], row[3], row[4], row[5], build)
+        """A revision from the columns of `_REVISION`."""
+        return Revision(
+            row[0],
+            row[1],
+            row[2],
+            row[3],
+            row[4],
+            row[5],
+            statement=row[6],
+            statement_build=None if row[7] is None else builds[row[7]],
+            schedule=None if row[8] is None else schedules.loads(row[8]),
+            written_at=row[9],
+            perennial=bool(row[10]),
+            created_at=row[11],
+        )
+
+    @staticmethod
+    def _alert(row: Sequence[Any], revision: Revision) -> Alert:
+        """An alert from its columns: id, revision, evaluation, app, title, address, d,
+        created_at, due_at, shown_at, vanished_at, seen_at, answer, answered_at, snooze."""
+        return Alert(
+            row[0],
+            revision.reminder_id,
+            revision,
+            row[2],
+            Context(*row[3:6]),
+            d=row[6],
+            created_at=row[7],
+            due_at=row[8],
+            shown_at=row[9],
+            vanished_at=row[10],
+            seen_at=row[11],
+            answer=None if row[12] is None else Answer(row[12]),
+            answered_at=row[13],
+            snooze=None if row[14] is None else Snooze(row[14]),
+        )
 
     def _unseen(self, builds: Mapping[int, EngineBuild]) -> tuple[Alert, ...]:
-        """Alerts shown and never answered, of active reminders, the latest to vanish first."""
+        """Alerts shown and never answered, the last of their active reminder, the latest to
+        vanish first: the tray list keeps one per reminder (ADR-0021)."""
+        last = _LAST_ALERT.format(which="1")
         rows = self._db.execute(
-            """SELECT alert.id, revision.reminder,
-                revision.id, revision.reminder, number, condition, action, statement,
-                statement_build,
-                alert.evaluation, app, title, address, alert.d, alert.created_at, shown_at,
-                vanished_at, seen_at
+            f"""SELECT alert.id, revision.id, alert.evaluation, app, title, address, alert.d,
+                alert.created_at, due_at, shown_at, vanished_at, seen_at, answer, answered_at,
+                snooze, {_REVISION}
             FROM alert
             JOIN revision ON revision.id = alert.revision
             JOIN reminder ON reminder.id = revision.reminder
             JOIN context ON context.id = alert.context
-            WHERE answer IS NULL AND shown_at IS NOT NULL AND evaluation IS NOT NULL
-                AND completed_at IS NULL
+            WHERE answer IS NULL AND shown_at IS NOT NULL AND completed_at IS NULL
+                AND alert.id = {last}
             ORDER BY ifnull(vanished_at, shown_at) DESC, alert.id DESC"""
         )
-        return tuple(
-            Alert(
-                row[0],
-                row[1],
-                self._revision(row[2:9], builds),
-                row[9],
-                Context(*row[10:13]),
-                *row[13:],
-            )
-            for row in rows
-        )
+        return tuple(self._alert(row, self._revision(row[15:], builds)) for row in rows)
 
     def _last_ids(self) -> LastIds:
         row = self._db.execute(

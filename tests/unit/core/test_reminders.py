@@ -1,6 +1,6 @@
 from collections.abc import Mapping
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta, timezone, tzinfo
+from datetime import UTC, date, datetime, time, timedelta, timezone, tzinfo
 
 import pytest
 
@@ -15,6 +15,7 @@ from jiffin.core.records import (
     CacheEntry,
     Evaluation,
     LastIds,
+    Left,
     Outcome,
     Record,
     Reminder,
@@ -23,26 +24,41 @@ from jiffin.core.records import (
     Silence,
     SilencesCleared,
     Snapshot,
+    Snooze,
 )
 from jiffin.core.reminders import (
     HOUR_MS,
     MINUTE_MS,
+    RETURN_PAUSE_MS,
     THRESHOLD,
     ActiveReminder,
     Reminders,
     RemindersView,
-    Snooze,
 )
+from jiffin.core.schedule import OnDate, Schedule, Slot
 
 START = 1_790_000_000_000  # 2026-09-21, in UTC milliseconds
 BUILD = EngineBuild(1, "0.1.0", "b11081", "79de5cb8", judge_prompt=1, rewrite_prompt=2)
 FIGMA = Context("figma.exe", "Icone - Figma", None)
 BANK = Context("vivaldi.exe", "Banca Rossi", "bancarossi.it")
 ROSSI = Context("code.exe", "changelog.md - rossi", None)
+CLAUDE = Context("claude.exe", "Claude", None)
+TEAMS = Context("ms-teams.exe", "Chat | Microsoft Teams", None)
+OUTLOOK = Context("olk.exe", "Posta in arrivo - Outlook", None)
+DAY_MS = 24 * HOUR_MS
 
 
 def english(condition: str) -> str:
     return f"The user: {condition}."
+
+
+def milliseconds(moment: datetime) -> int:
+    return round(moment.timestamp() * 1000)
+
+
+def at(day: int, hour: int, minute: int = 0, second: int = 0) -> int:
+    """A moment of October 2026 in UTC, the scenes' local time; the 2nd is a Friday."""
+    return milliseconds(datetime(2026, 10, day, hour, minute, second, tzinfo=UTC))
 
 
 class FakeModel:
@@ -52,9 +68,10 @@ class FakeModel:
         self.scores: dict[tuple[Context, str], float] = {}
         self.down = False
         self.calls: list[dict[int, str]] = []
+        self.rewritten: list[str] = []
 
-    def says(self, context: Context, condition: str, d: float = 4.0) -> None:
-        self.scores[(context, english(condition))] = d
+    def says(self, context: Context, remainder: str, d: float = 4.0) -> None:
+        self.scores[(context, english(remainder))] = d
 
     def build(self) -> EngineBuild:
         self._answer()
@@ -67,6 +84,7 @@ class FakeModel:
 
     def rewrite(self, condition: str) -> str:
         self._answer()
+        self.rewritten.append(condition)
         return english(condition)
 
     def _answer(self) -> None:
@@ -83,18 +101,26 @@ class Scene:
         start: int = START,
         zone: tzinfo = UTC,
         saved: Snapshot | None = None,
+        return_pause: int = RETURN_PAUSE_MS,
     ) -> None:
         self.model = model or FakeModel()
         self.clock = SimulatedClock(start, zone)
         self.views: list[AlertsView] = []
         self.lists: list[RemindersView] = []
         self.reminders = Reminders(
-            self.model, self.clock, self.views.append, self.lists.append, saved
+            self.model,
+            self.clock,
+            self.views.append,
+            self.lists.append,
+            saved,
+            return_pause=return_pause,
         )
         self.records: list[Record] = []
 
-    def create(self, condition: str, action: str = "esportare le icone") -> Reminder:
-        return self.reminders.create(condition, action)
+    def create(
+        self, condition: str, action: str = "esportare le icone", perennial: bool = False
+    ) -> Reminder:
+        return self.reminders.create(condition, action, perennial)
 
     def stay(self, context: Context | None, milliseconds: int = DEBOUNCE_MS) -> None:
         """Bring a context to the foreground and stay there."""
@@ -104,6 +130,9 @@ class Scene:
     def wait(self, milliseconds: int) -> None:
         self.clock.advance(milliseconds)
         self.reminders.poll()
+
+    def until(self, moment: int) -> None:
+        self.wait(moment - self.clock.now())
 
     @property
     def view(self) -> AlertsView:
@@ -127,6 +156,21 @@ class Scene:
         [alert] = self.view.visible
         return alert
 
+    def rang(self) -> list[Alert]:
+        """Every alert made so far, as first saved."""
+        found: dict[int, Alert] = {}
+        for alert in self.saved(Alert):
+            found.setdefault(alert.id, alert)
+        return list(found.values())
+
+
+def figma(return_pause: int = RETURN_PAUSE_MS) -> Scene:
+    """A scene with "quando apro Figma", true in Figma."""
+    scene = Scene(return_pause=return_pause)
+    scene.create("quando apro Figma")
+    scene.model.says(FIGMA, "quando apro Figma")
+    return scene
+
 
 # Reminders and revisions
 
@@ -138,6 +182,27 @@ def test_a_new_reminder_gets_its_statement_from_the_engine() -> None:
     assert reminder.revision.statement_build == BUILD
     saved = scene.saved(Reminder)
     assert [r.revision.statement for r in saved] == [None, english("quando apro Figma")]
+
+
+def test_the_time_of_a_new_reminder_is_read_when_it_is_saved() -> None:
+    scene = Scene(start=at(2, 22))
+    revision = scene.create("quando apro Claude dopo le 23", "chiudere il portatile").revision
+    assert revision.remainder == "quando apro Claude"
+    assert revision.schedule == Schedule(hours=Slot(time(23), time(4)))
+    assert (revision.written_at, revision.created_at) == (at(2, 22), at(2, 22))
+    assert not revision.perennial
+    assert revision.statement == english("quando apro Claude")
+    assert scene.create("quando apro Figma", perennial=True).revision.perennial
+
+
+def test_a_reminder_with_only_a_time_never_reaches_the_engine() -> None:
+    scene = Scene(start=at(2, 10))
+    revision = scene.create("alle 15", "chiamare Mario").revision
+    assert (revision.remainder, revision.statement) == ("", None)
+    scene.stay(FIGMA)
+    scene.reminders.model_ready()
+    assert (scene.model.calls, scene.model.rewritten) == ([], [])
+    assert [evaluation.candidates for evaluation in scene.saved(Evaluation)] == [(), ()]
 
 
 def test_a_reminder_without_a_statement_is_judged_once_the_engine_writes_it() -> None:
@@ -171,12 +236,68 @@ def test_a_new_text_is_a_new_revision_without_silences() -> None:
     assert scene.outcomes() == [Outcome.ALERT]
 
 
+def test_the_same_condition_keeps_its_time_and_statement() -> None:
+    scene = Scene(start=at(2, 10))
+    reminder = scene.create("domani quando apro Teams", "chiedere le ferie")
+    scene.until(at(3, 18))
+    scene.reminders.edit(reminder.id, "domani quando apro Teams", "chiedere i permessi")
+    edited = scene.saved(Reminder)[-1].revision
+    assert edited.schedule == Schedule(OnDate(date(2026, 10, 3)))
+    assert (edited.written_at, edited.created_at) == (at(2, 10), at(3, 18))
+    assert edited.statement == reminder.revision.statement
+    assert scene.model.rewritten == ["quando apro Teams"]
+
+
+def test_a_new_condition_is_read_again_from_now() -> None:
+    scene = Scene(start=at(2, 10))
+    reminder = scene.create("domani quando apro Teams", "chiedere le ferie")
+    scene.until(at(3, 18))
+    scene.reminders.edit(reminder.id, "domani quando apro Outlook", "chiedere le ferie")
+    edited = scene.saved(Reminder)[-1].revision
+    assert edited.schedule == Schedule(OnDate(date(2026, 10, 4)))
+    assert (edited.remainder, edited.written_at) == ("quando apro Outlook", at(3, 18))
+    assert edited.statement == english("quando apro Outlook")
+
+
+def test_a_new_condition_with_the_same_remainder_keeps_the_statement() -> None:
+    scene = Scene(start=at(2, 10))
+    reminder = scene.create("quando apro Teams la mattina", "leggere la chat")
+    scene.reminders.edit(reminder.id, "quando apro Teams la sera", "leggere la chat")
+    edited = scene.saved(Reminder)[-1].revision
+    assert edited.schedule == Schedule(hours=Slot(time(18), time(23)))
+    assert edited.statement == reminder.revision.statement
+    assert scene.model.rewritten == ["quando apro Teams"]
+
+
+def test_a_new_text_is_not_true_until_it_is_judged() -> None:
+    scene = figma()
+    scene.stay(FIGMA)
+    [active] = scene.listed
+    scene.reminders.edit(active.reminder.id, "quando apro Figma", "esportare i loghi")
+    scene.wait(10 * MINUTE_MS)
+    scene.stay(BANK, MINUTE_MS)
+    scene.stay(FIGMA)
+    assert scene.outcomes() == [Outcome.ALERT]
+
+
 def test_the_same_text_is_not_a_new_revision() -> None:
     scene = Scene()
     reminder = scene.create("quando apro Figma", "esportare le icone")
     scene.saved(Reminder)
     scene.reminders.edit(reminder.id, "quando apro Figma", "esportare le icone")
     assert scene.reminders.take_records() == []
+
+
+def test_ogni_volta_alone_is_a_new_revision_that_keeps_the_silences() -> None:
+    scene = figma()
+    scene.stay(FIGMA)
+    scene.reminders.not_here(scene.alert().id)
+    [active] = scene.listed
+    scene.reminders.edit(active.reminder.id, "quando apro Figma", "esportare le icone", True)
+    edited = scene.saved(Reminder)[-1].revision
+    assert (edited.number, edited.perennial) == (2, True)
+    assert scene.saved(SilencesCleared) == []
+    assert scene.listed[0].silences == 1
 
 
 def test_a_completed_reminder_is_no_longer_judged_and_its_alerts_go() -> None:
@@ -202,48 +323,16 @@ def test_commands_about_what_is_gone_do_nothing() -> None:
     assert scene.saved(ReminderDeleted) == [ReminderDeleted(reminder.id)]
     assert scene.view.visible == ()
     scene.reminders.done(alert.id)
-    scene.reminders.useful(alert.id)
+    scene.reminders.close(alert.id)
     scene.reminders.not_here(alert.id)
     scene.reminders.snooze(alert.id, Snooze.HOUR)
+    scene.reminders.snooze(alert.id, Snooze.NEXT_TIME)
     scene.reminders.vanished(alert.id)
     scene.reminders.edit(reminder.id, "quando apro Photoshop", "esportare le icone")
     scene.reminders.complete(reminder.id)
     scene.reminders.delete(reminder.id)
     assert scene.reminders.take_records() == []
     assert scene.reminders.deadline is None
-
-
-def test_reminders_go_on_from_what_was_saved() -> None:
-    revision = Revision(
-        7, 3, 1, "quando apro Figma", "esportare le icone", english("quando apro Figma"), BUILD
-    )
-    unseen = Alert(5, 3, revision, 4, FIGMA, 4.0, START, START, START + 10_000)
-    saved = Snapshot(
-        reminders=(Reminder(3, START, revision),),
-        silences=(Silence(3, BANK),),
-        cache=(CacheEntry(FIGMA, 7, BUILD, 4.0, START),),
-        last_alerts=((3, START),),
-        unseen=(unseen,),
-        last_ids=LastIds(reminder=3, revision=7, evaluation=4, alert=5),
-    )
-    scene = Scene(saved=saved)
-    scene.wait(0)
-    assert scene.view.unseen == (unseen,)
-    assert scene.listed == (ActiveReminder(Reminder(3, START, revision), silences=1),)
-    scene.stay(FIGMA)
-    assert (scene.model.calls, scene.outcomes()) == ([], [Outcome.HELD_BACK])
-    assert scene.saved(Evaluation)[-1].id == 5
-    scene.model.says(BANK, "quando apro Figma")
-    scene.stay(BANK, HOUR_MS)
-    assert scene.outcomes() == [Outcome.SILENCED]
-    created = scene.create("se sono sul sito della banca")
-    assert (created.id, created.revision.id) == (4, 8)
-
-
-def test_a_saved_snooze_still_ends_on_time() -> None:
-    snoozed = replace(Scene().create("quando apro Figma"), snoozed_until=START + HOUR_MS)
-    scene = Scene(saved=Snapshot(reminders=(snoozed,)))
-    assert scene.reminders.deadline == START + HOUR_MS
 
 
 # Judging
@@ -263,6 +352,7 @@ def test_a_stable_context_judges_every_active_reminder_in_one_call() -> None:
         THRESHOLD,
         BUILD,
     )
+    assert evaluation.return_pause == RETURN_PAUSE_MS
     assert [(c.outcome, c.from_cache) for c in evaluation.candidates] == [
         (Outcome.ALERT, False),
         (Outcome.BELOW_THRESHOLD, False),
@@ -273,6 +363,7 @@ def test_a_stable_context_judges_every_active_reminder_in_one_call() -> None:
         FIGMA,
         evaluation.id,
     )
+    assert (alert.d, alert.due_at) == (4.0, START)
 
 
 def test_the_threshold_is_reached_from_its_value_up() -> None:
@@ -352,7 +443,7 @@ def test_once_the_engine_is_back_what_it_judged_comes_from_the_cache() -> None:
     scene.stay(FIGMA)
     scene.reminders.model_ready()
     assert len(scene.model.calls) == 1
-    assert scene.outcomes() == [Outcome.HELD_BACK]
+    assert scene.outcomes() == [Outcome.SAME_OCCASION]
     assert len(scene.saved(Alert)) == 1
 
 
@@ -376,56 +467,332 @@ def test_an_evaluation_is_saved_before_its_alerts() -> None:
     assert kinds.index(Evaluation) < kinds.index(Alert)
 
 
-# Alert rules
-
-
-def test_an_alert_repeats_at_most_once_an_hour() -> None:
+def test_a_stable_context_that_leaves_is_recorded_with_when_it_came_and_went() -> None:
     scene = Scene()
-    scene.create("quando apro Figma")
-    scene.model.says(FIGMA, "quando apro Figma")
-    scene.stay(FIGMA)
+    scene.stay(FIGMA, MINUTE_MS)
+    scene.stay(BANK, 1_000)  # a quick switch: never stable
+    scene.stay(ROSSI)
+    assert scene.saved(Left) == [Left(FIGMA, START, START + MINUTE_MS)]
+
+
+# Occasions
+
+
+def test_a_reminder_rings_once_per_occasion() -> None:
+    scene = figma()
+    scene.stay(FIGMA, 3 * HOUR_MS)
     scene.reminders.vanished(scene.alert().id)
-    scene.stay(BANK)
+    scene.stay(BANK, RETURN_PAUSE_MS - 1)
     scene.stay(FIGMA)
-    assert scene.outcomes() == [Outcome.HELD_BACK]
-    scene.stay(BANK, HOUR_MS)
+    assert scene.outcomes() == [Outcome.SAME_OCCASION]
+    scene.stay(BANK, RETURN_PAUSE_MS)
+    scene.stay(FIGMA)
+    assert scene.outcomes() == [Outcome.ALERT]
+    assert len(scene.rang()) == 2
+
+
+def test_a_quick_switch_and_no_context_count_as_away() -> None:
+    scene = figma()
+    scene.stay(FIGMA)
+    scene.stay(BANK, 1_000)
+    scene.stay(FIGMA)
+    assert scene.outcomes() == [Outcome.SAME_OCCASION]
+    scene.stay(None, RETURN_PAUSE_MS)
     scene.stay(FIGMA)
     assert scene.outcomes() == [Outcome.ALERT]
 
 
-def test_staying_in_a_true_context_does_not_repeat_the_alert() -> None:
+def test_the_return_pause_is_the_settings() -> None:
+    scene = figma(return_pause=10_000)
+    scene.stay(FIGMA)
+    scene.stay(BANK, 10_000)
+    scene.stay(FIGMA)
+    assert scene.outcomes() == [Outcome.ALERT]
+    assert {evaluation.return_pause for evaluation in scene.saved(Evaluation)} == {10_000}
+
+
+def test_not_here_on_a_wrong_context_does_not_end_the_occasion() -> None:
     scene = Scene()
+    scene.create("quando scrivo a Rossi", "chiedere il preventivo")
+    scene.model.says(TEAMS, "quando scrivo a Rossi")
+    scene.model.says(OUTLOOK, "quando scrivo a Rossi")
+    scene.stay(TEAMS)
+    scene.reminders.not_here(scene.alert().id)
+    scene.stay(OUTLOOK)
+    assert scene.outcomes() == [Outcome.ALERT]
+    scene.stay(TEAMS)
+    assert scene.outcomes() == [Outcome.SILENCED]
+
+
+def test_a_slot_that_opens_and_closes_with_the_context_in_front_starts_and_ends_a_stretch() -> None:
+    scene = Scene(start=at(2, 22, 30))
+    scene.create("quando apro Claude dopo le 23", "chiudere il portatile")
+    scene.model.says(CLAUDE, "quando apro Claude")
+    assert scene.reminders.deadline is None
+    scene.stay(CLAUDE)
+    assert scene.outcomes() == [Outcome.OUTSIDE_TIME]
+    assert scene.reminders.deadline == at(2, 23)
+    scene.until(at(2, 23))
+    evaluation = scene.saved(Evaluation)[-1]
+    assert (evaluation.at, evaluation.context_since) == (at(2, 23), at(2, 22, 30))
+    assert scene.outcomes() == [Outcome.ALERT]
+    assert scene.alert().due_at == at(2, 23)
+    scene.reminders.vanished(scene.alert().id)
+    scene.until(at(3, 4))
+    assert scene.outcomes() == [Outcome.OUTSIDE_TIME]
+    scene.until(at(3, 23))
+    assert scene.outcomes() == [Outcome.ALERT]
+    scene.stay(None, 1_000)
+    assert scene.reminders.deadline is None
+
+
+def test_staying_on_the_thing_while_the_next_day_starts_keeps_the_occasion() -> None:
+    scene = Scene(start=at(6, 3, 50))  # Tuesday before 04:00: still Monday
+    scene.create("quando apro Outlook nei giorni feriali", "leggere la posta")
+    scene.model.says(OUTLOOK, "quando apro Outlook")
+    scene.stay(OUTLOOK)
+    assert scene.outcomes() == [Outcome.ALERT]
+    scene.until(at(6, 4))
+    assert scene.outcomes() == [Outcome.SAME_OCCASION]
+
+
+def test_a_slot_with_an_app_rings_at_every_occasion_within_it() -> None:
+    scene = Scene(start=at(2, 23))
+    scene.create("quando apro Claude dopo le 23", "chiudere il portatile")
+    scene.model.says(CLAUDE, "quando apro Claude")
+    scene.stay(CLAUDE)
+    scene.stay(BANK, RETURN_PAUSE_MS)
+    scene.stay(CLAUDE)
+    assert len(scene.rang()) == 2
+
+
+# Instances of a time
+
+
+def test_a_reminder_with_only_a_time_rings_at_its_moment_in_any_stable_context() -> None:
+    scene = Scene(start=at(2, 14, 50))
+    scene.create("alle 15", "chiamare Mario")
+    scene.stay(FIGMA)
+    assert scene.view.visible == ()
+    assert scene.reminders.deadline == at(2, 15)
+    scene.until(at(2, 15))
+    alert = scene.alert()
+    assert (alert.context, alert.evaluation_id, alert.d) == (FIGMA, None, None)
+    assert (alert.created_at, alert.due_at) == (at(2, 15), at(2, 15))
+    assert len(scene.saved(Evaluation)) == 1  # when Figma became stable
+
+
+def test_a_moment_that_came_while_away_rings_when_the_user_is_back() -> None:
+    scene = Scene(start=at(2, 14))
+    scene.create("alle 15", "chiamare Mario")
+    scene.stay(None, 2 * HOUR_MS)
+    assert scene.view.visible == ()
+    assert scene.reminders.deadline is None
+    scene.stay(FIGMA)
+    assert (scene.alert().created_at, scene.alert().due_at) == (at(2, 16, 0, 5), at(2, 16))
+
+
+def test_a_reminder_with_only_a_time_waits_for_a_context_stable_for_5_s() -> None:
+    scene = Scene(start=at(2, 14, 59, 58))
+    scene.create("alle 15", "chiamare Mario")
+    scene.stay(FIGMA)
+    assert (scene.alert().created_at, scene.alert().due_at) == (at(2, 15, 0, 3), at(2, 15))
+
+
+def test_a_one_off_moment_is_never_lost_and_comes_back_with_the_next_one() -> None:
+    scene = Scene(start=at(2, 14))
+    scene.create("alle 15", "chiamare Mario")
+    scene.stay(None, at(3, 10) - at(2, 14))
+    scene.stay(FIGMA)
+    late = scene.alert()
+    assert late.due_at == at(3, 10)
+    scene.reminders.vanished(late.id)
+    scene.stay(BANK)
+    assert scene.view.visible == ()
+    scene.until(at(3, 15))
+    assert (scene.alert().created_at, scene.alert().due_at) == (at(3, 15), at(3, 15))
+
+
+def test_a_perennial_moment_may_ring_until_four() -> None:
+    scene = Scene(start=at(2, 14))
+    scene.create("alle 15", "prendere la pastiglia", perennial=True)
+    scene.stay(None, at(3, 3) - at(2, 14))
+    scene.stay(FIGMA)
+    scene.reminders.done(scene.alert().id)
+    assert scene.saved(Reminder)[-1].completed_at is None
+    scene.stay(None, at(4, 4, 30) - scene.clock.now())
+    scene.stay(FIGMA)
+    assert scene.view.visible == ()
+    assert len(scene.rang()) == 1
+
+
+def test_a_one_off_date_rings_once_even_late() -> None:
+    scene = Scene(start=at(2, 10))
+    scene.create("domani alle 15", "chiamare Mario")
+    scene.stay(None, at(4, 9) - at(2, 10))
+    scene.stay(FIGMA)
+    assert scene.alert().due_at == at(4, 9)
+    scene.reminders.close(scene.alert().id)
+    scene.stay(BANK, DAY_MS)
+    scene.stay(FIGMA)
+    assert len(scene.rang()) == 1
+
+
+def test_a_perennial_date_rings_only_until_its_instance_ends() -> None:
+    scene = Scene(start=at(2, 10))
+    scene.create("domani alle 15", "chiamare Mario", perennial=True)
+    scene.stay(None, at(4, 9) - at(2, 10))
+    scene.stay(FIGMA)
+    assert scene.rang() == []
+
+
+def test_a_slot_without_an_app_rings_once_per_slot() -> None:
+    scene = Scene(start=at(2, 17))
+    scene.create("la sera", "annaffiare le piante")
+    scene.stay(FIGMA)
+    assert scene.view.visible == ()
+    scene.until(at(2, 18))
+    scene.reminders.vanished(scene.alert().id)
+    scene.stay(BANK, HOUR_MS)
+    scene.stay(FIGMA)
+    assert len(scene.rang()) == 1
+    scene.stay(None, at(3, 18, 30) - scene.clock.now())
+    scene.stay(FIGMA)
+    assert len(scene.rang()) == 2
+
+
+def test_a_frequency_rings_once_per_period_and_after_a_period_away_in_the_next() -> None:
+    scene = Scene(start=at(2, 10))
+    scene.create("ogni settimana", "fare il backup")
+    scene.stay(FIGMA)
+    scene.reminders.vanished(scene.alert().id)
+    scene.stay(None, at(5, 10) - scene.clock.now())
+    scene.stay(FIGMA)
+    assert len(scene.rang()) == 1
+    scene.stay(None, at(20, 10) - scene.clock.now())
+    scene.stay(FIGMA)
+    assert [alert.created_at for alert in scene.rang()] == [at(2, 10, 0, 5), at(20, 10, 0, 5)]
+
+
+def test_an_ended_period_goes_silent() -> None:
+    scene = Scene(start=at(2, 10))
+    scene.create("quando apro Teams la sera fino a domenica", "segnare le ore")
+    scene.model.says(TEAMS, "quando apro Teams")
+    scene.stay(None, at(5, 19) - at(2, 10))
+    scene.stay(TEAMS)
+    assert scene.outcomes() == [Outcome.OUTSIDE_TIME]
+    assert scene.reminders.deadline is None
+
+
+def test_a_moment_with_an_app_rings_once_from_the_moment_on() -> None:
+    scene = Scene(start=at(2, 22))
+    scene.create("quando apro Claude alle 23", "chiudere il portatile")
+    scene.model.says(CLAUDE, "quando apro Claude")
+    scene.stay(CLAUDE)
+    assert scene.outcomes() == [Outcome.OUTSIDE_TIME]
+    scene.stay(BANK, 2 * HOUR_MS)
+    scene.stay(CLAUDE)
+    assert scene.outcomes() == [Outcome.ALERT]
+    scene.reminders.vanished(scene.alert().id)
+    scene.stay(BANK, 10 * MINUTE_MS)
+    scene.stay(CLAUDE)
+    assert scene.outcomes() == [Outcome.SAME_OCCASION]
+
+
+def test_a_date_with_an_app_that_passed_without_ringing_rings_late_once() -> None:
+    scene = Scene(start=at(2, 10))
+    scene.create("domani quando apro Teams", "chiedere le ferie")
+    scene.model.says(TEAMS, "quando apro Teams")
+    scene.stay(TEAMS)
+    assert scene.outcomes() == [Outcome.OUTSIDE_TIME]
+    scene.stay(None, at(4, 10) - scene.clock.now())
+    scene.stay(TEAMS)
+    assert scene.outcomes() == [Outcome.ALERT]
+    scene.reminders.vanished(scene.alert().id)
+    scene.stay(BANK, HOUR_MS)
+    scene.stay(TEAMS)
+    assert scene.outcomes() == [Outcome.SAME_OCCASION]
+
+
+def test_a_reminder_with_only_a_time_rings_while_the_engine_is_down() -> None:
+    scene = Scene(start=at(2, 14, 50))
     scene.create("quando apro Figma")
+    scene.create("alle 15", "chiamare Mario")
+    scene.model.down = True
+    scene.stay(FIGMA)
+    scene.until(at(2, 15))
+    assert scene.alert().revision.condition == "alle 15"
+    assert [evaluation.failed for evaluation in scene.saved(Evaluation)] == [True]
+
+
+# Answers
+
+
+def test_done_completes_a_one_off_reminder() -> None:
+    scene = Scene()
+    reminder = scene.create("quando apro Figma")
     scene.model.says(FIGMA, "quando apro Figma")
+    scene.stay(FIGMA)
+    scene.reminders.done(scene.alert().id)
+    assert [a.answer for a in scene.saved(Alert) if a.answer] == [Answer.DONE]
+    assert scene.saved(Reminder)[-1].completed_at == START + DEBOUNCE_MS
+    assert scene.saved(Reminder)[-1].id == reminder.id
+
+
+def test_done_on_a_perennial_reminder_waits_for_the_next_occasion() -> None:
+    scene = Scene()
+    scene.create("quando apro Figma", perennial=True)
+    scene.model.says(FIGMA, "quando apro Figma")
+    scene.stay(FIGMA)
+    scene.reminders.done(scene.alert().id)
+    assert [a.answer for a in scene.saved(Alert) if a.answer] == [Answer.DONE]
+    assert [active.reminder.completed_at for active in scene.listed] == [None]
+    scene.stay(BANK)
+    scene.stay(FIGMA)
+    assert scene.outcomes() == [Outcome.SAME_OCCASION]
+    scene.stay(BANK, RETURN_PAUSE_MS)
+    scene.stay(FIGMA)
+    assert scene.outcomes() == [Outcome.ALERT]
+
+
+def test_alla_prossima_volta_waits_for_the_next_occasion() -> None:
+    scene = figma()
+    scene.stay(FIGMA)
+    scene.reminders.snooze(scene.alert().id, Snooze.NEXT_TIME)
+    [answered] = [a for a in scene.saved(Alert) if a.answer]
+    assert (answered.answer, answered.snooze) == (Answer.SNOOZE, Snooze.NEXT_TIME)
+    assert scene.listed[0].reminder.snoozed_until is None
+    assert scene.reminders.deadline is None
     scene.stay(FIGMA, 3 * HOUR_MS)
-    assert len(scene.saved(Alert)) == 1
+    assert len(scene.rang()) == 1
+    scene.stay(BANK, RETURN_PAUSE_MS)
+    scene.stay(FIGMA)
+    assert scene.outcomes() == [Outcome.ALERT]
 
 
 @pytest.mark.parametrize(
     ("snooze", "minutes"), [(Snooze.QUARTER_HOUR, 15), (Snooze.HOUR, 60)], ids=["15 min", "1 ora"]
 )
-def test_a_snoozed_alert_comes_back_when_the_snooze_ends_in_a_true_context(
+def test_a_snoozed_alert_comes_back_when_the_snooze_ends_even_within_the_occasion(
     snooze: Snooze, minutes: int
 ) -> None:
-    scene = Scene()
-    scene.create("quando apro Figma")
-    scene.model.says(FIGMA, "quando apro Figma")
+    scene = figma()
     scene.stay(FIGMA)
     scene.reminders.snooze(scene.alert().id, snooze)
     end = scene.clock.now() + minutes * MINUTE_MS
     assert scene.saved(Reminder)[-1].snoozed_until == scene.reminders.deadline == end
+    assert scene.saved(Alert)[-1].snooze is snooze
     scene.wait(minutes * MINUTE_MS - 1)
     assert scene.view.visible == ()
     scene.wait(1)
-    assert scene.alert().shown_at == end
-    assert scene.saved(Reminder)[-1].snoozed_until is None
+    assert (scene.alert().shown_at, scene.alert().due_at) == (end, end)
+    scene.reminders.vanished(scene.alert().id)
+    scene.stay(BANK)
+    scene.stay(FIGMA)
+    assert scene.outcomes() == [Outcome.SAME_OCCASION]
 
 
 ROME_SUMMER = timezone(timedelta(hours=2))
-
-
-def milliseconds(moment: datetime) -> int:
-    return round(moment.timestamp() * 1000)
 
 
 @pytest.mark.parametrize(
@@ -454,26 +821,36 @@ def test_tomorrow_is_the_next_morning_at_eight(
 
 
 def test_a_snoozed_reminder_keeps_quiet_until_the_snooze_ends() -> None:
-    scene = Scene()
-    scene.create("quando apro Figma")
-    scene.model.says(FIGMA, "quando apro Figma")
+    scene = figma()
     scene.stay(FIGMA)
     scene.reminders.snooze(scene.alert().id, Snooze.HOUR)
-    scene.stay(BANK)
+    scene.stay(BANK, RETURN_PAUSE_MS)
     scene.stay(FIGMA)
     assert scene.outcomes() == [Outcome.SNOOZED]
 
 
 def test_a_snooze_that_ends_elsewhere_waits_for_a_true_context() -> None:
-    scene = Scene()
-    scene.create("quando apro Figma")
-    scene.model.says(FIGMA, "quando apro Figma")
+    scene = figma()
     scene.stay(FIGMA)
     scene.reminders.snooze(scene.alert().id, Snooze.QUARTER_HOUR)
     scene.stay(BANK, 20 * MINUTE_MS)
     assert scene.view.visible == ()
     scene.stay(FIGMA)
     assert scene.outcomes() == [Outcome.ALERT]
+    assert scene.alert().due_at == scene.saved(Evaluation)[-1].context_since
+
+
+def test_alla_prossima_volta_on_an_older_alert_lifts_a_snooze() -> None:
+    scene = figma()
+    scene.stay(FIGMA)
+    older = scene.alert()
+    scene.stay(BANK, RETURN_PAUSE_MS)
+    scene.stay(FIGMA)
+    [newer] = [alert for alert in scene.view.visible if alert.id != older.id]
+    scene.reminders.snooze(newer.id, Snooze.HOUR)
+    scene.reminders.snooze(older.id, Snooze.NEXT_TIME)
+    assert scene.saved(Reminder)[-1].snoozed_until is None
+    assert scene.reminders.deadline is None
 
 
 def test_not_here_silences_the_reminder_in_that_exact_context() -> None:
@@ -492,26 +869,29 @@ def test_not_here_silences_the_reminder_in_that_exact_context() -> None:
     assert scene.outcomes() == [Outcome.ALERT]
 
 
-def test_done_completes_the_reminder() -> None:
-    scene = Scene()
-    reminder = scene.create("quando apro Figma")
-    scene.model.says(FIGMA, "quando apro Figma")
+def test_not_here_on_a_reminder_with_only_a_time_rings_it_elsewhere() -> None:
+    scene = Scene(start=at(2, 14, 50))
+    scene.create("alle 15", "chiamare Mario")
     scene.stay(FIGMA)
-    scene.reminders.done(scene.alert().id)
-    assert [a.answer for a in scene.saved(Alert) if a.answer] == [Answer.DONE]
-    assert scene.saved(Reminder)[-1] == Reminder(
-        reminder.id, START, reminder.revision, completed_at=START + DEBOUNCE_MS
-    )
+    scene.until(at(2, 15))
+    scene.reminders.not_here(scene.alert().id)
+    scene.stay(BANK)
+    assert (scene.alert().context, scene.alert().due_at) == (BANK, at(2, 15))
+    scene.reminders.vanished(scene.alert().id)
+    scene.stay(ROSSI)
+    assert len(scene.rang()) == 2
 
 
-def test_useful_keeps_the_reminder_active() -> None:
-    scene = Scene()
-    scene.create("quando apro Figma")
-    scene.model.says(FIGMA, "quando apro Figma")
+def test_the_x_waits_for_the_next_occasion_and_is_not_unseen() -> None:
+    scene = figma()
     scene.stay(FIGMA)
-    scene.reminders.useful(scene.alert().id)
-    assert [a.answer for a in scene.saved(Alert) if a.answer] == [Answer.USEFUL]
-    scene.stay(BANK, HOUR_MS)
+    scene.reminders.close(scene.alert().id)
+    assert [a.answer for a in scene.saved(Alert) if a.answer] == [Answer.CLOSED]
+    assert (scene.view.visible, scene.view.unseen) == ((), ())
+    scene.stay(BANK)
+    scene.stay(FIGMA)
+    assert scene.outcomes() == [Outcome.SAME_OCCASION]
+    scene.stay(BANK, RETURN_PAUSE_MS)
     scene.stay(FIGMA)
     assert scene.outcomes() == [Outcome.ALERT]
 
@@ -523,7 +903,7 @@ def test_a_fourth_alert_waits_for_a_place_on_screen() -> None:
         scene.model.says(FIGMA, f"quando apro {name}")
     scene.stay(FIGMA)
     assert (len(scene.view.visible), scene.view.waiting, scene.view.dot) == (3, 1, True)
-    scene.reminders.useful(scene.view.visible[0].id)
+    scene.reminders.close(scene.view.visible[0].id)
     assert (len(scene.view.visible), scene.view.waiting) == (3, 0)
 
 
@@ -548,6 +928,92 @@ def test_an_unanswered_alert_waits_on_top_of_the_tray_list() -> None:
     assert scene.saved(Reminder)[-1].id == reminder.id
 
 
+def test_the_tray_list_keeps_one_unseen_alert_per_reminder() -> None:
+    scene = figma()
+    scene.stay(FIGMA)
+    first = scene.alert()
+    scene.reminders.vanished(first.id)
+    scene.stay(BANK, RETURN_PAUSE_MS)
+    scene.stay(FIGMA)
+    second = scene.alert()
+    assert not scene.view.unseen
+    scene.reminders.vanished(second.id)
+    assert [alert.id for alert in scene.view.unseen] == [second.id]
+
+
+# After a restart
+
+
+def test_reminders_go_on_from_what_was_saved() -> None:
+    revision = Revision(
+        7,
+        3,
+        1,
+        "quando apro Figma",
+        "esportare le icone",
+        "quando apro Figma",
+        english("quando apro Figma"),
+        BUILD,
+    )
+    before = START - HOUR_MS
+    unseen = Alert(5, 3, revision, 4, FIGMA, 4.0, before, before, before, before + 10_000)
+    saved = Snapshot(
+        reminders=(Reminder(3, START - DAY_MS, revision),),
+        silences=(Silence(3, BANK),),
+        cache=(CacheEntry(FIGMA, 7, BUILD, 4.0, before),),
+        last_alerts=((3, 5, before),),
+        unseen=(unseen,),
+        last_ids=LastIds(reminder=3, revision=7, evaluation=4, alert=5),
+    )
+    scene = Scene(saved=saved)
+    scene.wait(0)
+    assert scene.view.unseen == (unseen,)
+    assert scene.listed == (ActiveReminder(Reminder(3, START - DAY_MS, revision), silences=1),)
+    scene.stay(FIGMA)
+    # Occasions start afresh: staying on the thing across a restart may give one alert more.
+    assert (scene.model.calls, scene.outcomes()) == ([], [Outcome.ALERT])
+    assert scene.saved(Evaluation)[-1].id == 5
+    assert scene.alert().id == 6
+    assert not scene.view.unseen  # the new alert took the old card's place
+    scene.model.says(BANK, "quando apro Figma")
+    scene.stay(BANK, HOUR_MS)
+    assert scene.outcomes() == [Outcome.SILENCED]
+    created = scene.create("se sono sul sito della banca")
+    assert (created.id, created.revision.id) == (4, 8)
+
+
+def a_call_at_three() -> tuple[Reminder, Alert]:
+    """ "alle 15" written on Friday morning, and its alert at 15:00 in Figma, as saved."""
+    scene = Scene(start=at(2, 10))
+    reminder = scene.create("alle 15", "chiamare Mario")
+    scene.stay(FIGMA, at(2, 15) - at(2, 10))
+    alert = scene.alert()
+    scene.reminders.vanished(alert.id)
+    return reminder, scene.saved(Alert)[-1]
+
+
+def test_after_a_restart_the_instances_of_a_time_stay_exact() -> None:
+    reminder, alert = a_call_at_three()
+    saved = Snapshot(
+        reminders=(reminder,),
+        last_alerts=((reminder.id, alert.id, alert.created_at),),
+        unseen=(alert,),
+        last_ids=LastIds(reminder=1, revision=1, evaluation=1, alert=1),
+    )
+    scene = Scene(start=at(2, 16), saved=saved)
+    scene.stay(FIGMA)
+    assert scene.view.visible == ()
+    scene.reminders.not_here(alert.id)
+    scene.stay(BANK)
+    assert (scene.alert().id, scene.alert().context) == (2, BANK)
+
+
+def test_a_saved_snooze_still_ends_on_time() -> None:
+    snoozed = replace(Scene().create("quando apro Figma"), snoozed_until=START + HOUR_MS)
+    scene = Scene(saved=Snapshot(reminders=(snoozed,)))
+    assert scene.reminders.deadline == START + HOUR_MS
+
+
 # The tray list
 
 
@@ -564,7 +1030,7 @@ def test_the_tray_list_shows_the_active_reminders_newest_first() -> None:
     assert scene.listed == ()
 
 
-def test_the_tray_list_shows_a_snooze_until_the_alert_comes_back_and_the_silences() -> None:
+def test_the_tray_list_shows_a_snooze_and_the_silences() -> None:
     scene = Scene()
     reminder = scene.create("quando apro Figma")
     scene.model.says(FIGMA, "quando apro Figma")
@@ -576,7 +1042,6 @@ def test_the_tray_list_shows_a_snooze_until_the_alert_comes_back_and_the_silence
         0,
     )
     scene.wait(15 * MINUTE_MS)
-    assert scene.listed[0].reminder.snoozed_until is None
     scene.reminders.not_here(scene.alert().id)
     assert scene.listed[0].silences == 1
     scene.reminders.edit(reminder.id, "quando apro Figma", "esportare i loghi")

@@ -1,10 +1,11 @@
-"""What `core` knows, as plain data: the records that `store` keeps (ADR-0013, ADR-0014)."""
+"""What `core` knows, as plain data: the records that `store` keeps (ADR-0013, ADR-0014, ADR-0021)."""
 
 from dataclasses import dataclass
 from enum import StrEnum
 
 from jiffin.core.context import Context
 from jiffin.core.model import EngineBuild
+from jiffin.core.schedule import Schedule
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,12 +16,24 @@ class Revision:
     reminder_id: int
     number: int
     condition: str
-    """The "Quando" box, in Italian: "quando apro Figma"."""
+    """The "Quando" box, in Italian: "quando apro Figma dopo le 23"."""
     action: str
     """The "Ricordami di" box: "esportare le icone"."""
+    remainder: str
+    """The condition without its time words, which the engine rewrites (ADR-0020): the whole
+    condition when it has no time; empty for a reminder with only a time, never judged."""
     statement: str | None = None
-    """The condition as one English statement, once the engine has written it (ADR-0008)."""
+    """The remainder as one English statement, once the engine has written it (ADR-0008)."""
     statement_build: EngineBuild | None = None
+    schedule: Schedule | None = None
+    """The time of the condition in real dates; None without a time, or with one not understood."""
+    written_at: int | None = None
+    """When the condition was written: its time counts from then, and a new revision that keeps
+    the condition keeps it (ADR-0020). None in version 0.1, whose reminders have no time."""
+    perennial: bool = False
+    """ "Ogni volta": Fatto means "done this time", and the reminder waits for its next unit."""
+    created_at: int | None = None
+    """When the revision was made; unknown for the later revisions of version 0.1."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,7 +45,8 @@ class Reminder:
     revision: Revision
     completed_at: int | None = None
     snoozed_until: int | None = None
-    """Set by Rimanda. Once past, it lifts the once-an-hour rule until the next alert."""
+    """Set by a Rimanda with a time. Once past, the reminder may ring again within its unit, until
+    it rings (ADR-0021)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,12 +81,18 @@ class CacheEntry:
 
 
 class Outcome(StrEnum):
+    """What a judgement gave a reminder; they are checked in the order of ADR-0021."""
+
     ALERT = "alert"
     BELOW_THRESHOLD = "below_threshold"
+    OUTSIDE_TIME = "outside_time"
+    """True in the context, but out of its time."""
     SILENCED = "silenced"
     SNOOZED = "snoozed"
+    SAME_OCCASION = "same_occasion"
+    """It has rung already in its unit: the occasion, or the instance of its time."""
     HELD_BACK = "held_back"
-    """By the once-an-hour rule."""
+    """By the once-an-hour rule of version 0.1: only in its rows."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,13 +118,39 @@ class Evaluation:
     candidates: tuple[Candidate, ...]
     failed: bool = False
     """The engine failed: the evaluation holds no candidates, and it is not a "no alert"."""
+    return_pause: int | None = None
+    """The return pause it was judged with, in milliseconds; None in version 0.1."""
+
+
+@dataclass(frozen=True, slots=True)
+class Left:
+    """A stable context left the foreground: `store` writes when on its evaluations, so that the
+    harness can replay the occasions (ADR-0021)."""
+
+    context: Context
+    since: int
+    """When it came to the foreground: the `context_since` of its evaluations."""
+    until: int
 
 
 class Answer(StrEnum):
     DONE = "fatto"
     USEFUL = "utile"
+    """Version 0.1 only: "Alla prossima volta" took its place."""
     SNOOZE = "rimanda"
     NOT_HERE = "non_qui"
+    CLOSED = "chiuso"
+    """The X: the alert was seen, and gives no label (ADR-0014)."""
+
+
+class Snooze(StrEnum):
+    """Which Rimanda (ADR-0021)."""
+
+    NEXT_TIME = "next_time"
+    """Alla prossima volta: the reminder waits for its next unit."""
+    QUARTER_HOUR = "quarter_hour"
+    HOUR = "hour"
+    TOMORROW = "tomorrow"
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,10 +158,15 @@ class Alert:
     id: int
     reminder_id: int
     revision: Revision
-    evaluation_id: int
+    evaluation_id: int | None
+    """None for a reminder with only a time, which is never judged."""
     context: Context
-    d: float
+    d: float | None
+    """None for a reminder with only a time."""
     created_at: int
+    due_at: int
+    """Since when it was due: the arrival of its context, the start of its time or the end of its
+    snooze, whichever came last (ADR-0022). In version 0.1, the arrival of its context."""
     shown_at: int | None = None
     """When it appeared; None while it waits for a free place."""
     vanished_at: int | None = None
@@ -124,9 +175,13 @@ class Alert:
     """When the tray list showed it, after it vanished."""
     answer: Answer | None = None
     answered_at: int | None = None
+    snooze: Snooze | None = None
+    """Which Rimanda, with the answer `rimanda`; unknown in version 0.1."""
 
 
-Record = Reminder | ReminderDeleted | Silence | SilencesCleared | CacheEntry | Evaluation | Alert
+Record = (
+    Reminder | ReminderDeleted | Silence | SilencesCleared | CacheEntry | Evaluation | Left | Alert
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,8 +202,9 @@ class Snapshot:
     silences: tuple[Silence, ...] = ()
     cache: tuple[CacheEntry, ...] = ()
     """The entries of the current revisions."""
-    last_alerts: tuple[tuple[int, int], ...] = ()
-    """For each reminder that has alerted, its id and when its last alert was made."""
+    last_alerts: tuple[tuple[int, int, int], ...] = ()
+    """For each reminder that has rung, its id, then the id and the time of its last alert not
+    answered "Non qui": the one that counts in its unit (ADR-0021)."""
     unseen: tuple[Alert, ...] = ()
-    """Alerts shown and never answered, newest first."""
+    """Alerts shown and never answered, the last of their reminder, newest first."""
     last_ids: LastIds = LastIds()

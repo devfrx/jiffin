@@ -4,7 +4,6 @@ from itertools import islice
 import pytest
 
 from jiffin.core.schedule import (
-    EVERY_DAY,
     EveryNWeeks,
     Frequency,
     Instance,
@@ -21,7 +20,6 @@ from jiffin.core.schedule import (
     frequency_period,
     instances,
     jiffin_day,
-    next_edge,
 )
 
 
@@ -141,36 +139,6 @@ def test_29_february_is_the_28th_in_other_years() -> None:
     assert days(leap_day, 2) == [date(2027, 2, 28), date(2028, 2, 29)]
 
 
-def test_the_next_edge_is_a_start_or_the_end_of_the_instance_under_way() -> None:
-    evening = Schedule(hours=Slot(time(18), time(23)))
-    assert next_edge(evening, FRIDAY) == at(2, 18)
-    assert next_edge(evening, at(2, 18)) == at(2, 23)
-    assert next_edge(evening, at(2, 23)) == at(3, 18)
-
-
-def test_a_moment_is_an_edge_only_after_it() -> None:
-    three = Schedule(hours=Moment(time(15)))
-    assert next_edge(three, FRIDAY) == at(2, 15)
-    assert next_edge(three, at(2, 15)) == at(3, 15)
-
-
-def test_a_new_period_of_a_frequency_is_an_edge() -> None:
-    weekly = Schedule(frequency=Frequency(1, Unit.WEEK, date(2026, 10, 2)))
-    assert next_edge(weekly, FRIDAY) == at(3, 4)
-    evenings = Schedule(EVERY_DAY, Slot(time(18), time(23)), None, weekly.frequency)
-    assert next_edge(evenings, at(8, 23, 30)) == at(9, 4)
-
-
-def test_there_is_no_edge_after_the_last_instance() -> None:
-    once = Schedule(OnDate(date(2026, 10, 2)), Moment(time(9)))
-    ended = Schedule(
-        period=Period(date(2026, 10, 1), date(2026, 10, 2)),
-        frequency=Frequency(1, Unit.WEEK, date(2026, 10, 1)),
-    )
-    assert next_edge(once, FRIDAY) is None
-    assert next_edge(ended, at(3, 4)) is None
-
-
 @pytest.mark.parametrize(
     ("frequency", "day", "period"),
     [
@@ -208,4 +176,4 @@ def test_only_the_wall_clock_of_a_time_counts() -> None:
     zone = timezone(timedelta(hours=2))
     evening = Schedule(hours=Slot(time(18), time(23)))
     assert first(evening, 1, since=FRIDAY.replace(tzinfo=zone)) == first(evening, 1)
-    assert next_edge(evening, FRIDAY.replace(tzinfo=UTC)) == at(2, 18)
+    assert first(evening, 1, since=FRIDAY.replace(tzinfo=UTC)) == first(evening, 1)

@@ -3,6 +3,7 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import closing
 from dataclasses import replace
+from datetime import date, time
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,7 @@ from jiffin.core.records import (
     Candidate,
     Evaluation,
     LastIds,
+    Left,
     Outcome,
     Reminder,
     ReminderDeleted,
@@ -23,7 +25,9 @@ from jiffin.core.records import (
     Silence,
     SilencesCleared,
     Snapshot,
+    Snooze,
 )
+from jiffin.core.schedule import Moment, OnDate, Period, Schedule, Slot, Weekdays
 from jiffin.store.store import RETENTION_MS, Store
 
 NOW = 1_790_000_000_000
@@ -35,18 +39,35 @@ BANK = Context("vivaldi.exe", "Banca Rossi", "bancarossi.it")
 
 def reminder(reminder_id: int, condition: str = "quando apro Figma") -> Reminder:
     revision = Revision(
-        reminder_id * 10, reminder_id, 1, condition, "esportare le icone", "The user.", BUILD
+        reminder_id * 10,
+        reminder_id,
+        1,
+        condition,
+        "esportare le icone",
+        condition,
+        "The user.",
+        BUILD,
+        written_at=NOW,
+        created_at=NOW,
     )
     return Reminder(reminder_id, NOW, revision)
 
 
 def evaluation(number: int, at: int, context: Context, *judged: Reminder) -> Evaluation:
     candidates = tuple(Candidate(r.revision.id, 2.5, False, Outcome.ALERT) for r in judged)
-    return Evaluation(number, at, context, at - 20_000, 0.97, BUILD, candidates)
+    return Evaluation(
+        number, at, context, at - 20_000, 0.97, BUILD, candidates, return_pause=120_000
+    )
 
 
 def alert(number: int, of: Reminder, evaluation: Evaluation) -> Alert:
-    return Alert(number, of.id, of.revision, evaluation.id, evaluation.context, 2.5, evaluation.at)
+    context, since = evaluation.context, evaluation.context_since
+    return Alert(number, of.id, of.revision, evaluation.id, context, 2.5, evaluation.at, since)
+
+
+def on_time(number: int, of: Reminder, at: int, context: Context = FIGMA) -> Alert:
+    """An alert of a reminder with only a time: no evaluation, no d."""
+    return Alert(number, of.id, of.revision, None, context, None, at, at - 1_000)
 
 
 @pytest.fixture
@@ -80,7 +101,7 @@ def test_what_core_saved_comes_back(store: Store) -> None:
         reminders=(figma, snoozed),
         silences=(Silence(2, FIGMA), Silence(2, BANK)),
         cache=(entry,),
-        last_alerts=((figma.id, NOW),),
+        last_alerts=((figma.id, vanished.id, NOW),),
         unseen=(vanished,),
         last_ids=LastIds(reminder=2, revision=20, evaluation=1, alert=1),
     )
@@ -96,24 +117,92 @@ def test_a_reminder_comes_back_with_its_current_revision_and_cache(store: Store)
     assert snapshot.cache == ()
 
 
-def test_only_alerts_shown_and_unanswered_of_active_reminders_are_unseen(store: Store) -> None:
-    active, done = reminder(1), replace(reminder(2), completed_at=NOW)
-    judged = evaluation(1, NOW, FIGMA, active, done)
-    shown = replace(alert(1, active, judged), shown_at=NOW)
-    later = replace(alert(4, active, judged), shown_at=NOW, vanished_at=NOW + 5)
+def test_the_unseen_are_the_last_alerts_of_active_reminders_shown_and_unanswered(
+    store: Store,
+) -> None:
+    figma, bank, call = reminder(1), reminder(2, "se sono sul sito della banca"), reminder(3, "")
+    done = replace(reminder(4), completed_at=NOW)
+    judged = evaluation(1, NOW, FIGMA, figma, bank, done)
     store.save(
         [
-            active,
+            figma,
+            bank,
+            call,
             done,
             judged,
-            shown,
-            later,
-            alert(2, active, judged),
-            replace(alert(3, active, judged), shown_at=NOW, answer=Answer.USEFUL, answered_at=NOW),
-            replace(alert(5, done, judged), shown_at=NOW),
+            replace(alert(1, figma, judged), shown_at=NOW, vanished_at=NOW + 10_000),
+            replace(alert(2, figma, judged), shown_at=NOW + 200_000),
+            replace(alert(3, bank, judged), shown_at=NOW, vanished_at=NOW + 10_000),
+            replace(alert(4, bank, judged), shown_at=NOW, answer=Answer.DONE, answered_at=NOW),
+            replace(on_time(5, call, NOW + 300_000), shown_at=NOW + 300_000),
+            alert(6, figma, judged),  # still waiting for a place on screen
+            replace(alert(7, done, judged), shown_at=NOW),
         ]
     )
-    assert [a.id for a in store.load().unseen] == [4, 1]
+    assert [a.id for a in store.load().unseen] == [5]
+    store.save([replace(alert(6, figma, judged), shown_at=NOW + 400_000)])
+    assert [a.id for a in store.load().unseen] == [6, 5]
+
+
+def test_the_alert_that_counts_is_the_last_not_answered_not_here(store: Store) -> None:
+    figma = reminder(1)
+    judged = evaluation(1, NOW, FIGMA, figma)
+    counted = replace(alert(1, figma, judged), shown_at=NOW, answer=Answer.DONE)
+    taken_back = replace(alert(2, figma, judged), created_at=NOW + 5, answer=Answer.NOT_HERE)
+    store.save([figma, judged, counted, taken_back])
+    assert store.load().last_alerts == ((figma.id, 1, NOW),)
+
+
+def test_a_revision_keeps_its_time_and_ogni_volta(store: Store) -> None:
+    figma = reminder(1, "quando apro Figma la sera fino a domenica")
+    timed = replace(
+        figma.revision,
+        remainder="quando apro Figma",
+        schedule=Schedule(
+            Weekdays(frozenset({0, 4})),
+            Slot(time(18), time(23)),
+            Period(date(2026, 10, 2), date(2026, 10, 4)),
+        ),
+        perennial=True,
+    )
+    call = reminder(2, "domani alle 15")
+    only_time = replace(
+        call.revision,
+        remainder="",
+        statement=None,
+        statement_build=None,
+        schedule=Schedule(OnDate(date(2026, 10, 3)), Moment(time(15))),
+    )
+    saved = [replace(figma, revision=timed), replace(call, revision=only_time)]
+    store.save(saved)
+    assert store.load().reminders == tuple(saved)
+    assert list(store.log().revisions.values()) == [timed, only_time]
+
+
+def test_a_context_that_left_ends_its_stretch_on_its_evaluations(store: Store, path: Path) -> None:
+    figma = reminder(1)
+    first = evaluation(1, NOW, FIGMA, figma)
+    again = replace(evaluation(2, NOW + 900_000, FIGMA, figma), context_since=first.context_since)
+    bank = evaluation(3, NOW + 2_000_000, BANK, figma)
+    store.save([figma, first, again, bank, Left(FIGMA, first.context_since, NOW + 1_000_000)])
+    assert count(path, "evaluation", f"context_until = {NOW + 1_000_000}") == 2
+    assert count(path, "evaluation", "context_until IS NULL") == 1
+    assert store.log().left == (Left(FIGMA, first.context_since, NOW + 1_000_000),)
+
+
+def test_alerts_without_a_judgement_and_the_kind_of_a_rimanda_are_kept(store: Store) -> None:
+    figma, call = reminder(1), reminder(2, "alle 15")
+    judged = evaluation(1, NOW, FIGMA, figma)
+    later = replace(
+        alert(1, figma, judged),
+        shown_at=NOW,
+        answer=Answer.SNOOZE,
+        answered_at=NOW + 3_000,
+        snooze=Snooze.NEXT_TIME,
+    )
+    closed = replace(on_time(2, call, NOW + 60_000), shown_at=NOW + 60_000, answer=Answer.CLOSED)
+    store.save([figma, call, judged, later, closed])
+    assert store.log().alerts == (later, closed)
 
 
 def test_silences_can_be_cleared(store: Store) -> None:
@@ -231,10 +320,15 @@ def test_logs_hold_ids_and_numbers_only(store: Store, caplog: pytest.LogCaptureF
 
 def test_the_log_holds_every_evaluation_alert_and_revision(store: Store) -> None:
     figma, bank = reminder(1), reminder(2, "se sono sul sito della banca")
-    revised = Revision(11, 1, 2, "quando disegno icone", "esportarle", "The user draws.", BUILD)
+    revised = Revision(
+        11, 1, 2, "quando disegno icone", "esportarle", "quando disegno icone", "The user draws."
+    )
+    revised = replace(revised, statement_build=BUILD)
     edited = replace(figma, revision=revised)
     first = evaluation(1, NOW, FIGMA, figma, bank)
-    failed = Evaluation(2, NOW + 60_000, BANK, NOW + 40_000, 0.97, None, (), failed=True)
+    failed = Evaluation(
+        2, NOW + 60_000, BANK, NOW + 40_000, 0.97, None, (), failed=True, return_pause=120_000
+    )
     later = evaluation(3, NOW + 120_000, FIGMA, edited)
     answered = replace(
         alert(1, figma, first), shown_at=NOW, answer=Answer.USEFUL, answered_at=NOW + 5_000
@@ -246,6 +340,7 @@ def test_the_log_holds_every_evaluation_alert_and_revision(store: Store) -> None
     assert log.evaluations == (first, failed, later)
     assert log.alerts == (answered,)
     assert log.silences == (Silence(2, FIGMA),)
+    assert log.left == ()
 
 
 def test_the_log_leaves_out_alerts_whose_evaluation_expired(store: Store) -> None:

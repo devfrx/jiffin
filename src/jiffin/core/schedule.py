@@ -185,23 +185,6 @@ def instances(schedule: Schedule, since: datetime) -> Iterator[Instance]:
             yield instance
 
 
-def next_edge(schedule: Schedule, after: datetime) -> datetime | None:
-    """The first start or end of an instance after `after`, or the start of the next period of
-    the frequency: when a reminder may start or stop ringing (ADR-0021). None after the last."""
-    after = _wall(after)
-    edges = []
-    for instance in instances(schedule, after):
-        edge = next((edge for edge in (instance.start, instance.end) if edge > after), None)
-        if edge is not None:
-            edges.append(edge)
-            break
-    if schedule.frequency is not None:
-        start = frequency_period(schedule.frequency, jiffin_day(after)).last + ONE_DAY
-        if schedule.period is None or start <= schedule.period.last:
-            edges.append(_on_day(start, DAY_STARTS_AT))
-    return min(edges, default=None)
-
-
 def frequency_period(frequency: Frequency, day: date) -> Period:
     """The period of the frequency that holds the Jiffin day `day`: its instance (ADR-0021)."""
     if frequency.unit in (Unit.DAY, Unit.WEEK):

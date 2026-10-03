@@ -9,10 +9,12 @@ What changes is one thing at a time: the threshold, the reminders or the engine.
 own threshold with its own scores, a day gives its alerts back.
 
 What the log does not keep is inferred from what it does:
-- a context seen twice in a row was left in between: a moment with no context separates them;
-- a reminder's new text starts when the context of its first evaluation came to the foreground;
-- how long a snooze lasted, from when the reminder was last judged snoozed and first judged
-  free after it.
+- when a context left, from version 0.2 on; before, a context seen twice in a row was left in
+  between: a moment with no context separates them;
+- a reminder's new text starts when it was made, from version 0.2 on; before, when the context
+  of its first evaluation came to the foreground;
+- which Rimanda answered an alert, from version 0.2 on; before, from when the reminder was last
+  judged snoozed and first judged free after it.
 """
 
 import heapq
@@ -30,20 +32,15 @@ from jiffin.core.records import (
     Answer,
     Evaluation,
     LastIds,
+    Left,
     Outcome,
     Record,
     Reminder,
     Revision,
     Snapshot,
-)
-from jiffin.core.reminders import (
-    HOUR_MS,
-    MINUTE_MS,
-    THRESHOLD,
-    TOMORROW_AT,
-    Reminders,
     Snooze,
 )
+from jiffin.core.reminders import HOUR_MS, MINUTE_MS, THRESHOLD, TOMORROW_AT, Reminders
 from jiffin.core.schedule import jiffin_day
 from jiffin.harness.day import Day
 from jiffin.harness.errors import HarnessError
@@ -71,7 +68,7 @@ class Recorded:
         self._clock = clock
         self._failed = {evaluation.at for evaluation in day.evaluations if evaluation.failed}
         self._statements = {
-            revision.condition: revision.statement
+            revision.remainder: revision.statement
             for revision in log.revisions.values()
             if revision.statement is not None
         }
@@ -87,7 +84,7 @@ class Recorded:
     def rewrite(self, condition: str) -> str:
         statement = self._statements.get(condition)
         if statement is None:
-            raise ModelError("the log holds no statement for that condition")
+            raise ModelError("the log holds no statement for that remainder")
         return statement
 
     def judge(self, context: Context, statements: Mapping[int, str]) -> dict[int, float]:
@@ -170,20 +167,25 @@ def passive(timeline: Timeline, alert: Alert) -> None:
         timeline.at(alert.shown_at + VANISH_MS, lambda core: core.vanished(alert.id))
 
 
-def observations(evaluations: Iterable[Evaluation]) -> list[Observation]:
-    """Each evaluated context when it came to the foreground, once."""
+def observations(evaluations: Iterable[Evaluation], left: Iterable[Left] = ()) -> list[Observation]:
+    """Each evaluated context when it came to the foreground, once, and when it left, where the
+    log says: what came in between was never stable, so it counts as no context."""
+    until = {(stretch.since, stretch.context): stretch.until for stretch in left}
     found: list[Observation] = []
     seen: set[tuple[int, Context]] = set()
     previous: Context | None = None
     for evaluation in sorted(evaluations, key=lambda e: (e.context_since, e.at)):
         mark = (evaluation.context_since, evaluation.context)
-        if mark in seen:  # judged again while it stayed: a snooze ended there
+        if mark in seen:  # judged again while it stayed: a snooze or a time ended there
             continue
         seen.add(mark)
         if evaluation.context == previous:
             found.append(Observation(evaluation.context_since - 1, None))
         found.append(Observation(evaluation.context_since, evaluation.context))
         previous = evaluation.context
+        if mark in until:
+            found.append(Observation(until[mark], None))
+            previous = None
     return found
 
 
@@ -226,7 +228,7 @@ class Replay:
         self._rewrite = rewrite
         self._extra = extra
         self._answers = answers
-        self._seen = observations(day.evaluations)
+        self._seen = observations(day.evaluations, log.left)
         self._begin = self._seen[0].at - 1
         self._until = max(evaluation.at for evaluation in day.evaluations)
         self._zone = SystemClock().local(self._begin).tzinfo or UTC
@@ -299,7 +301,8 @@ class Replay:
                 revision = self._day.revisions[candidate.revision_id]
                 known = any(revision.id == earlier.id for _, earlier in chain)
                 if revision.reminder_id == reminder.id and not known:
-                    chain.append((evaluation.context_since, revision))
+                    made = revision.created_at
+                    chain.append((evaluation.context_since if made is None else made, revision))
         if not chain:
             chain = [(self._begin, reminder.revision)]
         if self._rewrite:
@@ -323,12 +326,15 @@ class Replay:
             return None
         return next((at for at, outcome in judged if outcome is not Outcome.SNOOZED), None)
 
-    def _last_alerts(self) -> tuple[tuple[int, int], ...]:
-        last: dict[int, int] = {}
+    def _last_alerts(self) -> tuple[tuple[int, int, int], ...]:
+        """For each reminder, its last alert before the day that counts: not answered Non qui."""
+        last: dict[int, Alert] = {}
         for alert in self._log.alerts:
-            if alert.created_at < self._begin:
-                last[alert.reminder_id] = max(last.get(alert.reminder_id, 0), alert.created_at)
-        return tuple(sorted(last.items()))
+            if alert.created_at < self._begin and alert.answer is not Answer.NOT_HERE:
+                kept = last.get(alert.reminder_id)
+                if kept is None or alert.created_at >= kept.created_at:
+                    last[alert.reminder_id] = alert
+        return tuple((rid, alert.id, alert.created_at) for rid, alert in sorted(last.items()))
 
     # What happens during the day
 
@@ -350,13 +356,15 @@ class Replay:
 
     def _create(self, log_id: int, revision: Revision) -> Command:
         def create(core: Reminders) -> None:
-            self._ids[log_id] = core.create(revision.condition, revision.action).id
+            made = core.create(revision.condition, revision.action, revision.perennial)
+            self._ids[log_id] = made.id
 
         return create
 
     def _edit(self, log_id: int, revision: Revision) -> Command:
         def edit(core: Reminders) -> None:
-            core.edit(self._ids.get(log_id, log_id), revision.condition, revision.action)
+            reminder_id = self._ids.get(log_id, log_id)
+            core.edit(reminder_id, revision.condition, revision.action, revision.perennial)
 
         return edit
 
@@ -383,19 +391,21 @@ class Replay:
             match original.answer:
                 case Answer.DONE:
                     core.done(alert_id)
-                case Answer.USEFUL:
-                    core.useful(alert_id)
+                case Answer.USEFUL:  # Alla prossima volta took its place (ADR-0021)
+                    core.snooze(alert_id, Snooze.NEXT_TIME)
                 case Answer.NOT_HERE:
                     core.not_here(alert_id)
                 case Answer.SNOOZE:
-                    core.snooze(alert_id, self._snooze(original))
+                    core.snooze(alert_id, original.snooze or self._snooze(original))
+                case Answer.CLOSED:
+                    core.close(alert_id)
                 case None:
                     pass
 
         return reply
 
     def _snooze(self, original: Alert) -> Snooze:
-        """The snooze whose end falls after the reminder's last judgement as snoozed and by its
+        """For version 0.1, which did not record it: the snooze whose end falls after the reminder's last judgement as snoozed and by its
         first judgement as free. A reminder the day never judged again stays snoozed until
         tomorrow, so the replay does not judge it where the day did not."""
         answered = original.answered_at

@@ -15,8 +15,19 @@ BUILD = EngineBuild(1, "0.1.0", "b11081", "79de5cb8", 1, 2)
 FIGMA = Context("figma.exe", "Icone - Figma", None)
 BANK = Context("vivaldi.exe", "Banca Rossi", "bancarossi.it")
 MAIL = Context("outlook.exe", "Posta in arrivo", None)
-ICONS = Revision(10, 1, 1, "quando apro Figma", "esportare le icone", "The user has Figma.", BUILD)
-RENT = Revision(20, 2, 1, "se sono sul sito della banca", "pagare l'affitto", "The bank.", BUILD)
+ICONS = Revision(
+    10, 1, 1, "quando apro Figma", "esportare le icone", "quando apro Figma", "Figma.", BUILD
+)
+RENT = Revision(
+    20,
+    2,
+    1,
+    "se sono sul sito della banca",
+    "pagare l'affitto",
+    "se sono sul sito della banca",
+    "The bank.",
+    BUILD,
+)
 REVISIONS = {10: ICONS, 20: RENT}
 
 
@@ -46,10 +57,10 @@ E5 = judged(
 YESTERDAY = judged(
     0, T0 - 86_400_000, MAIL, (0.1, Outcome.BELOW_THRESHOLD), (0.1, Outcome.BELOW_THRESHOLD)
 )
-A1 = Alert(1, 1, ICONS, 1, FIGMA, 2.5, E1.at, shown_at=E1.at, answer=Answer.USEFUL)
-A2 = Alert(2, 2, RENT, 2, BANK, 0.99, E2.at, shown_at=E2.at + 5_000)
-A3 = Alert(3, 1, ICONS, 3, MAIL, 0.98, E3.at, shown_at=E3.at)
-LOG = Log((), REVISIONS, (YESTERDAY, E1, E2, E3, E4, E5), (A1, A2, A3), ())
+A1 = Alert(1, 1, ICONS, 1, FIGMA, 2.5, E1.at, T0, shown_at=E1.at, answer=Answer.USEFUL)
+A2 = Alert(2, 2, RENT, 2, BANK, 0.99, E2.at, E2.context_since, shown_at=E2.at + 5_000)
+A3 = Alert(3, 1, ICONS, 3, MAIL, 0.98, E3.at, E3.context_since, shown_at=E3.at)
+LOG = Log((), REVISIONS, (YESTERDAY, E1, E2, E3, E4, E5), (A1, A2, A3), (), ())
 LABELS = {
     days.key(FIGMA, ICONS.condition): True,
     days.key(FIGMA, RENT.condition): True,  # never shown: below the threshold
@@ -74,7 +85,7 @@ def test_a_day_is_a_local_day_the_last_one_by_default() -> None:
 
 def test_a_log_with_no_evaluation_has_no_day() -> None:
     with pytest.raises(HarnessError, match="no evaluation"):
-        days.select(Log((), {}, (), (), ()), None, clock())
+        days.select(Log((), {}, (), (), (), ()), None, clock())
 
 
 def test_pairs_are_every_judged_context_and_reminder_once() -> None:
@@ -119,7 +130,7 @@ def test_the_summary_counts_evaluations_delays_misses_and_false_alarms() -> None
 
 def test_a_missed_pair_says_how_close_it_came() -> None:
     held = judged(6, T0 + 1_500_000, MAIL, (1.5, Outcome.HELD_BACK), (0.3, Outcome.BELOW_THRESHOLD))
-    log = Log((), REVISIONS, (E1, held), (A1,), ())
+    log = Log((), REVISIONS, (E1, held), (A1,), (), ())
     labels = {days.key(MAIL, ICONS.condition): True}
     (missed,) = days.missed(days.select(log, None, clock()), labels)
     assert (missed.pair.context, missed.why, missed.d) == (MAIL, "held back", 1.5)

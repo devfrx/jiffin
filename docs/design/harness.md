@@ -117,8 +117,8 @@ The summary, numbers only, compares the day with the thresholds of
 
 | Measure | From |
 |---|---|
-| Delay, p50 and p95 | each alert on screen: when it appeared, minus when its context came to the foreground |
-| Missed reminders | relevant pairs never on screen that day, over all relevant pairs; each with why, from the candidate that came closest: waited for a place, held back by the once-an-hour rule, snoozed, silenced, below the threshold |
+| Delay, p50 and p95 | each alert on screen: when it appeared, minus when it became due (in 0.1, when its context came to the foreground) |
+| Missed reminders | relevant pairs never on screen that day, over all relevant pairs; each with why, from the candidate that came closest: waited for a place, same occasion, held back by the once-an-hour rule of 0.1, snoozed, silenced, out of time, below the threshold |
 | False alarms | alerts on screen whose pair is labelled not relevant |
 | Evaluations per hour | the evaluations, over the time from the first context evaluated to the last evaluation; of them, those that asked the engine and those that failed |
 | VRAM, RAM, CPU, battery | the day's `monitor` rows, when there are any: VRAM and the RAM of app and engine at their peak, their CPU on average |
@@ -160,21 +160,24 @@ sequenceDiagram
 ```
 
 - **The contexts**: every evaluation gives back its context at the time it
-  came to the foreground. A context evaluated twice in a row was left in
-  between, so a moment with no context separates the two; a context judged
-  again while it stayed (a snooze that ended) comes back once.
+  came to the foreground, and no context from when it left, where the log
+  says (from 0.2 on). In a log of 0.1, a context evaluated twice in a row was
+  left in between, so a moment with no context separates the two. A context
+  judged again while it stayed (a snooze or a time that ended) comes back once.
 - **The scores**: without an engine, d comes from the log by context and
   statement, and an evaluation the log recorded as failed fails again. A pair
   the day never judged has no score, so its evaluation fails, as with the
   engine down: the summary counts them.
 - **The owner**: an alert the log also had, by reminder, context and time, gets
-  the same answer after as long on screen; any other alert goes unanswered. A
-  snooze's length is not in the log: it is the one of 15 minutes, an hour or
-  "domani" whose end falls between the reminder's last judgement as snoozed and
-  its first as free.
+  the same answer after as long on screen; any other alert goes unanswered.
+  Utile, in a log of 0.1, is replayed as Alla prossima volta. The kind of a
+  Rimanda is in the log from 0.2 on; in 0.1 it is the one of 15 minutes, an
+  hour or "domani" whose end falls between the reminder's last judgement as
+  snoozed and its first as free.
 - **The reminders**: those created before the day start as they were; the
-  others are created, edited and completed when the log says, an edit when the
-  context of the new text's first evaluation came to the foreground.
+  others are created, edited and completed when the log says, an edit when it
+  was made (in 0.1, when the context of the new text's first evaluation came to
+  the foreground).
 - **Labels**: the day's labels serve every replay, since they are keyed by
   texts. The invented reminders need theirs: `label --reminders 80` adds their
   pairs with the day's contexts to the file for Claude.

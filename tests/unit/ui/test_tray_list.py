@@ -15,8 +15,8 @@ from pytestqt.qtbot import QtBot
 from jiffin.core.alerts import AlertsView
 from jiffin.core.clock import SimulatedClock
 from jiffin.core.context import Context
-from jiffin.core.records import Alert, Reminder, Revision
-from jiffin.core.reminders import HOUR_MS, MINUTE_MS, ActiveReminder, RemindersView, Snooze
+from jiffin.core.records import Alert, Reminder, Revision, Snooze
+from jiffin.core.reminders import HOUR_MS, MINUTE_MS, ActiveReminder, RemindersView
 from jiffin.ui import tray_list, win32
 from jiffin.ui.first_run import FirstRun, ModelFile, ModelState
 from jiffin.ui.glass import Glass
@@ -82,12 +82,13 @@ def active(
     silences: int = 0,
     snoozed_until: int | None = None,
 ) -> ActiveReminder:
-    revision = Revision(reminder_id, reminder_id, 1, condition, action)
+    revision = Revision(reminder_id, reminder_id, 1, condition, action, condition)
     return ActiveReminder(Reminder(reminder_id, START, revision, None, snoozed_until), silences)
 
 
 def unseen(alert_id: int, action: str, shown_at: int, seen_at: int | None = None) -> Alert:
-    revision = Revision(alert_id, alert_id, 1, "quando apro il gestionale delle fatture", action)
+    condition = "quando apro il gestionale delle fatture"
+    revision = Revision(alert_id, alert_id, 1, condition, action, condition)
     return Alert(
         alert_id,
         alert_id,
@@ -95,6 +96,7 @@ def unseen(alert_id: int, action: str, shown_at: int, seen_at: int | None = None
         alert_id,
         FIGMA,
         2.0,
+        shown_at,
         shown_at,
         shown_at=shown_at,
         vanished_at=shown_at + 10_000,

@@ -343,7 +343,7 @@ def _invented_pairs(day: days.Day, level: int) -> dict[str, days.Pair]:
     contexts = dict.fromkeys(e.context for e in day.evaluations if not e.failed)
     pairs = {}
     for number, (condition, action) in enumerate(fixtures.reminders(_extra(level, real)), 1):
-        revision = Revision(-number, -number, 1, condition, action)
+        revision = Revision(-number, -number, 1, condition, action, condition)
         for context in contexts:
             pair = days.Pair(context, revision)
             pairs[pair.key] = pair

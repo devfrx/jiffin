@@ -35,8 +35,13 @@ erDiagram
         int number "unique per reminder"
         text condition "Quando"
         text action "Ricordami di"
-        text statement "null until the engine answers"
+        text remainder "the condition without its time"
+        text statement "null until the engine answers, or for only a time"
         int statement_build FK
+        text schedule "JSON, null without a time"
+        int written_at "when its time counts from"
+        int perennial "Ogni volta"
+        int created_at "null for later revisions of 0.1"
     }
     context {
         int id PK
@@ -61,25 +66,29 @@ erDiagram
         text outcome "ok or error"
         real threshold
         int engine_build FK "null when nothing was judged"
+        int context_until "when the context left; null while in front"
+        int return_pause "ms; null in 0.1"
     }
     candidate {
         int evaluation PK "cascade"
         int revision PK "cascade"
         real d
         int from_cache
-        text outcome
+        text outcome "held_back only in 0.1 rows"
     }
     alert {
         int id PK
         int revision FK "cascade"
-        int evaluation FK "set null when it expires"
+        int evaluation FK "null for only a time, or when it expires"
         int context FK
-        real d
+        real d "null for only a time"
         int created_at
+        int due_at
         int shown_at
         int vanished_at
         int seen_at
-        text answer "fatto, utile, rimanda, non_qui"
+        text answer "fatto, rimanda, non_qui, chiuso; utile in 0.1"
+        text snooze "which Rimanda"
         int answered_at
     }
     silence {
@@ -98,6 +107,24 @@ erDiagram
         text value "JSON"
     }
 ```
+
+## Version 0.2
+
+Migration 0002 ([ADR-0021](../adr/0021-one-alert-per-unit.md)) adds the
+columns of times, "Ogni volta", the stretches in front and the return pause,
+and rebuilds `candidate` and `alert` for their new outcomes, answers and the
+alerts without a judgement; no table refers to them, so foreign keys stay on.
+A revision of 0.1 has no time, and its remainder is its condition; an alert of
+0.1 was due when its context came. `schedule` is `store/schedules.py`'s JSON,
+the shape of the time cases. `written_at` is not in ADR-0021's table: it keeps
+when a condition was written across a Modifica that does not change it, as
+[ADR-0020](../adr/0020-read-the-time-in-core.md) wants.
+
+- **What loads**: the last alert of each reminder not answered "Non qui", the
+  one that counts in its unit; the unseen alerts are the shown, unanswered
+  alerts that are the last of their active reminder.
+- **The harness's log** keeps the alerts of reminders with only a time, which
+  have no evaluation, and when each evaluated context left.
 
 ## Keeping and deleting
 
