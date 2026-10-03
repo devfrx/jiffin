@@ -43,7 +43,7 @@ class Places:
 
     def keep(self, name: str, point: QPoint) -> None:
         self._kept[name] = point
-        self._keep({name: (point.x(), point.y()) for name, point in self._kept.items()})
+        self._keep({each: (place.x(), place.y()) for each, place in self._kept.items()})
 
 
 class Place:
@@ -58,7 +58,8 @@ class Place:
         """Where Jiffin last put the window: None until it first opens."""
         self._centred = False
         """Jiffin put it at the centre, not where the user left it."""
-        self._settle = QTimer(singleShot=True, interval=KEEP_AFTER_MS)
+        # The window's: it never fires for a window that is gone.
+        self._settle = QTimer(window, singleShot=True, interval=KEEP_AFTER_MS)
         self._settle.timeout.connect(self._keep_if_moved)
         window.xChanged.connect(self._moved)
         window.yChanged.connect(self._moved)
