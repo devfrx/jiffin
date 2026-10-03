@@ -41,7 +41,7 @@ stateDiagram-v2
     [*] --> Hidden
     Hidden --> Open : a download or a problem, unless the user closed it during this run
     Hidden --> Open : Dettagli, in the tray list
-    Open --> Hidden : Chiudi or Esc: closed for this run
+    Open --> Hidden : Chiudi, the X or Esc: closed for this run
     Open --> Hidden : Inizia, once ready
 ```
 
@@ -77,9 +77,12 @@ stateDiagram-v2
 - **Ready**: "Jiffin è pronto", how to write a reminder, and where the tray
   icon is: Windows 11 puts a new icon in the ^ overflow, so the window says to
   drag it onto the taskbar. Inizia closes it.
-- It is a card like the creation window, centred and with the focus, without
-  Windows' title bar or a taskbar button; it stays centred as steps and lines
-  come and go.
+- It is a card like the creation window, with the focus, without Windows'
+  title bar or a taskbar button, and with the X on its title's line
+  ([ADR-0023](../adr/0023-window-frame.md)). It drags from any point no
+  control takes, and opens at the centre or where the user left it, also
+  after a restart: a centred window stays centred as steps and lines come and
+  go, a moved one keeps its top left corner.
 
 ## In the tray list
 

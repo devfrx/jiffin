@@ -9,9 +9,11 @@ clock is simulated.
 import hashlib
 import sys
 from collections.abc import Callable, Iterator
+from contextlib import closing
 from pathlib import Path
 
 import pytest
+from PySide6.QtCore import QPoint
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlEngine, qmlEngine
 from PySide6.QtQuick import QQuickWindow
@@ -96,6 +98,15 @@ class Desk:
                     return slot
         return None
 
+    def window(self, title: str) -> QQuickWindow:
+        (window,) = (
+            w
+            for w in QGuiApplication.topLevelWindows()
+            if qmlEngine(w) is self.engine and w.title() == title
+        )
+        assert isinstance(window, QQuickWindow)
+        return window
+
     def log(self) -> Log:
         """What the database keeps, once the app has closed."""
         store = Store.open(self.folders.database)
@@ -161,3 +172,21 @@ def test_a_reminder_alerts_in_its_context_and_its_answer_is_kept(qtbot: QtBot, d
     assert [candidate.outcome for candidate in evaluation.candidates] == [Outcome.ALERT]
     [alert] = log.alerts
     assert (alert.evaluation_id, alert.answer) == (evaluation.id, Answer.DONE)
+
+
+def test_the_windows_places_are_kept_and_put_back_at_the_start(qtbot: QtBot, desk: Desk) -> None:
+    with closing(Store.open(desk.folders.database)) as store:
+        store.set_setting("places", {"settings": [50, 60]})
+    desk.jiffin.start()
+    interface = desk.jiffin.interface
+    interface.preferences.open()
+    assert desk.window("Impostazioni").framePosition() == QPoint(50, 60)
+    interface.creation.new()
+    # Where the user drags it: the offscreen platform has no system move.
+    desk.window("Nuovo promemoria").setFramePosition(QPoint(30, 40))
+    interface.creation.cancel()
+    interface.creation.new()
+    desk.jiffin.close()
+
+    with closing(Store.open(desk.folders.database)) as store:
+        assert store.setting("places") == {"settings": [50, 60], "creation": [30, 40]}

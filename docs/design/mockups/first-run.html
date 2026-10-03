@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jiffin — primo avvio</title>
 <!--
-  The first-run window, as built in src/jiffin/ui/qml (ADR-0010, ADR-0015, ticket #43): the
+  The first-run window, as built in src/jiffin/ui/qml (ADR-0010, ADR-0015, ADR-0023, ticket #43): the
   model file on its way in three steps, a problem with Riprova and the file by hand, and ready.
   A card like the creation window, on the alerts' material (B by default), without Windows'
   title bar. The owner chose the steps on screen in #43, over a plain card and one with the
@@ -119,6 +119,7 @@
       linear-gradient(90deg, var(--desk-side) 0 140px, var(--desk) 140px);
   }
   .window {
+    position: relative;
     width: min(440px, calc(100% - 24px));
     margin: 0 auto;
     overflow: hidden;
@@ -133,7 +134,9 @@
     flex-direction: column;
     gap: 12px;
   }
+  /* The card's title, clear of the X. */
   .heading {
+    padding-right: 32px;
     font-size: 14px;
     line-height: 20px;
     font-weight: 600;
@@ -343,6 +346,30 @@
     background: var(--accent-edge);
   }
 
+  /* The X (ADR-0023): a subtle button on the title's line, 12 px from the window's edge, its
+     1 px stroke included; coloured only under the mouse. */
+  .close {
+    position: absolute;
+    top: 13px;
+    right: 11px;
+    width: 32px;
+    min-width: 0;
+    height: 32px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-primary);
+    font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets", sans-serif;
+    font-size: 16px;
+  }
+  .close::after {
+    display: none;
+  }
+  .close:hover {
+    background: var(--subtle-hover);
+  }
+
   .notes {
     margin: 24px 0 0;
     padding-left: 20px;
@@ -354,13 +381,14 @@
 </head>
 <body>
 <h1>Primo avvio</h1>
-<p class="lead">Al primo avvio Jiffin scarica il modello, 2,4 GB in qualche minuto, e lo controlla. La finestra si apre da sola durante il download o quando c'è un problema, al centro dello schermo, e prende il focus. Il controllo veloce a ogni avvio non apre niente.</p>
+<p class="lead">Al primo avvio Jiffin scarica il modello, 2,4 GB in qualche minuto, e lo controlla. La finestra si apre da sola durante il download o quando c'è un problema, al centro dello schermo o dove l'hai lasciata, e prende il focus. Il controllo veloce a ogni avvio non apre niente.</p>
 
 <div class="themes">
   <section class="theme light" aria-label="Tema chiaro">
     <h2>Chiaro</h2>
     <div class="desk">
       <div class="window" role="dialog" aria-label="Benvenuto in Jiffin">
+        <button class="close" aria-label="Chiudi">&#xE711;</button>
         <div class="content">
           <p class="heading">Benvenuto in Jiffin</p>
           <p class="body">Jiffin lavora solo su questo PC: niente esce da qui.</p>
@@ -375,6 +403,7 @@
       </div>
 
       <div class="window" role="dialog" aria-label="Benvenuto in Jiffin">
+        <button class="close" aria-label="Chiudi">&#xE711;</button>
         <div class="content">
           <p class="heading">Benvenuto in Jiffin</p>
           <p class="body">Jiffin lavora solo su questo PC: niente esce da qui.</p>
@@ -401,6 +430,7 @@
       </div>
 
       <div class="window" role="dialog" aria-label="Jiffin è pronto">
+        <button class="close" aria-label="Chiudi">&#xE711;</button>
         <div class="content">
           <p class="heading">Jiffin è pronto</p>
           <p class="body">Premi Win+Maiusc+N, da qualsiasi app, per un nuovo promemoria.</p>
@@ -415,6 +445,7 @@
     <h2>Scuro</h2>
     <div class="desk">
       <div class="window" role="dialog" aria-label="Benvenuto in Jiffin">
+        <button class="close" aria-label="Chiudi">&#xE711;</button>
         <div class="content">
           <p class="heading">Benvenuto in Jiffin</p>
           <p class="body">Jiffin lavora solo su questo PC: niente esce da qui.</p>
@@ -429,6 +460,7 @@
       </div>
 
       <div class="window" role="dialog" aria-label="Benvenuto in Jiffin">
+        <button class="close" aria-label="Chiudi">&#xE711;</button>
         <div class="content">
           <p class="heading">Benvenuto in Jiffin</p>
           <p class="body">Jiffin lavora solo su questo PC: niente esce da qui.</p>
@@ -448,6 +480,7 @@
       </div>
 
       <div class="window" role="dialog" aria-label="Jiffin è pronto">
+        <button class="close" aria-label="Chiudi">&#xE711;</button>
         <div class="content">
           <p class="heading">Jiffin è pronto</p>
           <p class="body">Premi Win+Maiusc+N, da qualsiasi app, per un nuovo promemoria.</p>
@@ -460,10 +493,11 @@
 </div>
 
 <ul class="notes">
-  <li>Chiusa con Chiudi o Esc, la finestra resta chiusa fino al prossimo avvio: il download continua, e l'elenco della tray mostra in cima una riga con la barra, o il problema con Riprova, e Dettagli, che riapre la finestra.</li>
+  <li>Chiusa con la X, Chiudi o Esc, la finestra resta chiusa fino al prossimo avvio: il download continua, e l'elenco della tray mostra in cima una riga con la barra, o il problema con Riprova, e Dettagli, che riapre la finestra.</li>
   <li>Un problema lascia ferma la barra del passo dove si è fermato. Riprova diventa «Riprovo…» finché l'app non risponde; il download riprende da dove era rimasto.</li>
   <li>Il tempo che manca viene dagli ultimi 30 secondi di download, e compare dopo 5 secondi. Le dimensioni sono in GB da 1024³ byte, come in Esplora file.</li>
   <li>Se un'altra app tiene Win+Maiusc+N, la finestra dice di scrivere i promemoria da Nuovo, nell'elenco.</li>
+  <li>La X sta sulla riga del titolo, come nelle altre finestre; Tab non ci passa, perché Esc fa lo stesso. La finestra si trascina da ogni punto vuoto, non dai controlli, e si riapre dove l'hai lasciata, anche dopo un riavvio; se quel posto non è più tutto su uno schermo, torna al centro.</li>
 </ul>
 </body>
 </html>

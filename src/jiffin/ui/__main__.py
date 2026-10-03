@@ -15,6 +15,7 @@ import os
 import signal
 import sys
 import tempfile
+from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
 
@@ -207,6 +208,10 @@ class Preview:
 
     def keep_material(self, material: Material) -> None:
         print(f"materiale {material.value}", flush=True)
+
+    def keep_places(self, places: Mapping[str, tuple[int, int]]) -> None:
+        where = ", ".join(f"{name} {x},{y}" for name, (x, y) in places.items())
+        print(f"posizioni {where}", flush=True)
 
     def _answered(self, alert_id: int, what: str) -> None:
         print(f"avviso {alert_id}: {what}", flush=True)

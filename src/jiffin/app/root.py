@@ -12,7 +12,7 @@ import logging.handlers
 import signal
 import sys
 import threading
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from types import TracebackType
 
@@ -87,14 +87,15 @@ class Jiffin:
         self._relay = relay
 
     def start(self) -> None:
-        """Open the database and put on the material it kept, before any window shows; then the
-        model file. Raise what opening the database raised."""
+        """Open the database and put on the material and the windows' places it kept, before any
+        window shows; then the model file. Raise what opening the database raised."""
         kept = self._worker.start()
-        if kept is not None:
+        if kept.material is not None:
             try:
-                self.interface.look.material = Material(kept)
+                self.interface.look.material = Material(kept.material)
             except ValueError:  # from a later version, after a downgrade
-                log.warning("the kept material %r is unknown: the default stays", kept)
+                log.warning("the kept material %r is unknown: the default stays", kept.material)
+        self.interface.places.restore(kept.places)
         self._fetch.fetch()
 
     def close(self) -> None:
@@ -112,6 +113,9 @@ class Jiffin:
 
     def keep_material(self, material: Material) -> None:
         self._worker.keep_material(material.value)
+
+    def keep_places(self, places: Mapping[str, tuple[int, int]]) -> None:
+        self._worker.keep_places(places)
 
 
 def main() -> None:

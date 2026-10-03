@@ -1,21 +1,21 @@
 """The settings window: the material of Jiffin's windows (#43, ADR-0010).
 
 A card like the creation window, with the four materials as radio buttons. The tray icon's menu
-opens it, centred on the screen, and it takes the focus. A click on a material changes every
-window at once, as Windows' own Settings, and the choice goes to be kept; Chiudi or Esc hides
-it.
+opens it, at the centre of the screen or where the user left it (ADR-0023), and it takes the
+focus. A click on a material changes every window at once, as Windows' own Settings, and the
+choice goes to be kept; the X or Esc hides it, as in Windows' Settings, which have no Chiudi.
 """
 
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import Property, QObject, QPoint, QUrl, Signal, Slot
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot
 from PySide6.QtQml import QmlElement, QmlUncreatable, QQmlComponent, QQmlEngine
 from PySide6.QtQuick import QQuickWindow
 
 from jiffin.ui.glass import Glass
 from jiffin.ui.look import Look, Material
+from jiffin.ui.places import Places
 
 QML_IMPORT_NAME = "Jiffin"
 QML_IMPORT_MAJOR_VERSION = 1
@@ -34,7 +34,12 @@ class Preferences(QObject):  # type: ignore[operator]  # QmlUncreatable's stub h
     """The window shows again: the focus goes to the material in use."""
 
     def __init__(
-        self, engine: QQmlEngine, look: Look, keep: Callable[[Material], None], glass: Glass
+        self,
+        engine: QQmlEngine,
+        look: Look,
+        keep: Callable[[Material], None],
+        glass: Glass,
+        places: Places,
     ) -> None:
         # The engine owns this object, as the creation window's: the window's bindings never
         # read it gone.
@@ -51,16 +56,17 @@ class Preferences(QObject):  # type: ignore[operator]  # QmlUncreatable's stub h
         if not isinstance(window, QQuickWindow):
             raise TypeError(f"no settings window: {self._component.errorString()}")
         self._window = window
+        self._place = places.follow("settings", window)
         # A line that wraps once the layout gives it its width, or the note on solid surfaces,
-        # makes the window taller after it is placed: it stays centred.
-        window.heightChanged.connect(self._centre)
+        # makes the window taller after it is placed: a centred one stays centred.
+        window.heightChanged.connect(self._place.resized)
         glass.add(int(window.winId()))
 
     def open(self) -> None:
-        """Centred on the screen, with the focus; an open window comes to the front."""
+        """With the focus; an open window comes to the front where it is."""
         window = self._window
         if not window.isVisible():
-            self._centre()
+            self._place.open()
             self.opened.emit()
         window.show()
         self._glass.shown(int(window.winId()))
@@ -88,13 +94,3 @@ class Preferences(QObject):  # type: ignore[operator]  # QmlUncreatable's stub h
     @Slot()
     def close(self) -> None:
         self._window.hide()
-
-    def _centre(self) -> None:
-        window = self._window
-        area = QGuiApplication.primaryScreen().availableGeometry()
-        frame = window.frameMargins()
-        width = window.width() + frame.left() + frame.right()
-        height = window.height() + frame.top() + frame.bottom()
-        window.setFramePosition(
-            QPoint(area.x() + (area.width() - width) // 2, area.y() + (area.height() - height) // 2)
-        )

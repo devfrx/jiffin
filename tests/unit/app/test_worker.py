@@ -203,10 +203,34 @@ def test_the_cleanup_runs_at_the_start_then_once_a_day(make_scene: MakeScene) ->
 
 def test_the_material_is_kept_for_the_next_start(make_scene: MakeScene) -> None:
     first = make_scene()
-    assert first.worker.start() is None
+    assert first.worker.start().material is None
     first.worker.keep_material("c")
     first.worker.close()
-    assert make_scene().worker.start() == "c"
+    assert make_scene().worker.start().material == "c"
+
+
+def test_the_windows_places_are_kept_for_the_next_start(make_scene: MakeScene) -> None:
+    first = make_scene()
+    assert first.worker.start().places == {}
+    first.worker.keep_places({"creation": (30, 40)})
+    first.worker.keep_places({"creation": (30, 40), "settings": (-1200, 300)})
+    first.worker.close()
+    assert make_scene().worker.start().places == {"creation": (30, 40), "settings": (-1200, 300)}
+
+
+def test_places_of_another_shape_are_left_out(make_scene: MakeScene) -> None:
+    """From a later version, after a downgrade: those windows open at the centre."""
+    scene = make_scene()
+    with closing(Store.open(scene.database)) as store:
+        store.set_setting(
+            "places",
+            {"creation": [30, 40], "settings": [1, 2, 3], "first_run": [1, "a"], "x": "a"},
+        )
+    assert scene.worker.start().places == {"creation": (30, 40)}
+    scene.worker.close()
+    with closing(Store.open(scene.database)) as store:
+        store.set_setting("places", [30, 40])
+    assert make_scene().worker.start().places == {}
 
 
 def test_a_database_from_a_later_version_is_refused(make_scene: MakeScene) -> None:

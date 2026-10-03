@@ -1,9 +1,9 @@
 import gc
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QPointF, Qt, QUrl
+from PySide6.QtCore import QPoint, QPointF, Qt, QUrl
 from PySide6.QtGui import QDesktopServices, QGuiApplication, QWindow
 from PySide6.QtQml import QQmlEngine, QQmlProperty, qmlContext, qmlEngine
 from PySide6.QtQuick import QQuickItem, QQuickWindow
@@ -15,6 +15,7 @@ from jiffin.ui import win32
 from jiffin.ui.first_run import FirstRun, ModelFile, ModelState
 from jiffin.ui.glass import Glass
 from jiffin.ui.look import Look, Settings
+from jiffin.ui.places import Places
 
 DARK = Settings(
     dark=True,
@@ -60,7 +61,8 @@ def in_button(item: QQuickItem) -> bool:
 
 
 class Screen:
-    """The first-run window on the offscreen screen, with the Riprova it was asked."""
+    """The first-run window on the offscreen screen, with the Riprova it was asked and the
+    places it kept."""
 
     def __init__(self, qtbot: QtBot, folder: Path) -> None:
         self._qtbot = qtbot
@@ -70,8 +72,12 @@ class Screen:
         self.clock = SimulatedClock(0)
         self.fetches = 0
         self.folder = folder
+        self.placed: list[dict[str, tuple[int, int]]] = []
+        self.places = Places(lambda places: self.placed.append(dict(places)))
         model = ModelFile(NAME, URL, SIZE, SHA256, folder)
-        self.first_run = FirstRun(self.engine, model, self._fetch, Glass(self.look), self.clock)
+        self.first_run = FirstRun(
+            self.engine, model, self._fetch, Glass(self.look), self.places, self.clock
+        )
         (window,) = (w for w in QGuiApplication.topLevelWindows() if qmlEngine(w) is self.engine)
         assert isinstance(window, QQuickWindow)
         self.window = window
@@ -101,11 +107,20 @@ class Screen:
             if item.inherits("QQuickAbstractButton") and accessible(item, "name") == name
         )
 
+    def x(self) -> QQuickItem:
+        """The X: Chiudi too, as the button at the bottom while the model is on its way."""
+        return next(
+            item
+            for item in self._shown()
+            if item.inherits("QQuickAbstractButton") and item.property("glyph") == ""
+        )
+
     def click(self, name: str) -> None:
         """Once the window's scene holds the button: it grows through the event queue, which
         QTest's click skips (see the tray list's tests)."""
-        button = self.button(name)
+        self.click_on(self.button(name))
 
+    def click_on(self, button: QQuickItem) -> None:
         def centre() -> QPointF:
             return button.mapToScene(QPointF(button.width() / 2, button.height() / 2))
 
@@ -224,10 +239,16 @@ def test_the_time_left_comes_from_the_downloads_pace(screen: Screen) -> None:
     assert "2,2 GB di 2,4 GB · meno di un minuto" in screen.lines()
 
 
-def test_closed_it_stays_closed_and_the_tray_lists_dettagli_opens_it(screen: Screen) -> None:
+@pytest.mark.parametrize("close", ["Esc", "the X"])
+def test_closed_it_stays_closed_and_the_tray_lists_dettagli_opens_it(
+    screen: Screen, close: str
+) -> None:
     screen.show(Stage.DOWNLOADING, SIZE // 3)
     screen.opened()
-    screen.press(Qt.Key.Key_Escape)
+    if close == "Esc":
+        screen.press(Qt.Key.Key_Escape)
+    else:
+        screen.click_on(screen.x())
     assert not screen.window.isVisible()
     screen.show(Stage.DOWNLOADING, SIZE // 2)
     screen.show(Stage.NETWORK, SIZE // 2)
@@ -235,6 +256,37 @@ def test_closed_it_stays_closed_and_the_tray_lists_dettagli_opens_it(screen: Scr
     screen.first_run.open()
     screen.opened()
     assert "Il download si è fermato" in " ".join(screen.lines())
+
+
+def test_the_window_drags_from_any_empty_point_but_not_from_its_controls(
+    screen: Screen, drags: Callable[[QQuickWindow, QPoint], bool]
+) -> None:
+    screen.show(Stage.DOWNLOADING, SIZE // 3)
+    screen.opened()
+    window = screen.window
+    assert drags(window, QPoint(8, window.height() - 8))
+    for control in (screen.x(), screen.button("Chiudi")):
+        middle = QPointF(control.width() / 2, control.height() / 2)
+        assert not drags(window, control.mapToScene(middle).toPoint())
+
+
+def test_the_window_opens_again_where_it_was_left_and_stays_there_as_it_grows(
+    screen: Screen, qtbot: QtBot
+) -> None:
+    screen.show(Stage.DOWNLOADING, SIZE // 3)
+    screen.opened()
+    # Where the user drags it: the offscreen platform has no system move.
+    screen.window.setFramePosition(QPoint(30, 40))
+    screen.press(Qt.Key.Key_Escape)
+    screen.first_run.open()
+    screen.opened()
+    assert screen.window.framePosition() == QPoint(30, 40)
+    assert screen.placed == [{"first_run": (30, 40)}]
+    screen.show(Stage.NETWORK, SIZE // 3)
+    # Qt says the window grew from its window-system queue, where it would move a centred one.
+    with qtbot.waitSignal(screen.window.heightChanged):
+        screen.click("Senza rete? Mettilo a mano")
+    assert screen.window.framePosition() == QPoint(30, 40)
 
 
 @pytest.mark.parametrize(
@@ -370,7 +422,9 @@ def test_the_first_run_goes_with_the_engine_and_no_binding_reads_it_gone(
     engine = QQmlEngine()
     look.provide(engine)
     model = ModelFile(NAME, URL, SIZE, SHA256, tmp_path)
-    first_run = FirstRun(engine, model, lambda: None, Glass(look), SimulatedClock(0))
+    first_run = FirstRun(
+        engine, model, lambda: None, Glass(look), Places(lambda places: None), SimulatedClock(0)
+    )
     first_run.show(ModelState(Stage.DOWNLOADING, SIZE // 3, SIZE))
     gone: list[str] = []
     first_run.destroyed.connect(lambda: gone.append("first run"))

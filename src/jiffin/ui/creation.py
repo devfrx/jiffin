@@ -1,20 +1,21 @@
 """The creation window: a new reminder, or one being edited (#12, #43).
 
 A card like the alerts, with two boxes, "Quando" and "Ricordami di", the sentence they make,
-and Salva and Annulla. The shortcut and the tray list open it; it shows centred on the screen
-and takes the focus, and saving or cancelling hides it. The texts go to `core` as written, with their spaces tidied: the
+and Salva and Annulla. The shortcut and the tray list open it; it shows at the centre of the
+screen, or where the user left it (ADR-0023), and takes the focus, and saving or cancelling hides
+it, as its X does. The texts go to `core` as written, with their spaces tidied: the
 judge gets exactly the "Quando" box (#12).
 """
 
 from pathlib import Path
 from typing import Protocol
 
-from PySide6.QtCore import Property, QObject, QPoint, QUrl, Signal, Slot
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot
 from PySide6.QtQml import QmlElement, QmlUncreatable, QQmlComponent, QQmlEngine
 from PySide6.QtQuick import QQuickWindow
 
 from jiffin.ui.glass import Glass
+from jiffin.ui.places import Places
 from jiffin.ui.words import sentence, tidy
 
 QML_IMPORT_NAME = "Jiffin"
@@ -42,7 +43,7 @@ class Creation(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
     """Another reminder to show, with its condition and action: the boxes take them, and the
     first one the focus."""
 
-    def __init__(self, engine: QQmlEngine, changes: Changes, glass: Glass) -> None:
+    def __init__(self, engine: QQmlEngine, changes: Changes, glass: Glass, places: Places) -> None:
         # The engine owns this object, and deletes it only once the window's bindings are
         # dead: whatever Python lets go of first on quitting, none of them reads it gone.
         super().__init__(engine)
@@ -60,6 +61,8 @@ class Creation(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         if not isinstance(window, QQuickWindow):
             raise TypeError(f"no creation window: {self._component.errorString()}")
         self._window = window
+        # It grows while the user types: it never moves for that, centred or not.
+        self._place = places.follow("creation", window)
         glass.add(int(window.winId()))
 
     def new(self) -> None:
@@ -127,14 +130,10 @@ class Creation(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         self.opened.emit(condition, action)
 
     def _present(self) -> None:
+        """An open window comes to the front where it is."""
         window = self._window
-        area = QGuiApplication.primaryScreen().availableGeometry()
-        frame = window.frameMargins()
-        width = window.width() + frame.left() + frame.right()
-        height = window.height() + frame.top() + frame.bottom()
-        window.setFramePosition(
-            QPoint(area.x() + (area.width() - width) // 2, area.y() + (area.height() - height) // 2)
-        )
+        if not window.isVisible():
+            self._place.open()
         window.show()
         self._glass.shown(int(window.winId()))
         # On Windows, activating the window also brings it to the front.

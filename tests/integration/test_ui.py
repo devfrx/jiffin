@@ -12,7 +12,7 @@ is what these tests watch.
 import ctypes
 import subprocess
 import sys
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from ctypes import POINTER, wintypes
 from pathlib import Path
 from typing import Any
@@ -328,6 +328,9 @@ class Upkeep:
         pass
 
     def keep_material(self, material: Material) -> None:
+        pass
+
+    def keep_places(self, places: Mapping[str, tuple[int, int]]) -> None:
         pass
 
 

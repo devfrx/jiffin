@@ -1,7 +1,8 @@
 // The first-run window (#43, ADR-0015): the model file on its way, in three steps, the download,
 // the check and ready; a problem with Riprova, and the file by hand when offline; at the end, how
-// to start. A card like the creation window, on the alerts' material (ADR-0010). The owner chose
-// the steps on screen. It takes the focus; Tab moves on, and Esc, Chiudi or Inizia closes it.
+// to start. A card like the creation window, on the alerts' material, with an X on its title's
+// line (ADR-0010, ADR-0023). The owner chose the steps on screen. It takes the focus; Tab moves
+// on, and Esc, the X, Chiudi or Inizia closes it. It drags from any point no control takes.
 pragma ComponentBehavior: Bound
 
 import QtQuick
@@ -38,6 +39,22 @@ Window {
         opacity: Look.veilOpacity
     }
 
+    // Any point no control takes moves the window, as a title bar does (ADR-0023).
+    Item {
+        anchors.fill: parent
+
+        DragHandler {
+            target: null
+            // Never from a control: Qt's default would take a drag over from the item that
+            // got the press, a button too.
+            grabPermissions: PointerHandler.CanTakeOverFromHandlersOfDifferentType | PointerHandler.ApprovesTakeOverByAnything
+            onActiveChanged: {
+                if (active)
+                    window.startSystemMove();
+            }
+        }
+    }
+
     ColumnLayout {
         id: content
 
@@ -47,7 +64,11 @@ Window {
         spacing: 12
 
         Text {
+            id: title
+
             Layout.fillWidth: true
+            // Clear of the X.
+            Layout.rightMargin: 32
             text: window.title
             color: Colors.textPrimary
             font.family: Typography.textFont
@@ -220,6 +241,17 @@ Window {
                 onClicked: window.firstRun.close()
             }
         }
+    }
+
+    // The X, as the creation window's: on the title's line, 12 px from the edge, never reached
+    // by Tab, since Esc does the same.
+    FluentButton {
+        x: window.width - 12 - width
+        y: content.y + title.y + (title.height - height) / 2
+        kind: FluentButton.Subtle
+        glyph: "" // Cancel
+        Accessible.name: Texts.close
+        onClicked: window.firstRun.close()
     }
 
     Shortcut {
