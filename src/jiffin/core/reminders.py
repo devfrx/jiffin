@@ -33,6 +33,7 @@ from jiffin.core.records import (
     SilencesCleared,
     Snapshot,
 )
+from jiffin.core.schedule import jiffin_day
 
 THRESHOLD = 0.97
 """d from which a reminder alerts: the starting value of ADR-0007. It belongs to the engine's
@@ -55,7 +56,6 @@ class Snooze(Enum):
 # at the earlier of their usual hours (8 or 9), since the alert waits for its context anyway.
 # Before 04:00 the night is not over, and "domani" is 08:00 of the same day, as in Anki.
 TOMORROW_AT = time(8)
-DAY_STARTS_AT = time(4)
 
 
 @dataclass(frozen=True, slots=True)
@@ -421,11 +421,8 @@ class Reminders:
             case Snooze.HOUR:
                 return now + HOUR_MS
             case Snooze.TOMORROW:
-                local = self._clock.local(now)
-                day = local.date()
-                if local.time() >= DAY_STARTS_AT:
-                    day += timedelta(days=1)
-                return self._clock.instant(day, TOMORROW_AT)
+                tomorrow = jiffin_day(self._clock.local(now)) + timedelta(days=1)
+                return self._clock.instant(tomorrow, TOMORROW_AT)
 
     def _publish(self) -> None:
         if self._alerts_changed:

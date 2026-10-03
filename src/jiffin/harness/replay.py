@@ -37,7 +37,6 @@ from jiffin.core.records import (
     Snapshot,
 )
 from jiffin.core.reminders import (
-    DAY_STARTS_AT,
     HOUR_MS,
     MINUTE_MS,
     THRESHOLD,
@@ -45,6 +44,7 @@ from jiffin.core.reminders import (
     Reminders,
     Snooze,
 )
+from jiffin.core.schedule import jiffin_day
 from jiffin.harness.day import Day
 from jiffin.harness.errors import HarnessError
 from jiffin.store.store import Log
@@ -408,12 +408,11 @@ class Replay:
             (at for at, outcome in judged if outcome is not Outcome.SNOOZED and at > low),
             default=math.inf,
         )
-        local = self._calendar.local(answered)
-        day = local.date() + timedelta(days=int(local.time() >= DAY_STARTS_AT))
+        tomorrow = jiffin_day(self._calendar.local(answered)) + timedelta(days=1)
         ends = (
             (Snooze.QUARTER_HOUR, answered + 15 * MINUTE_MS),
             (Snooze.HOUR, answered + HOUR_MS),
-            (Snooze.TOMORROW, self._calendar.instant(day, TOMORROW_AT)),
+            (Snooze.TOMORROW, self._calendar.instant(tomorrow, TOMORROW_AT)),
         )
         return next((kind for kind, end in ends if low < end <= high), Snooze.HOUR)
 
