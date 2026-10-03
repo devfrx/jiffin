@@ -1,17 +1,20 @@
 """The real foreground, with Vivaldi, Chrome and Brave on fresh profiles (ADR-0005).
 
 These tests run only on the owner's machine. `uv run pytest -m integration` opens windows of
-each installed browser, in the foreground, for about a minute; `uv run pytest -m benchmark -s`
-measures the CPU Vivaldi spends on the reads, in ten minutes. Leave the computer alone
-meanwhile. Every page comes from a local server; nothing of the owner's browsers is touched.
+each installed browser, in the foreground, for about a minute and a half, and puts a page in full
+screen; `uv run pytest -m benchmark -s` measures the CPU Vivaldi spends on the reads, in ten
+minutes. Leave the computer alone meanwhile. Every page comes from a local server; nothing of the
+owner's browsers is touched.
 """
 
+import ctypes
 import shutil
 import subprocess
 import threading
 import time
 import winreg
 from collections.abc import Callable, Iterator
+from ctypes import POINTER, wintypes
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -34,13 +37,63 @@ if ({every} > 0) setInterval(() => {{
   document.title = "Jiffin {name} " + tick;
   document.getElementById("tick").textContent = tick;
 }}, {every});
+addEventListener("keydown", (event) => {{
+  if (event.key === "f") document.documentElement.requestFullscreen();
+}});
 </script>"""
 BENCHMARK_SECONDS = 300
 """Each half of the benchmark: without reads, then with them."""
 
 
+class _MouseInput(ctypes.Structure):
+    _fields_ = (
+        ("dx", wintypes.LONG),
+        ("dy", wintypes.LONG),
+        ("mouseData", wintypes.DWORD),
+        ("dwFlags", wintypes.DWORD),
+        ("time", wintypes.DWORD),
+        ("dwExtraInfo", ctypes.c_size_t),
+    )
+
+
+class _KeyboardInput(ctypes.Structure):
+    _fields_ = (
+        ("wVk", wintypes.WORD),
+        ("wScan", wintypes.WORD),
+        ("dwFlags", wintypes.DWORD),
+        ("time", wintypes.DWORD),
+        ("dwExtraInfo", ctypes.c_size_t),
+    )
+
+
+class _InputUnion(ctypes.Union):
+    _fields_ = (("mi", _MouseInput), ("ki", _KeyboardInput))
+
+
+class _Input(ctypes.Structure):
+    _fields_ = (("type", wintypes.DWORD), ("u", _InputUnion))
+
+
+_user32 = ctypes.WinDLL("user32", use_last_error=True)
+_user32.SendInput.restype = wintypes.UINT
+_user32.SendInput.argtypes = [wintypes.UINT, POINTER(_Input), ctypes.c_int]
+_INPUT_KEYBOARD, _KEYEVENTF_KEYUP = 1, 0x0002
+_VK_ESCAPE, _VK_F = 0x1B, 0x46
+
+
+def press(key: int) -> None:
+    """A key down and up, to the window in front, as a keyboard sends it."""
+    events = (_Input * 2)()
+    for event, flags in zip(events, (0, _KEYEVENTF_KEYUP), strict=True):
+        event.type = _INPUT_KEYBOARD
+        event.u.ki = _KeyboardInput(key, 0, flags, 0, 0)
+    sent = _user32.SendInput(len(events), events, ctypes.sizeof(_Input))
+    assert sent == len(events), f"SendInput: {ctypes.WinError(ctypes.get_last_error())}"
+
+
 class Pages:
-    """A local server of pages titled "Jiffin <name>"; `?every=N` changes the title every N ms."""
+    """A local server of pages titled "Jiffin <name>"; `?every=N` changes the title every N ms,
+    and the key F puts a page in full screen, as on a video."""
 
     def __init__(self) -> None:
         class Handler(BaseHTTPRequestHandler):
@@ -235,6 +288,22 @@ def test_typing_in_the_bar_gives_no_address(pages: Pages, seen: Seen, browser: B
         ),
         focused,
     )
+
+
+@pytest.mark.integration
+def test_a_page_in_full_screen_is_no_context_and_has_its_address_after(
+    pages: Pages, seen: Seen, browser: Browser
+) -> None:
+    page = f"Jiffin video-{browser.app}"
+    browser.open(pages.url(f"video-{browser.app}"))
+    shown = seen.wait(titled(page))
+    press(_VK_F)
+    away = seen.wait(lambda observation: observation.context is None, after=shown + 1)
+    press(_VK_ESCAPE)
+    # Vivaldi builds a new address bar on the way out: the one read before is gone.
+    back = seen.observations[seen.wait(titled(page), after=away + 1)].context
+    assert back is not None
+    assert back.address == f"{pages.host}/video-{browser.app}"
 
 
 @pytest.mark.benchmark

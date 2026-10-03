@@ -60,7 +60,8 @@ or "(Privato)", and Vivaldi has a `PrivateWindowIndicator` beside its address
 bar. Vivaldi draws its interface as a web page, so its bar shows up only once
 the client looks like assistive technology (a focus listener) and after a hit
 test. The bar and the private flag of a window are kept for as long as it
-exists.
+exists, and a kept bar that is gone is looked up again at once: Vivaldi builds
+a new one when a page leaves full screen.
 
 | What UI Automation sees | Context | For the tray |
 |---|---|---|
