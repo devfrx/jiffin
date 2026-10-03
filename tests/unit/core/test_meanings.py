@@ -180,6 +180,17 @@ def test_a_time_not_understood_names_its_words_wherever_they_are() -> None:
         ("verso sera tardi", ["verso sera tardi"]),
         ("quando lavoro un giorno sì e uno no", ["sì e uno no"]),
         ("quando apro Excel per un paio d'ore", ["per un paio d'ore"]),
+        # An ordinal, or a word joined by "e", changes the time after it: it is never dropped.
+        ("il secondo lunedì", ["secondo lunedì"]),
+        ("la terza domenica", ["terza domenica"]),
+        ("quando apro Teams l'ultimo venerdì", ["l'ultimo venerdì"]),
+        ("all'inizio della settimana prossima", ["all'inizio della settimana prossima"]),
+        ("il quinto lunedì del mese", ["quinto lunedì"]),
+        ("il primo e il terzo lunedì del mese", ["primo e il terzo lunedì del mese"]),
+        ("il secondo ed il quarto lunedì del mese", ["secondo ed il quarto lunedì del mese"]),
+        ("un quarto alle 9", ["quarto alle 9"]),
+        ("prima e dopo cena", ["prima e dopo cena"]),
+        ("questa e la prossima settimana", ["questa e la prossima settimana"]),
         (
             "tranne lunedì, martedì, mercoledì, giovedì, venerdì, sabato e domenica",
             ["tranne lunedì, martedì, mercoledì, giovedì, venerdì, sabato e domenica"],
@@ -209,6 +220,11 @@ def test_words_that_do_not_make_a_decided_time_are_not_understood(
         ("fino a domani", Schedule(period=Period(date(2026, 10, 2), date(2026, 10, 3)))),
         ("per una settimana", Schedule(period=Period(date(2026, 10, 2), date(2026, 10, 8)))),
         ("da lunedì al venerdì", Schedule(period=Period(date(2026, 10, 5), date(2026, 10, 9)))),
+        (
+            "una volta ogni due settimane",
+            Schedule(frequency=Frequency(2, Unit.WEEK, date(2026, 10, 2))),
+        ),
+        ("una volta ogni mese", Schedule(frequency=Frequency(1, Unit.MONTH, date(2026, 10, 2)))),
         (
             "ogni due settimane il lunedì e il giovedì",
             Schedule(
