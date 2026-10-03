@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from PySide6.QtCore import QElapsedTimer, QPointF, Qt
 from PySide6.QtGui import QGuiApplication, QWindow
 from PySide6.QtQml import QQmlEngine, QQmlProperty, qmlContext, qmlEngine
 from PySide6.QtQuick import QQuickItem, QQuickWindow
@@ -308,9 +308,13 @@ def test_a_click_elsewhere_closes_the_list_and_the_icon_does_not_reopen_it_at_on
     screen.open()
     elsewhere()
     qtbot.waitUntil(lambda: not screen.window.isVisible())
+    # Counted on the list's clock, from after it closed: qtbot.wait counts on a Windows timer,
+    # which can end a few ms before REOPEN_MS have passed there, and the click is ignored.
+    closed = QElapsedTimer()
+    closed.start()
     screen.list.toggle()  # the click on the icon that took the focus
     assert not screen.window.isVisible()
-    qtbot.wait(REOPEN_MS)
+    qtbot.waitUntil(lambda: closed.elapsed() >= REOPEN_MS)
     screen.open()
 
 
