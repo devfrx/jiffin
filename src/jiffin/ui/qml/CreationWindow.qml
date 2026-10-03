@@ -1,7 +1,7 @@
 // The creation window (#12, #43): "Quando" and "Ricordami di", the sentence they make, Annulla
-// and Salva. A card like the alerts, on their material, with its title as its first line
-// (ADR-0010). It takes the focus: Enter saves, or goes to the box still empty; Esc cancels; Tab
-// moves on.
+// and Salva. A card like the alerts, on their material, with its title as its first line and an
+// X on it (ADR-0010, ADR-0023). It takes the focus: Enter saves, or goes to the box still empty;
+// Esc cancels, as the X does; Tab moves on. It drags from any point no control takes.
 import QtQuick
 import QtQuick.Layouts
 import Jiffin
@@ -41,6 +41,22 @@ Window {
         opacity: Look.veilOpacity
     }
 
+    // Any point no control takes moves the window, as a title bar does (ADR-0023).
+    Item {
+        anchors.fill: parent
+
+        DragHandler {
+            target: null
+            // Never from a control: Qt's default would take a drag over from the item that
+            // got the press, a button too.
+            grabPermissions: PointerHandler.CanTakeOverFromHandlersOfDifferentType | PointerHandler.ApprovesTakeOverByAnything
+            onActiveChanged: {
+                if (active)
+                    window.startSystemMove();
+            }
+        }
+    }
+
     ColumnLayout {
         id: content
 
@@ -50,7 +66,11 @@ Window {
         spacing: 16
 
         Text {
+            id: title
+
             Layout.fillWidth: true
+            // Clear of the X.
+            Layout.rightMargin: 32
             text: window.title
             color: Colors.textPrimary
             font.family: Typography.textFont
@@ -111,6 +131,17 @@ Window {
                 onClicked: window.creation.save()
             }
         }
+    }
+
+    // The X, as the notifications': on the title's line, 12 px from the edge. Esc does the same
+    // from the keyboard, so Tab never stops on it, as on a title bar's.
+    FluentButton {
+        x: window.width - 12 - width
+        y: content.y + title.y + (title.height - height) / 2
+        kind: FluentButton.Subtle
+        glyph: "" // Cancel
+        Accessible.name: Texts.close
+        onClicked: window.creation.cancel()
     }
 
     Shortcut {

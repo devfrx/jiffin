@@ -11,9 +11,9 @@ from [#43](https://github.com/devfrx/jiffin/issues/43); the
 
 ## The window
 
-- **Impostazioni** in the tray icon's menu opens it, centred on the primary
-  screen, with the focus on the material in use; an open one comes to the
-  front.
+- **Impostazioni** in the tray icon's menu opens it, at the centre of the
+  primary screen or where the user left it ([ADR-0023](../adr/0023-window-frame.md)), with the focus
+  on the material in use; an open one comes to the front where it is.
 - The four materials are radio buttons, each with its name and what it looks
   like; B, Acrilico dei menu, is the default. The owner chose the plain list on
   screen, over the radios in a card, as Windows' Settings, and over four tiles.
@@ -21,12 +21,16 @@ from [#43](https://github.com/devfrx/jiffin/issues/43); the
   of every window changes, this one's too, so the user sees the material on it.
   The owner chose this over Salva and Annulla, which cost a click every time.
   The check follows the look, never the click.
-- Tab moves from a material to the next and on to Chiudi; Space chooses. Esc or
-  Chiudi hides the window.
+- Tab moves from a material to the next; Space chooses. Esc or the X hides the
+  window. The X sits on the title's line, and there is no Chiudi, as in
+  Windows' Settings ([#84](https://github.com/devfrx/jiffin/issues/84)); Tab
+  passes the X by, since Esc does the same.
 - With Windows' transparency effects off, every surface is solid, whatever the
   material: a line under the materials says so.
 - The window is a card like the creation window, without Windows' title bar
-  and without a taskbar button.
+  and without a taskbar button. It drags from any point no control takes. A
+  centred window stays centred when the note on solid surfaces comes or goes;
+  one the user moved keeps its top left corner.
 
 ## Keeping the choice
 
@@ -36,6 +40,14 @@ each new choice goes to `keep_material`, of the `Upkeep` the app gives
 ([data model](data-model.md)) and sets it on `Interface.look.material` at the
 next start, before any window shows
 ([#44](https://github.com/devfrx/jiffin/issues/44)).
+
+The windows' places go the same way ([ADR-0023](../adr/0023-window-frame.md)). `ui/places.py` follows
+the creation window, the settings and the first-run window: a place the user
+moved one to is kept half a second after the window stops moving, once a drag
+ends, and all of them go to `keep_places`. The app keeps them as one `places`
+setting, `{"creation": [x, y], ...}`, and gives them to `Interface.places` at
+the next start; an entry of another shape is left out, and that window opens at
+the centre.
 
 ## Trying it
 

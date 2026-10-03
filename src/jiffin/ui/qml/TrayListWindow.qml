@@ -1,7 +1,8 @@
 // The tray list (#12, #43): what keeps Jiffin from working fully, the model file on its way
 // first, the alerts that vanished unanswered, with Fatto and Rimanda, and the active reminders,
-// with Nuovo, Modifica, Completa and Elimina. A card on the alerts' material, over the tray (ADR-0010). It takes the focus;
-// Tab moves from button to button, and Esc or a click elsewhere closes it.
+// with Nuovo, Modifica, Completa and Elimina. A card on the alerts' material, over the tray, with
+// an X after Nuovo (ADR-0010, ADR-0023). It takes the focus; Tab moves from button to button, and
+// Esc, the X or a click elsewhere closes it. It drags from any point no control takes.
 // Bound: the rows take their data as required properties, and reach the list by its id.
 pragma ComponentBehavior: Bound
 
@@ -56,6 +57,22 @@ Window {
         opacity: Look.veilOpacity
     }
 
+    // Any point no control takes moves the window, as a title bar does (ADR-0023).
+    Item {
+        anchors.fill: parent
+
+        DragHandler {
+            target: null
+            // Never from a control: Qt's default would take a drag over from the item that
+            // got the press, a button too.
+            grabPermissions: PointerHandler.CanTakeOverFromHandlersOfDifferentType | PointerHandler.ApprovesTakeOverByAnything
+            onActiveChanged: {
+                if (active)
+                    window.startSystemMove();
+            }
+        }
+    }
+
     Flickable {
         id: scroller
 
@@ -63,6 +80,8 @@ Window {
         contentWidth: width
         contentHeight: content.implicitHeight
         boundsBehavior: Flickable.StopAtBounds
+        // The mouse moves the window, as in Windows' own lists: the wheel and the bar scroll.
+        acceptedButtons: Qt.NoButton
         clip: true
         T.ScrollBar.vertical: FluentScrollBar {}
 
@@ -84,6 +103,7 @@ Window {
                     Layout.fillWidth: true
                     Layout.leftMargin: 16
                     Layout.rightMargin: 12
+                    spacing: 4
 
                     Text {
                         Layout.fillWidth: true
@@ -98,6 +118,14 @@ Window {
                         text: Texts.newOne
                         focusPolicy: Qt.StrongFocus
                         onClicked: window.trayList.new()
+                    }
+                    // The X, as the other windows', 12 px from the edge; never reached by Tab,
+                    // since Esc does the same.
+                    FluentButton {
+                        kind: FluentButton.Subtle
+                        glyph: "" // Cancel
+                        Accessible.name: Texts.close
+                        onClicked: window.trayList.close()
                     }
                 }
 

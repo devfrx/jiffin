@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jiffin — nuovo promemoria</title>
 <!--
-  The creation window, as built in src/jiffin/ui/qml (ADR-0010, tickets #12 and #43), ported
+  The creation window, as built in src/jiffin/ui/qml (ADR-0010, ADR-0023, tickets #12 and #43), ported
   from the board "A — Parte di Windows: scelta" of the visual direction, with the sentence of
   the board "Creazione — scelta: due campi". A card like the alerts, on their material (B by
   default), without Windows' title bar: the owner chose it on screen in #43.
@@ -28,6 +28,7 @@
     --text-primary: rgba(0, 0, 0, 0.894);
     --text-secondary: rgba(0, 0, 0, 0.62);
     --text-on-accent: #ffffff;
+    --subtle-hover: rgba(0, 0, 0, 0.035);
     --control-fill: rgba(255, 255, 255, 0.702);
     --control-fill-active: #ffffff;
     --control-stroke: rgba(0, 0, 0, 0.059);
@@ -49,6 +50,7 @@
     --text-primary: #ffffff;
     --text-secondary: rgba(255, 255, 255, 0.773);
     --text-on-accent: #000000;
+    --subtle-hover: rgba(255, 255, 255, 0.059);
     --control-fill: rgba(255, 255, 255, 0.059);
     --control-fill-active: rgba(30, 30, 30, 0.702);
     --control-stroke: rgba(255, 255, 255, 0.071);
@@ -103,6 +105,7 @@
   }
 
   .window {
+    position: relative;
     width: min(460px, calc(100% - 24px));
     margin: 0 auto;
     overflow: hidden;
@@ -111,9 +114,10 @@
     background: var(--card);
     box-shadow: var(--shadow);
   }
-  /* The card's title, its first line. */
+  /* The card's title, its first line, clear of the X. */
   .heading {
     margin: 0;
+    padding-right: 32px;
     font-size: 14px;
     line-height: 20px;
     font-weight: 600;
@@ -233,6 +237,30 @@
     background: var(--accent-edge);
   }
 
+  /* The X (ADR-0023): a subtle button on the title's line, 12 px from the window's edge, its
+     1 px stroke included; coloured only under the mouse. */
+  .close {
+    position: absolute;
+    top: 13px;
+    right: 11px;
+    width: 32px;
+    min-width: 0;
+    height: 32px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-primary);
+    font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets", sans-serif;
+    font-size: 16px;
+  }
+  .close::after {
+    display: none;
+  }
+  .close:hover {
+    background: var(--subtle-hover);
+  }
+
   .notes {
     margin: 24px 0 0;
     padding-left: 20px;
@@ -244,13 +272,14 @@
 </head>
 <body>
 <h1>Nuovo promemoria</h1>
-<p class="lead">Si apre con Win+Maiusc+N da qualsiasi app, al centro dello schermo, e prende il focus. Due caselle, «Quando» e «Ricordami di», con sotto la frase che formano. Per modificare un promemoria si usa la stessa finestra.</p>
+<p class="lead">Si apre con Win+Maiusc+N da qualsiasi app, al centro dello schermo o dove l'hai lasciata, e prende il focus. Due caselle, «Quando» e «Ricordami di», con sotto la frase che formano. Per modificare un promemoria si usa la stessa finestra.</p>
 
 <div class="themes">
   <section class="theme light" aria-label="Tema chiaro">
     <h2>Chiaro</h2>
     <div class="desk">
       <div class="window" role="dialog" aria-label="Nuovo promemoria">
+        <button class="close" aria-label="Chiudi">&#xE711;</button>
         <div class="content">
           <p class="heading">Nuovo promemoria</p>
           <div class="field">
@@ -276,6 +305,7 @@
     <h2>Scuro</h2>
     <div class="desk">
       <div class="window" role="dialog" aria-label="Nuovo promemoria">
+        <button class="close" aria-label="Chiudi">&#xE711;</button>
         <div class="content">
           <p class="heading">Nuovo promemoria</p>
           <div class="field">
@@ -299,9 +329,10 @@
 </div>
 
 <ul class="notes">
-  <li>Invio salva, oppure porta alla casella ancora vuota; una casella non va mai a capo. Tab passa da una casella all'altra e ai pulsanti; Esc e Annulla chiudono senza salvare.</li>
+  <li>Invio salva, oppure porta alla casella ancora vuota; una casella non va mai a capo. Tab passa da una casella all'altra e ai pulsanti; Esc, Annulla e la X chiudono senza salvare.</li>
   <li>Salva si attiva quando entrambe le caselle sono scritte. Il verificatore riceve esattamente il testo di «Quando», con gli spazi in ordine.</li>
   <li>È una scheda come gli avvisi, sullo stesso vetro, senza la barra di Windows: il titolo è la prima riga. Come i pannelli di Windows non ha un pulsante nella barra delle applicazioni, e Win+Maiusc+N la riporta davanti. Con la trasparenza spenta la superficie è piena.</li>
+  <li>La X sta sulla riga del titolo, come nelle notifiche di Windows; Tab non ci passa, perché Esc fa lo stesso. La finestra si trascina da ogni punto vuoto, non dai controlli, e si riapre dove l'hai lasciata, anche dopo un riavvio; se quel posto non è più tutto su uno schermo, torna al centro.</li>
 </ul>
 </body>
 </html>

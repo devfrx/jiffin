@@ -1,7 +1,8 @@
-// The settings window (#43): the material of Jiffin's windows, as four radio buttons, and
-// Chiudi. A card like the creation window, on the material it sets (ADR-0010). A click applies
-// the material at once, as Windows' own Settings. It takes the focus, on the material in use; Tab
-// moves on, Space chooses, and Esc or Chiudi closes it.
+// The settings window (#43): the material of Jiffin's windows, as four radio buttons. A card like
+// the creation window, on the material it sets, with an X on its title's line and no Chiudi, as
+// Windows' own Settings (ADR-0010, ADR-0023). A click applies the material at once, as there. It
+// takes the focus, on the material in use; Tab moves on, Space chooses, and Esc or the X closes
+// it. It drags from any point no control takes.
 pragma ComponentBehavior: Bound
 
 import QtQuick
@@ -34,6 +35,22 @@ Window {
         opacity: Look.veilOpacity
     }
 
+    // Any point no control takes moves the window, as a title bar does (ADR-0023).
+    Item {
+        anchors.fill: parent
+
+        DragHandler {
+            target: null
+            // Never from a control: Qt's default would take a drag over from the item that
+            // got the press, a button too.
+            grabPermissions: PointerHandler.CanTakeOverFromHandlersOfDifferentType | PointerHandler.ApprovesTakeOverByAnything
+            onActiveChanged: {
+                if (active)
+                    window.startSystemMove();
+            }
+        }
+    }
+
     ColumnLayout {
         id: content
 
@@ -43,7 +60,11 @@ Window {
         spacing: 16
 
         Text {
+            id: title
+
             Layout.fillWidth: true
+            // Clear of the X.
+            Layout.rightMargin: 32
             text: window.title
             color: Colors.textPrimary
             font.family: Typography.textFont
@@ -112,21 +133,17 @@ Window {
             lineHeightMode: Text.FixedHeight
             wrapMode: Text.Wrap
         }
+    }
 
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.topMargin: 4
-
-            Item {
-                Layout.fillWidth: true
-            }
-            FluentButton {
-                Layout.minimumWidth: 96
-                text: Texts.close
-                focusPolicy: Qt.StrongFocus
-                onClicked: window.preferences.close()
-            }
-        }
+    // The X, as the creation window's: on the title's line, 12 px from the edge, never reached
+    // by Tab, since Esc does the same.
+    FluentButton {
+        x: window.width - 12 - width
+        y: content.y + title.y + (title.height - height) / 2
+        kind: FluentButton.Subtle
+        glyph: "" // Cancel
+        Accessible.name: Texts.close
+        onClicked: window.preferences.close()
     }
 
     Shortcut {

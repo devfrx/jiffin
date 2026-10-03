@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jiffin — impostazioni</title>
 <!--
-  The settings window, as built in src/jiffin/ui/qml (ADR-0010, ticket #43): the material of
+  The settings window, as built in src/jiffin/ui/qml (ADR-0010, ADR-0023, ticket #43): the material of
   Jiffin's windows, as four radio buttons. A card like the creation window, on the material it
   sets (B by default), without Windows' title bar. The owner chose the plain list on screen in
   #43, over the radios in a card, as Windows' Settings, and over four tiles.
@@ -28,6 +28,7 @@
     --text-primary: rgba(0, 0, 0, 0.894);
     --text-secondary: rgba(0, 0, 0, 0.62);
     --text-on-accent: #ffffff;
+    --subtle-hover: rgba(0, 0, 0, 0.035);
     --control-fill: rgba(255, 255, 255, 0.702);
     --control-stroke: rgba(0, 0, 0, 0.059);
     --control-strong-stroke: rgba(0, 0, 0, 0.447);
@@ -47,6 +48,7 @@
     --text-primary: #ffffff;
     --text-secondary: rgba(255, 255, 255, 0.773);
     --text-on-accent: #000000;
+    --subtle-hover: rgba(255, 255, 255, 0.059);
     --control-fill: rgba(255, 255, 255, 0.059);
     --control-stroke: rgba(255, 255, 255, 0.071);
     --control-strong-stroke: rgba(255, 255, 255, 0.545);
@@ -99,6 +101,7 @@
   }
 
   .window {
+    position: relative;
     width: min(400px, calc(100% - 24px));
     margin: 0 auto;
     overflow: hidden;
@@ -107,9 +110,10 @@
     background: var(--card);
     box-shadow: var(--shadow);
   }
-  /* The card's title, its first line. */
+  /* The card's title, its first line, clear of the X. */
   .heading {
     margin: 0;
+    padding-right: 32px;
     font-size: 14px;
     line-height: 20px;
     font-weight: 600;
@@ -158,38 +162,25 @@
     background: radial-gradient(circle, var(--text-on-accent) 0 6px, var(--accent) 6.5px);
   }
 
-  /* A Fluent 2 standard button (FluentButton.qml). */
-  .buttons {
-    display: flex;
-    justify-content: flex-end;
-    padding-top: 4px;
-  }
-  button {
-    position: relative;
-    min-width: 96px;
-    height: 32px;
-    padding: 0 12px;
-    border: 1px solid var(--control-stroke);
-    border-radius: 4px;
-    background: var(--control-fill);
-    color: var(--text-primary);
-    font: inherit;
-    font-size: 14px;
-  }
-  /* The edge that makes a button look raised: at the top in dark, at the bottom in light. */
-  button::after {
-    content: "";
+  /* The X (ADR-0023): a subtle button on the title's line, 12 px from the window's edge, its
+     1 px stroke included; coloured only under the mouse. */
+  .close {
     position: absolute;
-    left: 4px;
-    right: 4px;
-    height: 1px;
-    background: var(--control-edge);
+    top: 13px;
+    right: 11px;
+    width: 32px;
+    min-width: 0;
+    height: 32px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-primary);
+    font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets", sans-serif;
+    font-size: 16px;
   }
-  .dark button::after {
-    top: 0;
-  }
-  .light button::after {
-    bottom: 0;
+  .close:hover {
+    background: var(--subtle-hover);
   }
 
   .notes {
@@ -203,13 +194,14 @@
 </head>
 <body>
 <h1>Impostazioni</h1>
-<p class="lead">Si apre da Impostazioni nel menu dell'icona di Jiffin, al centro dello schermo, e prende il focus. Si sceglie il materiale degli avvisi, dell'elenco e delle altre finestre di Jiffin.</p>
+<p class="lead">Si apre da Impostazioni nel menu dell'icona di Jiffin, al centro dello schermo o dove l'hai lasciata, e prende il focus. Si sceglie il materiale degli avvisi, dell'elenco e delle altre finestre di Jiffin.</p>
 
 <div class="themes">
   <section class="theme light" aria-label="Tema chiaro">
     <h2>Chiaro</h2>
     <div class="desk">
       <div class="window" role="dialog" aria-label="Impostazioni">
+        <button class="close" aria-label="Chiudi">&#xE711;</button>
         <div class="content">
           <p class="heading">Impostazioni</p>
           <div class="group" role="radiogroup" aria-label="Materiale">
@@ -221,9 +213,6 @@
             <div class="radio checked" role="radio" aria-checked="true"><span class="circle"></span><div><div class="label">Acrilico dei menu</div><div class="caption">Quasi pieno, come i menu di Windows. Predefinito.</div></div></div>
             <div class="radio" role="radio" aria-checked="false"><span class="circle"></span><div><div class="label">Mica</div><div class="caption">Come le Impostazioni di Windows: prende il colore dello sfondo.</div></div></div>
             <div class="radio" role="radio" aria-checked="false"><span class="circle"></span><div><div class="label">Mica Alt</div><div class="caption">Più scuro, con più colore dello sfondo.</div></div></div>
-          </div>
-          <div class="buttons">
-            <button>Chiudi</button>
           </div>
         </div>
       </div>
@@ -234,6 +223,7 @@
     <h2>Scuro</h2>
     <div class="desk">
       <div class="window" role="dialog" aria-label="Impostazioni">
+        <button class="close" aria-label="Chiudi">&#xE711;</button>
         <div class="content">
           <p class="heading">Impostazioni</p>
           <div class="group" role="radiogroup" aria-label="Materiale">
@@ -246,9 +236,6 @@
             <div class="radio" role="radio" aria-checked="false"><span class="circle"></span><div><div class="label">Mica</div><div class="caption">Come le Impostazioni di Windows: prende il colore dello sfondo.</div></div></div>
             <div class="radio" role="radio" aria-checked="false"><span class="circle"></span><div><div class="label">Mica Alt</div><div class="caption">Più scuro, con più colore dello sfondo.</div></div></div>
           </div>
-          <div class="buttons">
-            <button>Chiudi</button>
-          </div>
         </div>
       </div>
     </div>
@@ -256,8 +243,9 @@
 </div>
 
 <ul class="notes">
-  <li>Un clic su un materiale cambia subito tutte le finestre, come nelle Impostazioni di Windows, e la scelta resta per i prossimi avvii. Chiudi o Esc chiudono la finestra.</li>
-  <li>Il focus parte dal materiale in uso; Tab passa al successivo e a Chiudi, Spazio sceglie.</li>
+  <li>Un clic su un materiale cambia subito tutte le finestre, come nelle Impostazioni di Windows, e la scelta resta per i prossimi avvii. La X o Esc chiudono la finestra: non c'è Chiudi, come nelle Impostazioni di Windows.</li>
+  <li>Il focus parte dal materiale in uso; Tab passa al successivo, Spazio sceglie; Tab non passa dalla X, perché Esc fa lo stesso.</li>
+  <li>La finestra si trascina da ogni punto vuoto, non dai controlli, e si riapre dove l'hai lasciata, anche dopo un riavvio; se quel posto non è più tutto su uno schermo, torna al centro.</li>
   <li>Con la trasparenza di Windows spenta tutte le superfici sono piene, e la finestra lo dice sotto i materiali.</li>
 </ul>
 </body>

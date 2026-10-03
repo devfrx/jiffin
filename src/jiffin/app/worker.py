@@ -10,8 +10,9 @@ cleanup, and saves what `core` changed.
 import logging
 import queue
 import threading
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import Future
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
@@ -21,7 +22,7 @@ from jiffin.core.clock import Clock
 from jiffin.core.context import Observation
 from jiffin.core.records import Snooze
 from jiffin.core.reminders import Reminders, RemindersView
-from jiffin.store.store import Store
+from jiffin.store.store import Json, Store
 
 log = logging.getLogger(__name__)
 
@@ -32,9 +33,21 @@ LONGEST_WAIT_S = 3600.0
 a flat CMOS battery, cannot hold its deadlines back for longer."""
 MATERIAL = "material"
 """The setting that keeps the material of the alerts and the tray list, as its letter."""
+PLACES = "places"
+"""The setting that keeps where the user left the windows, by name: `{"creation": [x, y]}`
+(ADR-0023)."""
 
 type Command = Callable[[], object]
 """What it returns is dropped."""
+
+
+@dataclass(frozen=True, slots=True)
+class Kept:
+    """What the settings keep for the interface, to put on before any window shows."""
+
+    material: str | None
+    """The material's letter, if one was chosen."""
+    places: dict[str, tuple[int, int]]
 
 
 class Source(Protocol):
@@ -46,6 +59,21 @@ class Source(Protocol):
 
 def _wake() -> None:
     """No command: the worker woke for a deadline, or for an engine whose output ended."""
+
+
+def _places(kept: Json) -> dict[str, tuple[int, int]]:
+    """The places as `keep_places` kept them; anything else, from a later version after a
+    downgrade, is left out: that window opens at the centre."""
+    if not isinstance(kept, dict):
+        return {}
+    return {
+        name: (place[0], place[1])
+        for name, place in kept.items()
+        if isinstance(place, list)
+        and len(place) == 2
+        and isinstance(place[0], int)
+        and isinstance(place[1], int)
+    }
 
 
 class Worker:
@@ -88,14 +116,14 @@ class Worker:
         self._capture = capture(self.observe)
         self._capturing = False
         self._cleanup_at = 0
-        self._opened: Future[str | None] = Future()
+        self._opened: Future[Kept] = Future()
         # A daemon, so that an interface thread that fails cannot leave the process running.
         self._thread = threading.Thread(target=self._run, name="worker", daemon=True)
 
-    def start(self) -> str | None:
-        """Open the database, migrated and cleaned up, and go on from what it holds; return the
-        material kept in the settings, if any. Raise what opening raised: without its database
-        the app cannot go on."""
+    def start(self) -> Kept:
+        """Open the database, migrated and cleaned up, and go on from what it holds; return what
+        the settings keep for the interface. Raise what opening raised: without its database the
+        app cannot go on."""
         self._thread.start()
         return self._opened.result()
 
@@ -128,15 +156,19 @@ class Worker:
     def keep_material(self, material: str) -> None:
         self._queue.put(lambda: self._store.set_setting(MATERIAL, material))
 
+    def keep_places(self, places: Mapping[str, tuple[int, int]]) -> None:
+        kept: dict[str, Json] = {name: [x, y] for name, (x, y) in places.items()}
+        self._queue.put(lambda: self._store.set_setting(PLACES, kept))
+
     # On the worker thread
 
     def _run(self) -> None:
         try:
-            material = self._open()
+            kept = self._open()
         except BaseException as error:  # noqa: BLE001  # start() raises it on the interface thread
             self._opened.set_exception(error)
             return
-        self._opened.set_result(material)
+        self._opened.set_result(kept)
         command: Command | None = _wake  # the first turn shows what the database held
         while command is not None:
             self._turn(command)
@@ -146,7 +178,7 @@ class Worker:
                 command = _wake
         self._shut()
 
-    def _open(self) -> str | None:
+    def _open(self) -> Kept:
         self._store = Store.open(self._database)
         try:
             now = self._clock.now()
@@ -160,10 +192,11 @@ class Worker:
                 self._store.load(),
             )
             material = self._store.setting(MATERIAL)
+            places = self._store.setting(PLACES)
         except BaseException:
             self._store.close()
             raise
-        return material if isinstance(material, str) else None
+        return Kept(material if isinstance(material, str) else None, _places(places))
 
     def _turn(self, command: Command) -> None:
         """One command, then whatever deadline has come; then what `core` changed is saved. A

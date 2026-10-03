@@ -30,8 +30,8 @@ stateDiagram-v2
     New --> New : the shortcut again, which keeps the text
     Editing --> New : the shortcut, for a blank reminder
     Editing --> Editing : edit another reminder, which replaces it
-    New --> Hidden : Salva, Annulla, Esc or close
-    Editing --> Hidden : Salva, Annulla, Esc or close
+    New --> Hidden : Salva, Annulla, the X or Esc
+    Editing --> Hidden : Salva, Annulla, the X or Esc
 ```
 
 - Two boxes, "Quando" and "Ricordami di", each showing an example in grey
@@ -48,9 +48,20 @@ stateDiagram-v2
 - The window is a card like the alerts, chosen by the owner on screen (#43):
   the alerts' material and glass, no Windows title bar, "Nuovo promemoria" or
   "Modifica promemoria" as its first line. Like Windows' own panels it has no
-  taskbar button; Win+Shift+N brings it back to the front. It is centred on
-  the primary screen and takes the focus; once it hides, Windows gives the
-  focus back to the app the user was in.
+  taskbar button; Win+Shift+N brings it back to the front, where it is. It
+  takes the focus; once it hides, Windows gives the focus back to the app the
+  user was in.
+- **The frame** ([ADR-0023](../adr/0023-window-frame.md)): an X on the title's line, a Subtle button
+  12 px from the right edge, closes as Annulla does; Tab passes it by, since
+  Esc does the same. The window drags from any point no control takes: a
+  `DragHandler` hands the drag to Windows with `startSystemMove()`, and a drag
+  that starts on a button or a box stays theirs.
+- It opens at the centre of the primary screen's work area, or where the user
+  left it, also after a restart; at the centre when that place is no longer
+  whole on a screen, a monitor unplugged. `ui/places.py` follows the moves,
+  and the app keeps the places with the [settings](settings.md). While it
+  shows, it grows downwards as the sentence takes a second line, and never
+  moves by itself.
 
 ## Trying it
 

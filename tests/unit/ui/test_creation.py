@@ -3,7 +3,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import replace
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtGui import QColor, QGuiApplication, QWindow
 from PySide6.QtQml import QQmlEngine, QQmlProperty, qmlContext
 from PySide6.QtQuick import QQuickItem, QQuickWindow
@@ -14,6 +14,7 @@ from jiffin.ui import win32
 from jiffin.ui.creation import Creation
 from jiffin.ui.glass import Glass
 from jiffin.ui.look import Look, Settings
+from jiffin.ui.places import Places
 
 DARK = Settings(
     dark=True,
@@ -63,7 +64,8 @@ def accessible_name(item: QQuickItem) -> object:
 
 
 class Screen:
-    """The creation window on the offscreen screen, with the changes saved there."""
+    """The creation window on the offscreen screen, with the changes saved there and the places
+    kept."""
 
     def __init__(self, qtbot: QtBot) -> None:
         self._qtbot = qtbot
@@ -72,8 +74,10 @@ class Screen:
         self.engine = QQmlEngine()
         self.look.provide(self.engine)
         self.changes = Changes()
+        self.kept: list[dict[str, tuple[int, int]]] = []
+        self.places = Places(lambda places: self.kept.append(dict(places)))
         before = set(QGuiApplication.topLevelWindows())
-        self.creation = Creation(self.engine, self.changes, Glass(self.look))
+        self.creation = Creation(self.engine, self.changes, Glass(self.look), self.places)
         (window,) = (w for w in QGuiApplication.topLevelWindows() if w not in before)
         assert isinstance(window, QQuickWindow)
         self.window = window
@@ -273,8 +277,8 @@ def test_an_empty_box_shows_an_example(screen: Screen) -> None:
     assert screen.examples() == {"aggiornare il changelog"}
 
 
-@pytest.mark.parametrize("close", ["Annulla", "Esc"])
-def test_annulla_and_esc_close_without_saving(screen: Screen, close: str) -> None:
+@pytest.mark.parametrize("close", ["Annulla", "Esc", "Chiudi"])
+def test_annulla_esc_and_the_x_close_without_saving(screen: Screen, close: str) -> None:
     screen.new()
     screen.type("quando apro Figma")
     screen.press(Qt.Key.Key_Tab)
@@ -285,6 +289,60 @@ def test_annulla_and_esc_close_without_saving(screen: Screen, close: str) -> Non
         screen.click(close)
     assert not screen.window.isVisible()
     assert screen.changes.made == []
+
+
+def test_the_x_sits_on_the_titles_line_12_px_from_the_edge_and_tab_passes_it_by(
+    screen: Screen,
+) -> None:
+    screen.new()
+    x = screen.button("Chiudi")
+    title = screen._item(
+        lambda item: item.inherits("QQuickText") and item.property("text") == "Nuovo promemoria"
+    )
+    corner = x.mapToScene(QPointF(0, 0))
+    assert corner.x() + x.width() == screen.window.width() - 12
+    assert corner.y() + x.height() / 2 == title.mapToScene(QPointF(0, title.height() / 2)).y()
+    screen.type("quando apro Figma")
+    screen.press(Qt.Key.Key_Tab)
+    screen.type("esportare le icone")
+    for name in ("Annulla", "Salva", WHEN):
+        screen.press(Qt.Key.Key_Tab)
+        assert screen.focused() == name
+
+
+def test_the_window_drags_from_any_empty_point_but_not_from_its_controls(
+    screen: Screen, drags: Callable[[QQuickWindow, QPoint], bool]
+) -> None:
+    screen.new()
+    window = screen.window
+    title = screen._item(
+        lambda item: item.inherits("QQuickText") and item.property("text") == "Nuovo promemoria"
+    )
+    assert drags(window, QPoint(8, window.height() - 8))
+    assert drags(window, title.mapToScene(QPointF(4, title.height() / 2)).toPoint())
+    for control in (screen.button("Chiudi"), screen.button("Annulla"), screen.box(WHEN)):
+        middle = QPointF(control.width() / 2, control.height() / 2)
+        assert not drags(window, control.mapToScene(middle).toPoint())
+
+
+def test_the_window_opens_again_where_it_was_left(screen: Screen) -> None:
+    screen.new()
+    # Where the user drags it: the offscreen platform has no system move.
+    screen.window.setFramePosition(QPoint(30, 40))
+    screen.creation.cancel()
+    screen.new()
+    assert screen.window.framePosition() == QPoint(30, 40)
+    assert screen.kept == [{"creation": (30, 40)}]
+
+
+def test_the_shortcut_brings_an_open_window_to_the_front_where_it_is(screen: Screen) -> None:
+    screen.new()
+    # Even partly off the screen: it opens at the centre only from hidden.
+    area = QGuiApplication.primaryScreen().availableGeometry()
+    partly_off = QPoint(area.right() - 100, area.y() + 40)
+    screen.window.setFramePosition(partly_off)
+    screen.new()
+    assert screen.window.framePosition() == partly_off
 
 
 def test_tab_reaches_the_buttons_and_enter_clicks_them(screen: Screen) -> None:
@@ -331,7 +389,7 @@ def test_the_creation_goes_with_the_engine_and_no_binding_reads_it_gone(
     look = Look(Windows().read)
     engine = QQmlEngine()
     look.provide(engine)
-    creation = Creation(engine, Changes(), Glass(look))
+    creation = Creation(engine, Changes(), Glass(look), Places(lambda places: None))
     creation.new()
     gone: list[str] = []
     creation.destroyed.connect(lambda: gone.append("creation"))

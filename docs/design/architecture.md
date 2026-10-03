@@ -96,8 +96,8 @@ sequenceDiagram
     I->>I: make the interface: windows hidden, tray icon, shortcut
     I->>W: start
     W->>W: open the database: migrations, cleanup, what it holds
-    W-->>I: the material kept in the settings
-    I->>I: put it on, before any window shows
+    W-->>I: the material and the windows' places kept in the settings
+    I->>I: put them on, before any window shows
     W-->>I: the reminders and the unseen alerts (signals)
     I->>M: fetch the model file
     M-->>I: the check, or the download (signals)

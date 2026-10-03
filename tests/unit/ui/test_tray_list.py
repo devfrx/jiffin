@@ -5,8 +5,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QElapsedTimer, QPointF, Qt
-from PySide6.QtGui import QGuiApplication, QWindow
+from PySide6.QtCore import QElapsedTimer, QPoint, QPointF, Qt
+from PySide6.QtGui import QGuiApplication, QWheelEvent, QWindow
 from PySide6.QtQml import QQmlEngine, QQmlProperty, qmlContext, qmlEngine
 from PySide6.QtQuick import QQuickItem, QQuickWindow
 from PySide6.QtTest import QTest
@@ -21,6 +21,7 @@ from jiffin.ui import tray_list, win32
 from jiffin.ui.first_run import FirstRun, ModelFile, ModelState
 from jiffin.ui.glass import Glass
 from jiffin.ui.look import Look, Settings
+from jiffin.ui.places import Places
 from jiffin.ui.rows import Rows
 from jiffin.ui.tray_list import MARGIN, REOPEN_MS, TrayList
 
@@ -149,7 +150,14 @@ class Screen:
         self.writer = Writer()
         self.retries = 0
         self.fetches = 0
-        self.first_run = FirstRun(self.engine, MODEL, self._fetch, Glass(self.look), self.clock)
+        self.first_run = FirstRun(
+            self.engine,
+            MODEL,
+            self._fetch,
+            Glass(self.look),
+            Places(lambda places: None),
+            self.clock,
+        )
         self.list = TrayList(
             self.engine,
             self.commands,
@@ -295,13 +303,59 @@ def test_the_list_is_a_card_on_the_alerts_glass(
     assert calls[1:] == [("activate_frame", hwnd), ("nudge", hwnd)]
 
 
-def test_esc_and_the_tray_icon_close_the_list(screen: Screen) -> None:
+def test_esc_the_x_and_the_tray_icon_close_the_list(screen: Screen) -> None:
     screen.open()
     screen.press(Qt.Key.Key_Escape)
     assert not screen.window.isVisible()
     screen.open()
+    screen.click("Chiudi")
+    assert not screen.window.isVisible()
+    screen.open()
     screen.list.toggle()
     assert not screen.window.isVisible()
+
+
+def test_the_x_sits_after_nuovo_12_px_from_the_edge(screen: Screen) -> None:
+    screen.open()
+    new, x = screen.button("Nuovo"), screen.button("Chiudi")
+    corner = x.mapToScene(QPointF(0, 0))
+    assert corner.x() + x.width() == screen.window.width() - 12
+    assert corner.x() - new.mapToScene(QPointF(new.width(), 0)).x() == 4
+    assert corner.y() == new.mapToScene(QPointF(0, 0)).y()
+
+
+def test_the_list_drags_from_any_empty_point_but_not_from_its_controls(
+    screen: Screen, drags: Callable[[QQuickWindow, QPoint], bool]
+) -> None:
+    screen.list.show_reminders(
+        RemindersView((active(1, "quando apro Figma", "esportare le icone"),))
+    )
+    screen.open()
+    window = screen.window
+    assert drags(window, QPoint(4, window.height() - 4))
+    for name in ("Nuovo", "Chiudi", "Completa", "Modifica"):
+        button = screen.button(name)
+        middle = QPointF(button.width() / 2, button.height() / 2)
+        assert not drags(window, button.mapToScene(middle).toPoint())
+
+
+def test_a_moved_list_stays_where_it_was_left_as_it_grows_and_opens_over_the_tray_again(
+    screen: Screen, qtbot: QtBot
+) -> None:
+    screen.open()
+    # Where the user drags it: the offscreen platform has no system move.
+    screen.window.setFramePosition(QPoint(30, 40))
+    # Qt says the window grew from its window-system queue, where the list keeps its bottom.
+    with qtbot.waitSignal(screen.window.heightChanged):
+        screen.list.show_reminders(
+            RemindersView((active(1, "quando apro Figma", "esportare le icone"),))
+        )
+    assert screen.window.framePosition() == QPoint(30, 40)
+    screen.press(Qt.Key.Key_Escape)
+    screen.open()
+    area = QGuiApplication.primaryScreen().availableGeometry()
+    frame = screen.window.frameGeometry()
+    assert (frame.right(), frame.bottom()) == (area.right() - MARGIN, area.bottom() - MARGIN)
 
 
 def test_a_click_elsewhere_closes_the_list_and_the_icon_does_not_reopen_it_at_once(
@@ -550,6 +604,31 @@ def test_a_long_list_scrolls_to_the_button_tab_reaches(screen: Screen) -> None:
     assert 0 < bottom <= screen.window.height()
 
 
+def test_a_long_list_scrolls_with_the_wheel(screen: Screen, qtbot: QtBot) -> None:
+    """The mouse no longer scrolls it by dragging, which moves the window instead."""
+    many = tuple(
+        active(n, f"quando apro il progetto {n}", f"chiudere il ticket {n}")
+        for n in range(40, 0, -1)
+    )
+    screen.list.show_reminders(RemindersView(many))
+    screen.open()
+    (scroller,) = (item for item in screen._shown() if item.inherits("QQuickFlickable"))
+    assert scroller.property("contentY") == 0
+    middle = QPointF(screen.window.width() / 2, screen.window.height() / 2)
+    notch = QWheelEvent(
+        middle,
+        screen.window.mapToGlobal(middle),
+        QPoint(),
+        QPoint(0, -120),
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+        Qt.ScrollPhase.NoScrollPhase,
+        False,
+    )
+    QGuiApplication.sendEvent(screen.window, notch)
+    qtbot.waitUntil(lambda: scroller.property("contentY") > 0)
+
+
 @pytest.mark.parametrize(
     ("engine", "message", "retry"),
     [
@@ -664,7 +743,9 @@ def test_the_list_goes_with_the_engine_and_no_binding_reads_it_gone(
     engine = QQmlEngine()
     look.provide(engine)
     clock = SimulatedClock(0)
-    first_run = FirstRun(engine, MODEL, lambda: None, Glass(look), clock)
+    first_run = FirstRun(
+        engine, MODEL, lambda: None, Glass(look), Places(lambda places: None), clock
+    )
     trays = TrayList(engine, Commands(), Writer(), lambda: None, first_run, Glass(look), clock)
     trays.show_reminders(RemindersView((active(1, "quando apro Figma", "esportare le icone"),)))
     gone: list[str] = []

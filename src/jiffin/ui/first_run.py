@@ -7,7 +7,8 @@ to wait or to act, for a download or a problem, and shows three steps: the downl
 and ready, with how to start. The plain check at every start opens nothing. Once the user closes
 it, it stays closed for this run: the tray list shows the download and the problems, and its
 Dettagli opens the window again. Offline, the window says where to get the file and where to put
-it, and Riprova checks it as it checks a download.
+it, and Riprova checks it as it checks a download. It opens at the centre of the screen, or where
+the user left it (ADR-0023).
 """
 
 import math
@@ -17,13 +18,14 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-from PySide6.QtCore import Property, QEnum, QObject, QPoint, QUrl, Signal, Slot
+from PySide6.QtCore import Property, QEnum, QObject, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 from PySide6.QtQml import QmlElement, QmlUncreatable, QQmlComponent, QQmlEngine
 from PySide6.QtQuick import QQuickWindow
 
 from jiffin.core.clock import Clock
 from jiffin.ui.glass import Glass
+from jiffin.ui.places import Places
 
 QML_IMPORT_NAME = "Jiffin"
 QML_IMPORT_MAJOR_VERSION = 1
@@ -92,6 +94,7 @@ class FirstRun(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         model: ModelFile,
         fetch: Callable[[], None],
         glass: Glass,
+        places: Places,
         clock: Clock,
     ) -> None:
         # The engine owns this object, as the creation window's: the windows' bindings never
@@ -118,9 +121,10 @@ class FirstRun(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         if not isinstance(window, QQuickWindow):
             raise TypeError(f"no first-run window: {self._component.errorString()}")
         self._window = window
-        # Steps come and go, and lines wrap once the layout gives them their width: it stays
-        # centred.
-        window.heightChanged.connect(self._centre)
+        self._place = places.follow("first_run", window)
+        # Steps come and go, and lines wrap once the layout gives them their width: a centred
+        # window stays centred.
+        window.heightChanged.connect(self._place.resized)
         glass.add(int(window.winId()))
 
     def show(self, state: ModelState) -> None:
@@ -268,22 +272,12 @@ class FirstRun(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
     def _open(self) -> None:
         window = self._window
         if not window.isVisible():
-            self._centre()
+            self._place.open()
             self.opened.emit()
         window.show()
         self._glass.shown(int(window.winId()))
         # On Windows, activating the window also brings it to the front.
         window.requestActivate()
-
-    def _centre(self) -> None:
-        window = self._window
-        area = QGuiApplication.primaryScreen().availableGeometry()
-        frame = window.frameMargins()
-        width = window.width() + frame.left() + frame.right()
-        height = window.height() + frame.top() + frame.bottom()
-        window.setFramePosition(
-            QPoint(area.x() + (area.width() - width) // 2, area.y() + (area.height() - height) // 2)
-        )
 
 
 # After the class: inside its body, PySide's QEnum has not made the enum yet.

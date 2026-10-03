@@ -1,7 +1,8 @@
-"""The pieces of the interface that share one QML engine: the look, the glass, the overlay, the
-creation window and its shortcut, the tray icon and its list, the settings window and the
-first-run window."""
+"""The pieces of the interface that share one QML engine: the look, the glass, the windows'
+places, the overlay, the creation window and its shortcut, the tray icon and its list, the
+settings window and the first-run window."""
 
+from collections.abc import Mapping
 from typing import Protocol
 
 from PySide6.QtGui import QGuiApplication
@@ -18,6 +19,7 @@ from jiffin.ui.glass import Glass
 from jiffin.ui.hotkey import Hotkey
 from jiffin.ui.look import Look, Material
 from jiffin.ui.overlay import Overlay
+from jiffin.ui.places import Places
 from jiffin.ui.preferences import Preferences
 from jiffin.ui.tray import Tray
 from jiffin.ui.tray_list import Commands, TrayList
@@ -43,11 +45,17 @@ class Upkeep(Protocol):
         """The material the user chose, to set on `look.material` at the next start."""
         ...
 
+    def keep_places(self, places: Mapping[str, tuple[int, int]]) -> None:
+        """Where the user left the windows, by name, to give `places.restore` at the next
+        start."""
+        ...
+
 
 class Interface:
     """Make it on the interface thread, after the application and before any window, and set
-    the kept material on `look.material` before anything shows. The `show_` methods take, on this
-    thread, what `core`, the context capture, the engine and the model file say."""
+    the kept material on `look.material` and the kept places on `places` before anything shows.
+    The `show_` methods take, on this thread, what `core`, the context capture, the engine and the
+    model file say."""
 
     def __init__(
         self,
@@ -68,9 +76,12 @@ class Interface:
         app.installNativeEventFilter(self.glass)
         self.engine = QQmlEngine()
         self.look.provide(self.engine)
+        self.places = Places(upkeep.keep_places)
         self.overlay = Overlay(self.engine, core, self.glass)
-        self.creation = Creation(self.engine, core, self.glass)
-        self.first_run = FirstRun(self.engine, model, upkeep.fetch_model, self.glass, clock)
+        self.creation = Creation(self.engine, core, self.glass, self.places)
+        self.first_run = FirstRun(
+            self.engine, model, upkeep.fetch_model, self.glass, self.places, clock
+        )
         self.tray_list = TrayList(
             self.engine,
             core,
@@ -80,7 +91,9 @@ class Interface:
             self.glass,
             clock,
         )
-        self.preferences = Preferences(self.engine, self.look, upkeep.keep_material, self.glass)
+        self.preferences = Preferences(
+            self.engine, self.look, upkeep.keep_material, self.glass, self.places
+        )
         self.tray = Tray(self.engine, self.look, self.tray_list.toggle, self.preferences.open)
         self.tray.install()
         self.hotkey = Hotkey(self.creation.new)

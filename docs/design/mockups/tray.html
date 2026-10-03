@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jiffin — lista nella tray</title>
 <!--
-  The tray list, as built in src/jiffin/ui/qml (ADR-0010, tickets #12 and #43). A card on the
+  The tray list, as built in src/jiffin/ui/qml (ADR-0010, ADR-0023, tickets #12 and #43). A card on the
   alerts' material (B by default) over the tray, 368 px wide. The owner chose on screen in #43
   the rows (a circle completes, Elimina asks first) and the warnings as a quiet line, without
   the box of WinUI's InfoBar. Colours are those of Colors.qml; text and icons use Windows 11's
@@ -161,12 +161,16 @@
     font-size: 14px;
     line-height: 20px;
   }
+  /* The title, then Nuovo and the X (ADR-0023), 12 px from the edge. */
   .header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 4px;
     padding: 0 12px 0 16px;
     font-weight: 600;
+  }
+  .header .title {
+    flex: 1;
   }
   .caption,
   .section {
@@ -327,7 +331,7 @@
     <h2>Chiaro</h2>
     <div class="desk">
       <div class="window" role="dialog" aria-label="Promemoria">
-        <div class="header">Promemoria <button><span class="glyph">&#xE710;</span>Nuovo</button></div>
+        <div class="header"><span class="title">Promemoria</span><button><span class="glyph">&#xE710;</span>Nuovo</button><button class="subtle" aria-label="Chiudi"><span class="glyph">&#xE711;</span></button></div>
         <div class="notice">
           <span class="status critical"><span class="glyph ring">&#xF136;</span><span class="glyph mark">&#xF13D;</span></span>
           <div><p>Il modello si è fermato quattro volte in un'ora. Finché non riparte, i promemoria non avvisano.</p><button>Riprova</button></div>
@@ -371,7 +375,7 @@
     <h2>Scuro</h2>
     <div class="desk">
       <div class="window" role="dialog" aria-label="Promemoria">
-        <div class="header">Promemoria <button><span class="glyph">&#xE710;</span>Nuovo</button></div>
+        <div class="header"><span class="title">Promemoria</span><button><span class="glyph">&#xE710;</span>Nuovo</button><button class="subtle" aria-label="Chiudi"><span class="glyph">&#xE711;</span></button></div>
         <div class="notice">
           <span class="status critical"><span class="glyph ring">&#xF136;</span><span class="glyph mark">&#xF13D;</span></span>
           <div><p>Il modello si è fermato quattro volte in un'ora. Finché non riparte, i promemoria non avvisano.</p><button>Riprova</button></div>
@@ -413,7 +417,8 @@
 </div>
 
 <ul class="notes">
-  <li>La lista prende il focus. Esc, un clic altrove o un altro clic sull'icona la chiudono; Tab passa da un pulsante all'altro.</li>
+  <li>La lista prende il focus. Esc, la X, un clic altrove o un altro clic sull'icona la chiudono; Tab passa da un pulsante all'altro, non dalla X, perché Esc fa lo stesso.</li>
+  <li>Si trascina da ogni punto vuoto, non dai controlli; si riapre sempre sopra l'icona. Il mouse non la fa più scorrere trascinando: scorre con la rotella o con la barra.</li>
   <li>In cima, solo quando serve, una riga per ciò che impedisce a Jiffin di funzionare del tutto: il modello e i browser di cui non si legge l'indirizzo. Solo l'icona è colorata.</li>
   <li>Gli avvisi spariti senza risposta stanno sopra i promemoria, i più recenti prima; Rimanda apre 15 min, 1 ora e Domani dentro la scheda. Il puntino dice che la lista mostra l'avviso per la prima volta.</li>
   <li>Il cerchio a sinistra completa il promemoria, la matita lo apre nella finestra di modifica, il cestino chiede prima di eliminarlo, con Annulla prima di Elimina.</li>

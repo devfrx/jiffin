@@ -3,8 +3,9 @@ the active reminders (#12, #43, ADR-0010). The model file on its way is one of t
 line shows the download or the problem, and Dettagli opens the first-run window.
 
 A card on the alerts' material, at the bottom right of the screen over the tray. The tray icon
-opens it, and it takes the focus; Esc or a click elsewhere closes it. While it is open, the
-unseen alerts it shows are seen, and those new to it keep a dot until it closes.
+opens it, and it takes the focus; Esc, its X or a click elsewhere closes it. It drags, and opens
+over the tray again (ADR-0023). While it is open, the unseen alerts it shows are seen, and those
+new to it keep a dot until it closes.
 """
 
 from collections.abc import Callable
@@ -119,6 +120,8 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         self._fresh: set[int] = set()
         """The unseen alerts the open list shows for the first time: they keep their dot."""
         self._max_height = 0
+        self._put_at: QPoint | None = None
+        """Where the list was last put: an open list anywhere else, the user moved."""
         self._unseen = Rows(
             "alertId", ("condition", "action", "fresh", "daysAgo", "day", "month", "time"), self
         )
@@ -330,8 +333,12 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         return next((a for a in self._reminders.active if a.reminder.id == reminder_id), None)
 
     def _place(self) -> None:
-        """At the bottom right of the work area: a list that grows or shrinks keeps its bottom."""
+        """At the bottom right of the work area: a list that grows or shrinks keeps its bottom.
+        One the user moved stays where they left it, with its top left corner, until it
+        closes."""
         window = self._window
+        if window.isVisible() and window.framePosition() != self._put_at:
+            return
         area = QGuiApplication.primaryScreen().availableGeometry()
         frame = window.frameMargins()
         width = window.width() + frame.left() + frame.right()
@@ -342,3 +349,4 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
                 area.y() + area.height() - MARGIN - height,
             )
         )
+        self._put_at = window.framePosition()
