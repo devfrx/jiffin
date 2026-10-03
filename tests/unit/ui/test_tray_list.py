@@ -64,7 +64,7 @@ class Commands:
 
 
 class Writer:
-    """What the list opened the creation window for: (what[, reminder id, condition, action])."""
+    """What the list opened the creation window for: (what[, the revision to edit])."""
 
     def __init__(self) -> None:
         self.opened: list[tuple[object, ...]] = []
@@ -72,8 +72,8 @@ class Writer:
     def new(self) -> None:
         self.opened.append(("new",))
 
-    def edit(self, reminder_id: int, condition: str, action: str) -> None:
-        self.opened.append(("edit", reminder_id, condition, action))
+    def edit(self, revision: Revision) -> None:
+        self.opened.append(("edit", revision))
 
 
 def active(
@@ -482,19 +482,18 @@ def test_an_alert_new_to_the_list_keeps_its_dot_until_the_list_closes(screen: Sc
 
 
 def test_nuovo_and_modifica_open_the_creation_window_and_close_the_list(screen: Screen) -> None:
-    screen.list.show_reminders(
-        RemindersView((active(2, "quando apro la posta", "rispondere a Giulia"),))
-    )
+    posta = active(2, "quando apro la posta", "rispondere a Giulia")
+    perennial = replace(posta.reminder.revision, perennial=True)
+    posta = replace(posta, reminder=replace(posta.reminder, revision=perennial))
+    screen.list.show_reminders(RemindersView((posta,)))
     screen.open()
     screen.click("Nuovo")
     assert not screen.window.isVisible()
     screen.open()
     screen.click("Modifica", "Rispondere a Giulia")
     assert not screen.window.isVisible()
-    assert screen.writer.opened == [
-        ("new",),
-        ("edit", 2, "quando apro la posta", "rispondere a Giulia"),
-    ]
+    # The whole revision: the creation window shows its "Ogni volta" and its saved time.
+    assert screen.writer.opened == [("new",), ("edit", perennial)]
 
 
 def test_completa_goes_to_core_and_elimina_asks_first(screen: Screen) -> None:

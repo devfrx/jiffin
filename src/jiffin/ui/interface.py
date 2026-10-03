@@ -78,7 +78,7 @@ class Interface:
         self.look.provide(self.engine)
         self.places = Places(upkeep.keep_places)
         self.overlay = Overlay(self.engine, core, self.glass)
-        self.creation = Creation(self.engine, core, self.glass, self.places)
+        self.creation = Creation(self.engine, core, self.glass, self.places, clock)
         self.first_run = FirstRun(
             self.engine, model, upkeep.fetch_model, self.glass, self.places, clock
         )

@@ -31,7 +31,7 @@ from PySide6.QtQuick import QQuickWindow
 
 from jiffin.core.alerts import AlertsView
 from jiffin.core.clock import Clock
-from jiffin.core.records import Alert, Snooze
+from jiffin.core.records import Alert, Revision, Snooze
 from jiffin.core.reminders import MINUTE_MS, ActiveReminder, RemindersView
 from jiffin.ui.first_run import FirstRun
 from jiffin.ui.glass import Glass
@@ -65,7 +65,7 @@ class Writer(Protocol):
     """The creation window, which Nuovo and Modifica open."""
 
     def new(self) -> None: ...
-    def edit(self, reminder_id: int, condition: str, action: str) -> None: ...
+    def edit(self, revision: Revision) -> None: ...
 
 
 @QmlElement
@@ -213,8 +213,7 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         if active is None:
             return
         self.close()
-        revision = active.reminder.revision
-        self._writer.edit(reminder_id, revision.condition, revision.action)
+        self._writer.edit(active.reminder.revision)
 
     @Slot(int)
     def complete(self, reminder_id: int) -> None:

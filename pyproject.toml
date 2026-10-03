@@ -87,6 +87,7 @@ files = [
     "src/jiffin/ui/qml/CreationWindow.qml",
     "src/jiffin/ui/qml/FirstRunWindow.qml",
     "src/jiffin/ui/qml/FluentButton.qml",
+    "src/jiffin/ui/qml/FluentCheckBox.qml",
     "src/jiffin/ui/qml/FluentInfoBar.qml",
     "src/jiffin/ui/qml/FluentProgressBar.qml",
     "src/jiffin/ui/qml/FluentRadioButton.qml",
