@@ -161,7 +161,7 @@ def wait_until(condition: Callable[[], bool]) -> None:
 def test_what_the_database_holds_shows_at_the_start(make_scene: MakeScene) -> None:
     first = make_scene()
     first.worker.start()
-    first.core.create("quando apro Figma", "esportare le icone")
+    first.core.create("quando apro Figma", "esportare le icone", False)
     first.worker.close()
     second = make_scene()
     second.worker.start()
@@ -182,7 +182,7 @@ def test_the_capture_starts_with_the_worker_and_the_engine_once_the_model_file_i
 
 def test_a_reminder_with_only_a_time_rings_before_the_engine_starts(scene: Scene) -> None:
     """While the model downloads, say (ADR-0021)."""
-    scene.core.create("oggi", "pagare la bolletta")
+    scene.core.create("oggi", "pagare la bolletta", False)
     scene.enter(FIGMA)
     scene.advance(DEBOUNCE_MS)
     scene.enter(None)
@@ -196,7 +196,7 @@ def test_a_capture_that_cannot_start_is_logged_and_the_worker_goes_on(
 ) -> None:
     scene = make_scene(contexts=RefusedContexts)
     scene.worker.start()
-    scene.core.create("quando apro Figma", "esportare le icone")
+    scene.core.create("quando apro Figma", "esportare le icone", False)
     scene.settle()
     assert "the context capture cannot start" in caplog.text
     assert [active.reminder.revision.condition for active in scene.lists[-1].active] == [
@@ -207,7 +207,7 @@ def test_a_capture_that_cannot_start_is_logged_and_the_worker_goes_on(
 def test_a_reminder_written_before_the_engine_gets_its_statement_once_it_is_up(
     scene: Scene,
 ) -> None:
-    scene.core.create("quando apro Figma", "esportare le icone")
+    scene.core.create("quando apro Figma", "esportare le icone", False)
     scene.settle()
     assert scene.statement() is None
     scene.worker.model_ready()
@@ -217,7 +217,7 @@ def test_a_reminder_written_before_the_engine_gets_its_statement_once_it_is_up(
 
 def test_the_contexts_reach_core(scene: Scene) -> None:
     scene.worker.model_ready()
-    scene.core.create("quando apro Figma", "esportare le icone")
+    scene.core.create("quando apro Figma", "esportare le icone", False)
     scene.enter(FIGMA)
     scene.advance(DEBOUNCE_MS)
     scene.enter(None)
@@ -317,7 +317,7 @@ def test_a_command_that_fails_is_logged_and_the_worker_goes_on(
     scene: Scene, caplog: pytest.LogCaptureFixture
 ) -> None:
     scene.worker.command(lambda core: 1 / 0)
-    scene.core.create("quando apro Figma", "esportare le icone")
+    scene.core.create("quando apro Figma", "esportare le icone", False)
     scene.settle()
     assert "the worker failed" in caplog.text
     assert scene.count("reminder") == 1
@@ -375,8 +375,8 @@ class Recorded:
         ("snooze", (7, Snooze.HOUR)),
         ("vanished", (7,)),
         ("seen", ()),
-        ("create", ("quando apro Figma", "esportare le icone")),
-        ("edit", (3, "quando apro Figma", "esportare le icone")),
+        ("create", ("quando apro Figma", "esportare le icone", True)),
+        ("edit", (3, "quando apro Figma", "esportare le icone", True)),
         ("complete", (3,)),
         ("delete", (3,)),
     ],

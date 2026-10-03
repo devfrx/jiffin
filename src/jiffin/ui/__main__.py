@@ -25,6 +25,7 @@ from PySide6.QtGui import QGuiApplication
 from jiffin.core.alerts import AlertsView
 from jiffin.core.clock import SystemClock
 from jiffin.core.context import Context
+from jiffin.core.meanings import read
 from jiffin.core.records import Alert, Reminder, Revision, Snooze
 from jiffin.core.reminders import MINUTE_MS, ActiveReminder, RemindersView
 from jiffin.ui.first_run import FirstRun, ModelFile, ModelState
@@ -170,19 +171,26 @@ class Preview:
         ]
         QTimer.singleShot(0, self._show_alerts)
 
-    def create(self, condition: str, action: str) -> None:
-        print(f"nuovo promemoria: {condition!r}, {action!r}", flush=True)
+    def create(self, condition: str, action: str, perennial: bool) -> None:
+        every = ", ogni volta" if perennial else ""
+        print(f"nuovo promemoria: {condition!r}, {action!r}{every}", flush=True)
         reminder_id = next(self._ids)
-        revision = Revision(reminder_id, reminder_id, 1, condition, action, condition)
+        revision = self._revision(reminder_id, condition, action, perennial)
         reminder = Reminder(reminder_id, self._clock.now(), revision)
         self._reminders[reminder_id] = ActiveReminder(reminder, 0)
         QTimer.singleShot(0, self._show_reminders)
 
-    def edit(self, reminder_id: int, condition: str, action: str) -> None:
-        print(f"promemoria {reminder_id} modificato: {condition!r}, {action!r}", flush=True)
+    def edit(self, reminder_id: int, condition: str, action: str, perennial: bool) -> None:
+        every = ", ogni volta" if perennial else ""
+        print(f"promemoria {reminder_id} modificato: {condition!r}, {action!r}{every}", flush=True)
         active = self._reminders.get(reminder_id)
         if active is not None:
-            revision = replace(active.reminder.revision, condition=condition, action=action)
+            old = active.reminder.revision
+            # The same condition keeps its time, as in `core` (ADR-0020).
+            if condition == old.condition:
+                revision = replace(old, action=action, perennial=perennial)
+            else:
+                revision = self._revision(reminder_id, condition, action, perennial)
             reminder = replace(active.reminder, revision=revision)
             self._reminders[reminder_id] = ActiveReminder(reminder, 0)
         QTimer.singleShot(0, self._show_reminders)
@@ -212,6 +220,22 @@ class Preview:
     def keep_places(self, places: Mapping[str, tuple[int, int]]) -> None:
         where = ", ".join(f"{name} {x},{y}" for name, (x, y) in places.items())
         print(f"posizioni {where}", flush=True)
+
+    def _revision(self, reminder_id: int, condition: str, action: str, perennial: bool) -> Revision:
+        """As `core` makes one: its time read now."""
+        now = self._clock.now()
+        reading = read(condition, self._clock.local(now))
+        return Revision(
+            reminder_id,
+            reminder_id,
+            1,
+            condition,
+            action,
+            reading.remainder,
+            schedule=reading.schedule,
+            written_at=now,
+            perennial=perennial,
+        )
 
     def _answered(self, alert_id: int, what: str) -> None:
         print(f"avviso {alert_id}: {what}", flush=True)

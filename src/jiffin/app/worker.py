@@ -311,11 +311,11 @@ class QueuedCore:
     def seen(self) -> None:
         self._worker.command(lambda core: core.seen())
 
-    def create(self, condition: str, action: str) -> None:
-        self._worker.command(lambda core: core.create(condition, action))
+    def create(self, condition: str, action: str, perennial: bool) -> None:
+        self._worker.command(lambda core: core.create(condition, action, perennial))
 
-    def edit(self, reminder_id: int, condition: str, action: str) -> None:
-        self._worker.command(lambda core: core.edit(reminder_id, condition, action))
+    def edit(self, reminder_id: int, condition: str, action: str, perennial: bool) -> None:
+        self._worker.command(lambda core: core.edit(reminder_id, condition, action, perennial))
 
     def complete(self, reminder_id: int) -> None:
         self._worker.command(lambda core: core.complete(reminder_id))

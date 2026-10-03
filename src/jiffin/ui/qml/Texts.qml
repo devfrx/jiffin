@@ -21,10 +21,12 @@ QtObject {
     readonly property string newReminder: "Nuovo promemoria"
     readonly property string editReminder: "Modifica promemoria"
     readonly property string when: "Quando"
-    readonly property string whenHint: "Descrivi dove sei: un'app, un sito, un progetto."
+    readonly property string whenHint: "Descrivi dove sei o quando: un'app, un sito, un orario."
     readonly property string whenExample: "quando lavoro al progetto Rossi"
     readonly property string remindMe: "Ricordami di"
     readonly property string remindMeExample: "aggiornare il changelog"
+    readonly property string everyTime: "Ogni volta"
+    readonly property string everyTimeHint: "Suona ogni volta che succede, e non si completa mai."
     readonly property string save: "Salva"
     readonly property string cancel: "Annulla"
 
@@ -132,10 +134,24 @@ QtObject {
     // What the engine's trouble means, by TrayList.Engine; WORKING says nothing.
     readonly property var engineTrouble: ["", "Il modello si è fermato: lo sto riavviando.", "Il modello si è fermato quattro volte in un'ora. Finché non riparte, i promemoria non avvisano.", "Il modello non si carica. Finché non riparte, i promemoria non avvisano.", "La scheda video non ha abbastanza memoria per il modello. Chiudi un'app che la usa, poi riprova.", "Il modello è di un'altra versione di Jiffin: reinstalla l'app."]
 
-    // The sentence the two boxes make (#12): "Quando …, ti ricordo di …". The full stop comes
-    // with the action: Italian puts none after an ellipsis.
-    function preview(condition: string, action: string): string {
-        return (condition || "Quando …") + ", ti ricordo di " + (action ? action + "." : "…");
+    // The sentence the two boxes make (#12): "Quando …, ti ricordo di …", "ti ricordo ogni volta"
+    // for a perennial reminder (#84). The full stop comes with the action: Italian puts none after
+    // an ellipsis.
+    function preview(condition: string, action: string, perennial: bool): string {
+        return (condition || "Quando …") + ", ti ricordo " + (perennial ? "ogni volta " : "") + "di " + (action ? action + "." : "…");
+    }
+
+    // Under "Quando", for the words of a time not understood (#90): the reminder still saves,
+    // without its time. "Non capisco «verso sera» e «a dicembre»: …".
+    function notUnderstood(words: list<string>): string {
+        const quoted = words.map(word => "«" + word + "»");
+        const listed = quoted.length > 1 ? quoted.slice(0, -1).join(", ") + " e " + quoted[quoted.length - 1] : quoted.join("");
+        return "Non capisco " + listed + ": suona a qualsiasi ora.";
+    }
+
+    // Under the sentence, while a time already over keeps Salva off (#84): "Oggi alle 09:00 …".
+    function past(when: string): string {
+        return when + " è già passato. Per salvare, scrivi un giorno o un'ora che deve ancora venire.";
     }
 
     // Under an unseen alert: its condition, and when it appeared.

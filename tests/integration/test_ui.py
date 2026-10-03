@@ -305,11 +305,11 @@ class Core:
     def seen(self) -> None:
         self.given.append(("seen",))
 
-    def create(self, condition: str, action: str) -> None:
-        self.made.append(("create", condition, action))
+    def create(self, condition: str, action: str, perennial: bool) -> None:
+        self.made.append(("create", condition, action, perennial))
 
-    def edit(self, reminder_id: int, condition: str, action: str) -> None:
-        self.made.append(("edit", reminder_id, condition, action))
+    def edit(self, reminder_id: int, condition: str, action: str, perennial: bool) -> None:
+        self.made.append(("edit", reminder_id, condition, action, perennial))
 
     def complete(self, reminder_id: int) -> None:
         self.made.append(("complete", reminder_id))
@@ -508,7 +508,7 @@ def test_the_shortcut_brings_the_creation_window_over_another_app(
     type_text("esportare le icone")
     press(_VK_RETURN)
     qtbot.waitUntil(lambda: not window.isVisible())
-    assert screen.core.made == [("create", "quando apro Figma", "esportare le icone")]
+    assert screen.core.made == [("create", "quando apro Figma", "esportare le icone", False)]
     qtbot.waitUntil(lambda: foreground() == desk.window)
     qtbot.wait(300)
     desk.check("creation window closed")

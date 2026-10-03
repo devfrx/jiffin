@@ -2,11 +2,12 @@
 
 How Jiffin reads the time of a condition: "quando apro Claude dopo le 23",
 "alle 15", "il primo lunedì del mese"
-([ADR-0020](../adr/0020-read-the-time-in-core.md)). The code is in `core`,
-pure and without dependencies: `grammar.py` finds the time words and labels
-them, `meanings.py` turns the labels into a `Schedule` with every decided
-meaning and has `read`, the only way in, and `schedule.py` holds the
-`Schedule` and its calendar.
+([ADR-0020](../adr/0020-read-the-time-in-core.md)), and how it writes it
+back. The reading is in `core`, pure and without dependencies: `grammar.py`
+finds the time words and labels them, `meanings.py` turns the labels into a
+`Schedule` with every decided meaning and has `read`, the only way in, and
+`schedule.py` holds the `Schedule` and its calendar. The writing is in
+`ui/words.py`.
 
 ## The stages
 
@@ -116,6 +117,48 @@ Known limits: a part of the day in a lowercase name is not told from a time
 and the condition is saved whole, without time, as if it had none. A time
 word capitalized after the first word is a name: "quando apro Excel Lunedì"
 has no time.
+
+## The words of a time
+
+`core` gives the structure; `ui/words.py` writes it when it shows it
+(`when`), so "domani alle 21", written yesterday, reads "Oggi" today. The
+rules are #84's, with the forms of #91 and #92; the examples of those tickets
+are tests in `tests/unit/ui/test_words.py`.
+
+- **Hours** have two digits: "alle 09:00", "dalle 23:00 alle 04:00"; a slot
+  that was open when written shows where it ends. Midnight is "a mezzanotte".
+- **Days count by the Jiffin day**, as the meanings do (#91): "Oggi",
+  "Domani" and "Ieri" are the Jiffin day and its neighbours, and a date is a
+  Jiffin day. So hours before 04:00, the night after their day, say so: "alle
+  02:00 di notte".
+- **A date** has its weekday, "Oggi", "Domani" or "Ieri" in front when it is
+  one of them, and its year only when it is not the current one: "Oggi,
+  venerdì 2 ottobre, alle 09:00", "Lunedì 5 ottobre, alle 10:00", "Martedì 5
+  ottobre 2027".
+- **Days of the week**: "Ogni lunedì"; a run of three or more, also through
+  Sunday, "Dal lunedì al venerdì"; six days, or five not in a row, "Ogni
+  giorno tranne il sabato"; otherwise a list, "Il sabato e la domenica". Their
+  hours follow without a comma: "Ogni lunedì alle 09:00".
+- **Every day** is "Ogni giorno" before the hours of a perennial reminder, and
+  goes unsaid for a one-off one, which may ring once: "Dalle 23:00 alle 04:00"
+  (#84).
+- **Days of the month and of the year**, and a weekday every N weeks: "Il
+  primo lunedì di ogni mese", "L'ultima domenica di ogni mese", "Il 15 di ogni
+  mese", "L'ultimo giorno di ogni mese", "Il 12 marzo di ogni anno", "Un
+  lunedì sì e uno no, da lunedì 5 ottobre". Their hours follow after a comma:
+  "Il primo lunedì di ogni mese, alle 09:00".
+- **A period** of every day leads the line: "Da sabato 10 a martedì 20
+  ottobre", "Da oggi a domenica 4 ottobre", the month and the year said once
+  when they are the same; a period of one day is its date. After other days it
+  follows: ", fino a martedì 20 ottobre" when it starts today, else ", da … a
+  …": its start stays written once past (#92).
+- **A frequency** leads: "Una volta al mese", "Una volta ogni due settimane",
+  then its days ("il lunedì"), its hours, "da" and the day its periods count
+  from, and its period: "Una volta alla settimana, dalle 18:00 alle 23:00, da
+  oggi, venerdì 2 ottobre".
+- **A time already over** is named short, for Salva's warning (`passed`):
+  "Oggi alle 09:00". `read` finds one only on a date, always the Jiffin day
+  of writing.
 
 ## The tests
 

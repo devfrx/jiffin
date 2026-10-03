@@ -5,10 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jiffin — nuovo promemoria</title>
 <!--
-  The creation window, as built in src/jiffin/ui/qml (ADR-0010, ADR-0023, tickets #12 and #43), ported
-  from the board "A — Parte di Windows: scelta" of the visual direction, with the sentence of
-  the board "Creazione — scelta: due campi". A card like the alerts, on their material (B by
-  default), without Windows' title bar: the owner chose it on screen in #43.
+  The creation window, as built in src/jiffin/ui/qml (ADR-0010, ADR-0020, ADR-0023, tickets #12,
+  #43 and #101), ported from the board "A — Parte di Windows: scelta" of the visual direction,
+  with the sentence of the board "Creazione — scelta: due campi". A card like the alerts, on their
+  material (B by default), without Windows' title bar: the owner chose it on screen in #43. The
+  time under "Quando", the "Ogni volta" box and the warning of a time already over were chosen on
+  live variants in #84 and #90. Light: a perennial reminder, its box ticked by its own words (#92).
+  Dark: a time already over, which keeps Salva off.
   Colours are those of Colors.qml; text and icons use Windows 11's system fonts, Segoe UI
   Variable and Segoe Fluent Icons.
 -->
@@ -37,6 +40,11 @@
     --accent: #005fb8;
     --accent-stroke: rgba(255, 255, 255, 0.078);
     --accent-edge: rgba(0, 0, 0, 0.4);
+    --accent-disabled: rgba(0, 0, 0, 0.216);
+    --text-on-accent-disabled: #ffffff;
+    --control-alt-fill: rgba(0, 0, 0, 0.024);
+    --caution: #9d5d00;
+    --text-inverse: #ffffff;
   }
   .dark {
     --desk: #1f1f1f;
@@ -59,6 +67,11 @@
     --accent: #60cdff;
     --accent-stroke: rgba(255, 255, 255, 0.078);
     --accent-edge: rgba(0, 0, 0, 0.137);
+    --accent-disabled: rgba(255, 255, 255, 0.157);
+    --text-on-accent-disabled: rgba(255, 255, 255, 0.529);
+    --control-alt-fill: rgba(0, 0, 0, 0.098);
+    --caution: #fce100;
+    --text-inverse: rgba(0, 0, 0, 0.894);
   }
 
   body {
@@ -191,6 +204,89 @@
     line-height: 20px;
     color: var(--text-secondary);
   }
+  .glyph {
+    font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets", sans-serif;
+    font-size: 16px;
+    line-height: 16px;
+  }
+
+  /* The time understood, in place of the hint, 6 px under the box: a clock, then the words. */
+  .when-line {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--text-primary);
+  }
+  .when-line .glyph {
+    flex: none;
+    margin-top: 2px;
+    color: var(--text-secondary);
+  }
+  .when-line.caution .glyph {
+    color: var(--caution);
+  }
+
+  /* A Fluent 2 check box (FluentCheckBox.qml): a 20 px box with 4 px corners, the label 8 px
+     after it, a caption under the label. */
+  .check {
+    display: grid;
+    grid-template-columns: 20px 1fr;
+    column-gap: 8px;
+    padding: 6px 0;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--text-primary);
+  }
+  .check .square {
+    box-sizing: border-box;
+    width: 20px;
+    height: 20px;
+    border: 1px solid var(--control-strong-stroke);
+    border-radius: 4px;
+    background: var(--control-alt-fill);
+    color: var(--text-on-accent);
+    font-size: 12px;
+    line-height: 20px;
+    text-align: center;
+  }
+  .check.checked .square {
+    border: 0;
+    background: var(--accent);
+  }
+  .check .caption {
+    font-family: "Segoe UI Variable Small", "Segoe UI", system-ui, sans-serif;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--text-secondary);
+  }
+
+  /* An info bar's warning line (FluentInfoBar.qml): its icon level with the boxes' edge. */
+  .infobar {
+    display: flex;
+    gap: 10px;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--text-secondary);
+  }
+  .status {
+    position: relative;
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin-top: 2px;
+  }
+  .status .glyph {
+    position: absolute;
+    inset: 0;
+  }
+  .status .ring {
+    color: var(--caution);
+  }
+  .status .mark {
+    color: var(--text-inverse);
+  }
 
   /* Fluent 2 buttons, standard and accent (FluentButton.qml). */
   .buttons {
@@ -236,6 +332,14 @@
     bottom: 0;
     background: var(--accent-edge);
   }
+  button.accent:disabled {
+    border-color: transparent;
+    background: var(--accent-disabled);
+    color: var(--text-on-accent-disabled);
+  }
+  .theme button.accent:disabled::after {
+    display: none;
+  }
 
   /* The X (ADR-0023): a subtle button on the title's line, 12 px from the window's edge, its
      1 px stroke included; coloured only under the mouse. */
@@ -272,11 +376,11 @@
 </head>
 <body>
 <h1>Nuovo promemoria</h1>
-<p class="lead">Si apre con Win+Maiusc+N da qualsiasi app, al centro dello schermo o dove l'hai lasciata, e prende il focus. Due caselle, «Quando» e «Ricordami di», con sotto la frase che formano. Per modificare un promemoria si usa la stessa finestra.</p>
+<p class="lead">Si apre con Win+Maiusc+N da qualsiasi app, al centro dello schermo o dove l'hai lasciata, e prende il focus. Due caselle, «Quando» e «Ricordami di», la casella «Ogni volta» e sotto la frase che formano. Sotto «Quando» Jiffin dice, mentre scrivi, che orario ha capito. Per modificare un promemoria si usa la stessa finestra.</p>
 
 <div class="themes">
   <section class="theme light" aria-label="Tema chiaro">
-    <h2>Chiaro</h2>
+    <h2>Chiaro: un perenne</h2>
     <div class="desk">
       <div class="window" role="dialog" aria-label="Nuovo promemoria">
         <button class="close" aria-label="Chiudi">&#xE711;</button>
@@ -284,14 +388,15 @@
           <p class="heading">Nuovo promemoria</p>
           <div class="field">
             <label>Quando</label>
-            <div class="box focused">quando lavoro al progetto Rossi<span class="caret"></span></div>
-            <div class="description">Descrivi dove sei: un'app, un sito, un progetto.</div>
+            <div class="box focused">quando apro Dropbox ogni due settimane<span class="caret"></span></div>
+            <div class="when-line"><span class="glyph">&#xE121;</span><span>Una volta ogni due settimane, da oggi, venerdì 2 ottobre</span></div>
           </div>
           <div class="field">
             <label>Ricordami di</label>
-            <div class="box">aggiornare il changelog prima del rilascio</div>
+            <div class="box">svuotare la cartella Download</div>
           </div>
-          <p class="sentence">Quando lavoro al progetto Rossi, ti ricordo di aggiornare il changelog prima del rilascio.</p>
+          <div class="check checked" role="checkbox" aria-checked="true"><span class="square glyph">&#xE73E;</span><div><div>Ogni volta</div><div class="caption">Suona ogni volta che succede, e non si completa mai.</div></div></div>
+          <p class="sentence">Quando apro Dropbox ogni due settimane, ti ricordo ogni volta di svuotare la cartella Download.</p>
           <div class="buttons">
             <button>Annulla</button>
             <button class="accent">Salva</button>
@@ -302,7 +407,7 @@
   </section>
 
   <section class="theme dark" aria-label="Tema scuro">
-    <h2>Scuro</h2>
+    <h2>Scuro: un orario già passato</h2>
     <div class="desk">
       <div class="window" role="dialog" aria-label="Nuovo promemoria">
         <button class="close" aria-label="Chiudi">&#xE711;</button>
@@ -310,17 +415,19 @@
           <p class="heading">Nuovo promemoria</p>
           <div class="field">
             <label>Quando</label>
-            <div class="box focused">quando lavoro al progetto Rossi<span class="caret"></span></div>
-            <div class="description">Descrivi dove sei: un'app, un sito, un progetto.</div>
+            <div class="box">oggi alle 9</div>
+            <div class="when-line caution"><span class="glyph">&#xE121;</span><span>Oggi, venerdì 2 ottobre, alle 09:00</span></div>
           </div>
           <div class="field">
             <label>Ricordami di</label>
-            <div class="box">aggiornare il changelog prima del rilascio</div>
+            <div class="box focused">chiamare Mario<span class="caret"></span></div>
           </div>
-          <p class="sentence">Quando lavoro al progetto Rossi, ti ricordo di aggiornare il changelog prima del rilascio.</p>
+          <div class="check" role="checkbox" aria-checked="false"><span class="square"></span><div><div>Ogni volta</div><div class="caption">Suona ogni volta che succede, e non si completa mai.</div></div></div>
+          <p class="sentence">Oggi alle 9, ti ricordo di chiamare Mario.</p>
+          <div class="infobar"><span class="status"><span class="glyph ring">&#xF136;</span><span class="glyph mark">&#xF13C;</span></span><span>Oggi alle 09:00 è già passato. Per salvare, scrivi un giorno o un'ora che deve ancora venire.</span></div>
           <div class="buttons">
             <button>Annulla</button>
-            <button class="accent">Salva</button>
+            <button class="accent" disabled>Salva</button>
           </div>
         </div>
       </div>
@@ -329,8 +436,12 @@
 </div>
 
 <ul class="notes">
-  <li>Invio salva, oppure porta alla casella ancora vuota; una casella non va mai a capo. Tab passa da una casella all'altra e ai pulsanti; Esc, Annulla e la X chiudono senza salvare.</li>
-  <li>Salva si attiva quando entrambe le caselle sono scritte. Il verificatore riceve esattamente il testo di «Quando», con gli spazi in ordine.</li>
+  <li>Invio salva, oppure porta alla casella da scrivere o da correggere; una casella non va mai a capo. Tab passa dalle caselle a «Ogni volta» e ai pulsanti; Esc, Annulla e la X chiudono senza salvare.</li>
+  <li>Salva si attiva quando entrambe le caselle sono scritte e l'orario non è già passato. Il verificatore riceve esattamente il testo di «Quando», con gli spazi in ordine.</li>
+  <li>Sotto «Quando», al posto del suggerimento «Descrivi dove sei o quando: un'app, un sito, un orario.», c'è l'orario capito, con l'orologio, scritto per il giorno in cui lo guardi: «domani alle 21», scritto ieri, si legge «Oggi». Senza orario resta il suggerimento. Le parole che Jiffin non capisce sono nominate, con l'orologio del colore dell'attenzione: «Non capisco «verso sera»: suona a qualsiasi ora.», e il promemoria si salva senza orario.</li>
+  <li>Un orario già passato spegne Salva e lo dice sotto la frase; anche quando passa mentre la finestra è aperta, Salva non salva e lo dice.</li>
+  <li>«Ogni volta» si segna da solo quando compaiono parole come «ogni…» o «il primo lunedì del mese», e si toglie se spariscono; se lo tocchi, resta come lo lasci. Nella frase diventa «ti ricordo ogni volta di …», e l'orario di ogni giorno si legge «Ogni giorno dalle 23:00 alle 04:00» invece di «Dalle 23:00 alle 04:00».</li>
+  <li>Modifica apre la casella com'era e, finché non tocchi «Quando», mostra l'orario salvato senza rileggerlo: un orario salvato già passato non spegne Salva.</li>
   <li>È una scheda come gli avvisi, sullo stesso vetro, senza la barra di Windows: il titolo è la prima riga. Come i pannelli di Windows non ha un pulsante nella barra delle applicazioni, e Win+Maiusc+N la riporta davanti. Con la trasparenza spenta la superficie è piena.</li>
   <li>La X sta sulla riga del titolo, come nelle notifiche di Windows; Tab non ci passa, perché Esc fa lo stesso. La finestra si trascina da ogni punto vuoto, non dai controlli, e si riapre dove l'hai lasciata, anche dopo un riavvio; se quel posto non è più tutto su uno schermo, torna al centro.</li>
 </ul>
