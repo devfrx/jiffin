@@ -81,8 +81,10 @@ its time or the end of its snooze, whichever came last
   previous record with that id, a cache entry replaces the one with the same
   context, revision and engine build, and when a context left goes on the
   evaluations of that stretch. At startup, `Reminders` starts from
-  `Store.load()`, with the return pause the worker gives it (2 minutes by
-  default); the schema is in [data-model.md](data-model.md).
+  `Store.load()`, with the return pause the worker reads in the settings (2
+  minutes by default); a new one from the settings is in force at once, for
+  the stretches that start after it. The schema is in
+  [data-model.md](data-model.md).
 - **Interface.** `on_alerts` receives an `AlertsView` after every change, on
   the worker thread: the alerts on screen (at most 3), how many wait, and those
   that vanished unanswered, one per reminder. `on_reminders` receives a

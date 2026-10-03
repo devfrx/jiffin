@@ -59,7 +59,7 @@ flowchart LR
 |---|---|---|
 | interface | Qt, the QML windows, the tray icon, the shortcut, the relay | Qt's events, and the relay's slots |
 | worker | `core`, the one connection to the database, the supervisor and through it the engine process | its queue, and its deadlines |
-| context | the message loop, the WinEvent hooks and the COM apartment of the capture ([context](context.md)) | Windows |
+| context | the message loop, the WinEvent hooks, the window of Windows' notices and the COM apartment of the capture ([context](context.md)) | Windows |
 | model file | one call to `model_file.ensure` at a time ([first run](first-run.md)) | the start, Riprova, and a network problem tried again |
 | engine stdout, stderr | the engine's pipes ([engine](engine.md)) | the engine process |
 
@@ -95,17 +95,17 @@ sequenceDiagram
     I->>I: packaged: a newer release applied, and a new start
     I->>I: make the interface: windows hidden, tray icon, shortcut
     I->>W: start
-    W->>W: open the database: migrations, cleanup, what it holds
+    W->>W: open the database: migrations, cleanup, what it holds, the return pause
     W-->>I: the material and the windows' places kept in the settings
     I->>I: put them on, before any window shows
+    W->>C: start the capture
+    C->>W: observations
     W-->>I: the reminders and the unseen alerts (signals)
     I->>M: fetch the model file
     M-->>I: the check, or the download (signals)
     M->>W: the file is checked
     W->>E: start the engine: initialize
     E-->>W: ready
-    W->>C: start the capture
-    C->>W: observations
     Note over I,C: until Esci
     I->>W: close
     W->>C: close
@@ -124,6 +124,11 @@ sequenceDiagram
   downgrade, after a failed migration or a damaged file
   ([ADR-0013](../adr/0013-sqlite-storage.md)): the app does not start, and
   Windows' own message box says so and names the log.
+- **The capture starts with the worker**, before the engine: a reminder with
+  only a time rings while the model downloads or the engine is down. Until the
+  engine is ready, a context to judge gives a failed evaluation, as when the
+  engine falls ([ADR-0021](../adr/0021-one-alert-per-unit.md)). A capture
+  that cannot start is logged, and the app goes on without contexts.
 - **The engine back.** When the supervisor reports it ready, after the first
   start or a restart, `core` writes the statements it missed and judges the
   stable context again; the cache spares what was judged already

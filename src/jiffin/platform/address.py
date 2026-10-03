@@ -4,7 +4,8 @@ It runs on the context thread, in the multithreaded apartment. Chromium exposes 
 and so all of Vivaldi's interface, only to clients that look like assistive technology: hence a
 focus listener that does nothing and, while Vivaldi's address bar is not exposed yet, a hit test
 into the window. A private window has the same title as any other; UI Automation tells them
-apart. The bar and the private flag of a window never change, so they are kept per window.
+apart. The private flag of a window never changes and its bar seldom does, so both are kept per
+window; a kept bar that is gone is looked up again.
 
 The ways to find the bar and the private marks were checked on 2026-09-30 with Vivaldi 8.2 (in
 Italian), Chrome 154 and Brave 1.96.
@@ -28,6 +29,8 @@ log = logging.getLogger(__name__)
 _UIA: Any = comtypes.client.GetModule("UIAutomationCore.dll")
 TIMEOUT_MS = 2000
 """How long UI Automation waits for a browser that does not answer."""
+_GONE = 0x80040201
+"""UIA_E_ELEMENTNOTAVAILABLE (UIAutomationCoreApi.h): the element no longer exists."""
 _WAKES = 4
 _WAKE_SECONDS = 0.25
 _IGNORE_CASE_SUBSTRING = 1 | 2  # PropertyConditionFlags_IgnoreCase | _MatchSubstring
@@ -111,6 +114,7 @@ class AddressBars:
     def read(self, hwnd: int, app: str) -> Reading:
         """What the bar of a window of `app`, one of BROWSERS, shows now."""
         known = self._windows.get(hwnd)
+        kept = known is not None
         if known is None:
             try:
                 located = self._locate(hwnd, BROWSERS[app])
@@ -131,6 +135,9 @@ class AddressBars:
             value = bar.GetCurrentPropertyValue(_UIA.UIA_ValueValuePropertyId)
         except comtypes.COMError as error:
             del self._windows[hwnd]
+            if kept and error.hresult & 0xFFFFFFFF == _GONE:
+                # Vivaldi builds a new bar when a page leaves full screen.
+                return self.read(hwnd, app)
             log.info("%s: the bar could not be read, error %#010x", app, error.hresult & 0xFFFFFFFF)
             return Reading(Outcome.FAILED)
         return Reading(Outcome.ADDRESS, value or None)

@@ -53,6 +53,8 @@ HOUR_MS = 60 * MINUTE_MS
 RETURN_PAUSE_MS = 2 * MINUTE_MS
 """How long the user must be away from a thing for its reminders to ring again when they come
 back: the default of the settings, which allow 10 s to 2 hours (ADR-0021)."""
+SHORTEST_RETURN_PAUSE_MS = 10_000
+LONGEST_RETURN_PAUSE_MS = 2 * HOUR_MS
 
 # "Domani" is the next day at 08:00, local time: the usual meaning in mail and reminder apps,
 # at the earlier of their usual hours (8 or 9), since the alert waits for its context anyway.
@@ -161,6 +163,16 @@ class Reminders:
         """What changed since the last call, in the order `store` must save it."""
         records, self._records = self._records, []
         return records
+
+    @property
+    def return_pause(self) -> int:
+        """In milliseconds. A change from the settings is in force at once: it decides the
+        occasions of the stretches that start after it (ADR-0021)."""
+        return self._return_pause
+
+    @return_pause.setter
+    def return_pause(self, return_pause: int) -> None:
+        self._return_pause = return_pause
 
     # Time
 

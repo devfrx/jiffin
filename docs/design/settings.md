@@ -51,6 +51,13 @@ setting, `{"creation": [x, y], ...}`, and gives them to `Interface.places` at
 the next start; an entry of another shape is left out, and that window opens at
 the centre.
 
+The return pause of [ADR-0021](../adr/0021-one-alert-per-unit.md) is one
+`return_pause` setting, in whole seconds from 10 to 7200. The worker reads it
+at the start and gives it to `core`; when it is missing, or of another shape,
+the pause is 2 minutes. A new one goes to the worker's `keep_return_pause`,
+which keeps it and puts it in force at once. Its row in this window comes with
+[#103](https://github.com/devfrx/jiffin/issues/103).
+
 ## Trying it
 
 `uv run python -m jiffin.ui`, then Impostazioni in the tray icon's menu: a

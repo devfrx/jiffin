@@ -21,7 +21,13 @@ from jiffin.core.alerts import AlertsView
 from jiffin.core.clock import Clock
 from jiffin.core.context import Observation
 from jiffin.core.records import Snooze
-from jiffin.core.reminders import Reminders, RemindersView
+from jiffin.core.reminders import (
+    LONGEST_RETURN_PAUSE_MS,
+    RETURN_PAUSE_MS,
+    SHORTEST_RETURN_PAUSE_MS,
+    Reminders,
+    RemindersView,
+)
 from jiffin.store.store import Json, Store
 
 log = logging.getLogger(__name__)
@@ -36,6 +42,8 @@ MATERIAL = "material"
 PLACES = "places"
 """The setting that keeps where the user left the windows, by name: `{"creation": [x, y]}`
 (ADR-0023)."""
+RETURN_PAUSE = "return_pause"
+"""The setting that keeps the return pause, in seconds (ADR-0021)."""
 
 type Command = Callable[[], object]
 """What it returns is dropped."""
@@ -76,6 +84,14 @@ def _places(kept: Json) -> dict[str, tuple[int, int]]:
     }
 
 
+def _return_pause(kept: Json) -> int:
+    """The return pause as `keep_return_pause` kept it, in milliseconds; the default when there
+    is none, or when it is not whole seconds within the range of the settings."""
+    if isinstance(kept, int) and SHORTEST_RETURN_PAUSE_MS <= kept * 1000 <= LONGEST_RETURN_PAUSE_MS:
+        return kept * 1000
+    return RETURN_PAUSE_MS
+
+
 class Worker:
     """Make it on the interface thread. `start` opens the database on the worker thread, which
     then runs until `close`; any other method may be called from any thread, and only puts a
@@ -83,7 +99,8 @@ class Worker:
 
     `on_alerts` and `on_reminders` are `core`'s, and `on_engine` gets the supervisor's status: all
     three are called on the worker thread, and should only pass on what they get. `capture` makes
-    the context source, given where its observations go; it starts after the engine's first start.
+    the context source, given where its observations go; it starts with the worker, before the
+    engine, so that a reminder with only a time rings while the model downloads (ADR-0021).
     """
 
     _store: Store
@@ -114,7 +131,6 @@ class Worker:
             model, model_sha256, clock, self._status, self._exited, command=engine
         )
         self._capture = capture(self.observe)
-        self._capturing = False
         self._cleanup_at = 0
         self._opened: Future[Kept] = Future()
         # A daemon, so that an interface thread that fails cannot leave the process running.
@@ -145,9 +161,8 @@ class Worker:
         self.command(lambda core: core.observe(observation))
 
     def model_ready(self) -> None:
-        """The model file is checked: the engine starts, and after its first start the context
-        capture."""
-        self._queue.put(self._start_engine)
+        """The model file is checked: the engine starts."""
+        self._queue.put(self._supervisor.start)
 
     def restart_engine(self) -> None:
         """Riprova, on the engine's trouble."""
@@ -160,6 +175,16 @@ class Worker:
         kept: dict[str, Json] = {name: [x, y] for name, (x, y) in places.items()}
         self._queue.put(lambda: self._store.set_setting(PLACES, kept))
 
+    def keep_return_pause(self, seconds: int) -> None:
+        """The return pause chosen in the settings: kept for the next start, and in force at
+        once (ADR-0021)."""
+
+        def keep() -> None:
+            self._store.set_setting(RETURN_PAUSE, seconds)
+            self._core.return_pause = seconds * 1000
+
+        self._queue.put(keep)
+
     # On the worker thread
 
     def _run(self) -> None:
@@ -169,6 +194,10 @@ class Worker:
             self._opened.set_exception(error)
             return
         self._opened.set_result(kept)
+        try:
+            self._capture.start()
+        except Exception:
+            log.exception("the context capture cannot start")
         command: Command | None = _wake  # the first turn shows what the database held
         while command is not None:
             self._turn(command)
@@ -190,6 +219,7 @@ class Worker:
                 self._on_alerts,
                 self._on_reminders,
                 self._store.load(),
+                return_pause=_return_pause(self._store.setting(RETURN_PAUSE)),
             )
             material = self._store.setting(MATERIAL)
             places = self._store.setting(PLACES)
@@ -231,12 +261,6 @@ class Worker:
             if deadline is not None:
                 deadlines.append(deadline)
         return min(max(0, min(deadlines) - self._clock.now()) / 1000, LONGEST_WAIT_S)
-
-    def _start_engine(self) -> None:
-        self._supervisor.start()
-        if not self._capturing:
-            self._capturing = True
-            self._capture.start()
 
     def _status(self, status: Status) -> None:
         """Called inside the supervisor, which it must not call back: `core` catches up on the

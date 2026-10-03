@@ -274,6 +274,12 @@ with only a time have no cache entries.
 - Verify on the owner's machine that the capture reports lock, sleep and
   return at the right time; add Windows' session and power notifications where
   it does not.
+- Verified on the owner's laptop, which sleeps in Modern Standby
+  ([#99](https://github.com/devfrx/jiffin/issues/99)): the capture of 0.1 sent
+  the lock screen as a context and nothing before sleep. Windows' notices came
+  at the right time, the lock at once and the sleep 0.1 s after the display
+  went off, also when the lid closed, and the capture now takes both
+  ([context capture](../design/context.md)).
 - When this is built, `docs/design/` follows in the same changes:
   `lifecycles.md` (these states and answers), `pipeline.md` (outcomes and time
   deadlines), `data-model.md` (migration 0002), `architecture.md` (the capture

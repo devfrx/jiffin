@@ -1,11 +1,15 @@
 """The adapter of the context port: the window in the foreground, as observations (ADR-0004).
 
 A thread of its own runs a message loop for two WinEvent hooks (ADR-0005): the foreground
-changed, anywhere; a title changed, in the foreground window's process only, since every name
-change of every process would reach the loop otherwise. On each, it reads the app, the title
-and, in the supported browsers, the address, from the multithreaded apartment. Private windows,
-windows that may be private, and Jiffin's own are not contexts. An observation goes out only
-when the context changed. Titles and addresses never reach the log.
+changed, anywhere; the window in front changed its title, moved or resized, in its process
+only, since every change of every process would reach the loop otherwise. On each, it reads the
+app, the title and, in the supported browsers, the address, from the multithreaded apartment.
+The same loop takes Windows' notices of a lock and of sleep (ADR-0021).
+
+Private windows, windows that may be private, Jiffin's own and a window in full screen
+(ADR-0024) are not contexts, and nothing is in front while the screen is locked or the PC
+asleep. An observation goes out only when the context changed. Titles and addresses never reach
+the log.
 """
 
 import contextlib
@@ -27,8 +31,9 @@ log = logging.getLogger(__name__)
 UNREADABLE_MS = 600_000
 UNREADABLE_FAILURES = 5
 """A browser's address is unreadable once its bar has failed this many times over at least
-UNREADABLE_MS, with no read in between: long enough for a video in full screen, which hides
-the bar, and short enough to notice a browser update that broke the reading."""
+UNREADABLE_MS, with no read in between: long enough to pass over a failure now and then, and
+short enough to notice a browser update that broke the reading. A window in full screen, which
+hides the bar, is not read at all."""
 
 
 class Bars(Protocol):
@@ -79,23 +84,47 @@ class Foreground:
         self._unreadable = unreadable
         self._own = os.getpid()
         self._window: int | None = None
-        self._titles: win32.Hook | None = None
-        self._titles_of: int | None = None
-        """The process whose title changes are hooked."""
+        self._changes: win32.Hook | None = None
+        self._changes_of: int | None = None
+        """The process whose changes of title, place and size are hooked."""
+        self._full_screen = False
+        """Whether the window in front was in full screen when last read."""
+        self._locked = False
+        self._asleep = False
         self._sent = False
         self._last: Context | None = None
 
     def on_event(self, event: int, hwnd: int | None, id_object: int, id_child: int) -> None:
-        """A WinEvent: the foreground changed, or the name of something changed."""
-        if event == win32.EVENT_OBJECT_NAMECHANGE and not (
+        """A WinEvent: the foreground changed, or something changed its name, moved or resized."""
+        if event != win32.EVENT_SYSTEM_FOREGROUND and not (
             id_object == win32.OBJID_WINDOW
             and id_child == win32.CHILDID_SELF
             and hwnd == self._window
         ):
             return
         try:
+            # A move or a resize of the window in front matters only into or out of full screen:
+            # F11 changes its rectangle, not the window.
+            if (
+                event == win32.EVENT_OBJECT_LOCATIONCHANGE
+                and hwnd is not None
+                and win32.full_screen(hwnd) == self._full_screen
+            ):
+                return
             self.refresh()
         except Exception:  # a hook must not raise: ctypes would only print it
+            log.exception("the foreground could not be read")
+
+    def on_notice(self, notice: win32.Notice) -> None:
+        """The screen locked or unlocked, or the PC goes to sleep or woke: nothing is in front
+        from a lock or a sleep until both are over (ADR-0021)."""
+        if notice in (win32.Notice.LOCKED, win32.Notice.UNLOCKED):
+            self._locked = notice is win32.Notice.LOCKED
+        else:
+            self._asleep = notice is win32.Notice.SLEEPING
+        try:
+            self.refresh()
+        except Exception:  # a window procedure must not raise either
             log.exception("the foreground could not be read")
 
     def refresh(self) -> None:
@@ -104,26 +133,34 @@ class Foreground:
         window = win32.foreground()
         if window != self._window:
             self._window = window
-            self._follow_titles(window)
-        context = self._context(window)
+            self._follow(window)
+        self._full_screen = window is not None and win32.full_screen(window)
+        away = self._locked or self._asleep or self._full_screen
+        context = None if away else self._context(window)
         if self._sent and context == self._last:
             return
         self._sent, self._last = True, context
         self._on_observation(Observation(at, context))
 
     def close(self) -> None:
-        if self._titles is not None:
-            self._titles.close()
-            self._titles = None
+        if self._changes is not None:
+            self._changes.close()
+            self._changes = None
 
-    def _follow_titles(self, window: int | None) -> None:
+    def _follow(self, window: int | None) -> None:
         process = None if window is None else win32.process_id(window)
-        if process == self._titles_of:
+        if process == self._changes_of:
             return
         self.close()
-        self._titles_of = process
+        self._changes_of = process
         if process is not None and process != self._own:
-            self._titles = win32.Hook(win32.EVENT_OBJECT_NAMECHANGE, self.on_event, process)
+            # One hook takes both: the two events are next to each other.
+            self._changes = win32.Hook(
+                win32.EVENT_OBJECT_LOCATIONCHANGE,
+                self.on_event,
+                process,
+                last=win32.EVENT_OBJECT_NAMECHANGE,
+            )
 
     def _context(self, window: int | None) -> Context | None:
         if window is None or win32.process_id(window) == self._own:
@@ -185,6 +222,7 @@ class Capture:
         bars: AddressBars | None = None
         foreground: Foreground | None = None
         hook: win32.Hook | None = None
+        notices: win32.Notices | None = None
         try:
             try:
                 win32.make_queue()
@@ -197,6 +235,7 @@ class Capture:
                     Unreadable(self._clock, self._on_unreadable),
                 )
                 hook = win32.Hook(win32.EVENT_SYSTEM_FOREGROUND, foreground.on_event)
+                notices = win32.Notices(foreground.on_notice)
                 foreground.refresh()
             except Exception as error:  # noqa: BLE001  # start() raises it on its own thread
                 self._failure = error
@@ -207,6 +246,8 @@ class Capture:
         except Exception:
             log.exception("the context thread failed")
         finally:
+            if notices is not None:
+                notices.close()
             if hook is not None:
                 hook.close()
             if foreground is not None:
