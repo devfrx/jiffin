@@ -10,8 +10,8 @@ import pytest
 from jiffin.core.clock import SimulatedClock
 from jiffin.core.context import Context, Observation, normalize
 from jiffin.core.model import EngineBuild, ModelError
-from jiffin.core.records import Alert, Answer, Evaluation
-from jiffin.core.reminders import HOUR_MS, Reminders, Snooze
+from jiffin.core.records import Alert, Answer, Evaluation, Left, Snooze
+from jiffin.core.reminders import HOUR_MS, Reminders
 from jiffin.harness import __main__ as harness
 from jiffin.harness import day as days
 from jiffin.harness import engine, fixtures, labels, replay, snapshot
@@ -65,13 +65,14 @@ class FakeEngine:
 
 def a_day(path: Path) -> Log:
     """The invented morning through the app's own core, with an owner who answers some alerts:
-    Utile and then Fatto for Verdi, Non qui for the bank, Rimanda a quarter of an hour for the
-    mail; the engine down for a while; the mail's reminder created, the bank's edited."""
+    Alla prossima volta and then Fatto for Verdi, Non qui for the bank, Rimanda a quarter of an
+    hour for the mail; the engine down for a while; the mail's reminder created, the bank's
+    edited."""
     fake = FakeEngine()
     clock = SimulatedClock(T0 - HOUR_MS, UTC)
     core = Reminders(fake, clock, lambda view: None, lambda view: None)
     answers: dict[int, list[tuple[str, int]]] = {
-        1: [("useful", 4_000), ("done", 2_000)],
+        1: [("next_time", 4_000), ("done", 2_000)],
         2: [("not_here", 3_000)],
         4: [("snooze", 5_000)],
     }
@@ -85,6 +86,8 @@ def a_day(path: Path) -> Log:
             def answer(core: Reminders) -> None:
                 if what == "snooze":
                     core.snooze(alert.id, Snooze.QUARTER_HOUR)
+                elif what == "next_time":
+                    core.snooze(alert.id, Snooze.NEXT_TIME)
                 else:
                     getattr(core, what)(alert.id)
 
@@ -144,8 +147,14 @@ def recorded(tmp_path_factory: pytest.TempPathFactory) -> tuple[Log, days.Day]:
 
 def test_the_invented_day_holds_what_makes_a_replay_hard(recorded: tuple[Log, days.Day]) -> None:
     log, day = recorded
-    answers = {alert.answer for alert in day.alerts}
-    assert answers >= {Answer.USEFUL, Answer.DONE, Answer.NOT_HERE, Answer.SNOOZE}
+    answers = {(alert.answer, alert.snooze) for alert in day.alerts}
+    assert answers >= {
+        (Answer.SNOOZE, Snooze.NEXT_TIME),
+        (Answer.DONE, None),
+        (Answer.NOT_HERE, None),
+        (Answer.SNOOZE, Snooze.QUARTER_HOUR),
+    }
+    assert log.left
     assert any(evaluation.failed for evaluation in day.evaluations)
     assert len({revision.condition for revision in log.revisions.values()}) == 5  # one edit
     assert any(reminder.created_at > T0 for reminder in log.reminders)
@@ -202,6 +211,16 @@ def test_a_context_seen_twice_in_a_row_was_left_in_between() -> None:
     assert replay.observations([again, snooze_end, first]) == [
         Observation(0, FIGMA),
         Observation(99_999, None),
+        Observation(100_000, FIGMA),
+    ]
+
+
+def test_a_context_that_left_where_the_log_says_is_left_then() -> None:
+    first = Evaluation(1, 20_000, FIGMA, 0, 0.97, BUILD, ())
+    again = Evaluation(2, 120_000, FIGMA, 100_000, 0.97, BUILD, ())
+    assert replay.observations([again, first], [Left(FIGMA, 0, 30_000)]) == [
+        Observation(0, FIGMA),
+        Observation(30_000, None),
         Observation(100_000, FIGMA),
     ]
 

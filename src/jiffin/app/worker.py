@@ -19,7 +19,8 @@ from jiffin.client.supervisor import State, Status, Supervisor
 from jiffin.core.alerts import AlertsView
 from jiffin.core.clock import Clock
 from jiffin.core.context import Observation
-from jiffin.core.reminders import Reminders, RemindersView, Snooze
+from jiffin.core.records import Snooze
+from jiffin.core.reminders import Reminders, RemindersView
 from jiffin.store.store import Store
 
 log = logging.getLogger(__name__)
@@ -172,6 +173,9 @@ class Worker:
             self._due()
         except Exception:
             log.exception("the worker failed")
+        self._save()
+
+    def _save(self) -> None:
         records = self._core.take_records()
         if records:
             try:
@@ -215,6 +219,9 @@ class Worker:
     def _shut(self) -> None:
         try:
             self._capture.close()
+            # Nothing is in front any more: the context in front leaves with the app (ADR-0021).
+            self._core.observe(Observation(self._clock.now(), None))
+            self._save()
             self._supervisor.close()
         finally:
             self._store.close()
@@ -231,7 +238,9 @@ class QueuedCore:
         self._worker.command(lambda core: core.done(alert_id))
 
     def useful(self, alert_id: int) -> None:
-        self._worker.command(lambda core: core.useful(alert_id))
+        """Utile, until the alert of version 0.2 replaces it with its Rimanda menu (#102): its
+        meaning is now "Alla prossima volta" (ADR-0021)."""
+        self._worker.command(lambda core: core.snooze(alert_id, Snooze.NEXT_TIME))
 
     def not_here(self, alert_id: int) -> None:
         self._worker.command(lambda core: core.not_here(alert_id))

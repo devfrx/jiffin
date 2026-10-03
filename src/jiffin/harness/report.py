@@ -25,7 +25,9 @@ CPU_PERCENT = 5.0
 
 _WHY = {
     "below threshold": "sotto la soglia",
+    "same occasion": "stessa occasione",
     "held back": "trattenuto (una volta all'ora)",
+    "out of time": "fuori orario",
     "snoozed": "rimandato",
     "silenced": "«Non qui»",
     "waited": "in attesa di un posto, poi chiuso",
@@ -148,7 +150,6 @@ def replays(rows: Sequence[tuple[str, days.Day]], labels: Mapping[str, bool]) ->
 
 
 def page(day: days.Day, labels: Mapping[str, bool], clock: Clock, source: str, path: Path) -> Path:
-    evaluations = {evaluation.id: evaluation for evaluation in day.evaluations}
     alerts = [
         {
             "time": f"{clock.local(alert.shown_at):%H:%M}",
@@ -157,10 +158,10 @@ def page(day: days.Day, labels: Mapping[str, bool], clock: Clock, source: str, p
             "address": alert.context.address,
             "condition": alert.revision.condition,
             "action": alert.revision.action,
-            "d": f"{alert.d:.2f}",
+            "d": "" if alert.d is None else f"{alert.d:.2f}",
             "label": labels.get(days.key(alert.context, alert.revision.condition)),
             "answer": "" if alert.answer is None else alert.answer.value,
-            "delay": f"{(alert.shown_at - evaluations[alert.evaluation_id].context_since) / 1000:.0f} s",
+            "delay": f"{(alert.shown_at - alert.due_at) / 1000:.0f} s",
         }
         for alert in day.alerts
         if alert.shown_at is not None

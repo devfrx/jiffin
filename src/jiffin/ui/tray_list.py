@@ -30,8 +30,8 @@ from PySide6.QtQuick import QQuickWindow
 
 from jiffin.core.alerts import AlertsView
 from jiffin.core.clock import Clock
-from jiffin.core.records import Alert
-from jiffin.core.reminders import MINUTE_MS, ActiveReminder, RemindersView, Snooze
+from jiffin.core.records import Alert, Snooze
+from jiffin.core.reminders import MINUTE_MS, ActiveReminder, RemindersView
 from jiffin.ui.first_run import FirstRun
 from jiffin.ui.glass import Glass
 from jiffin.ui.rows import Row, Rows

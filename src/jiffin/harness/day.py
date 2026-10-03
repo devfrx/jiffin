@@ -21,9 +21,11 @@ from jiffin.store.store import Log
 # Why a relevant pair was never shown, from the candidate that came closest to an alert.
 _CLOSEST = (
     (Outcome.ALERT, "waited"),
+    (Outcome.SAME_OCCASION, "same occasion"),
     (Outcome.HELD_BACK, "held back"),
     (Outcome.SNOOZED, "snoozed"),
     (Outcome.SILENCED, "silenced"),
+    (Outcome.OUTSIDE_TIME, "out of time"),
     (Outcome.BELOW_THRESHOLD, "below threshold"),
 )
 
@@ -65,7 +67,7 @@ class Summary:
     shown: int
     """Alerts that reached the screen."""
     delays: tuple[float, ...]
-    """Seconds from the context coming to the foreground to its alert on screen."""
+    """Seconds from when each alert became due to when it reached the screen (ADR-0022)."""
     pairs: int
     labelled: int
     relevant: int
@@ -135,12 +137,9 @@ def missed(day: Day, labels: Mapping[str, bool]) -> list[Missed]:
 
 
 def summarize(day: Day, labels: Mapping[str, bool]) -> Summary:
-    evaluations = {evaluation.id: evaluation for evaluation in day.evaluations}
     shown = [alert for alert in day.alerts if alert.shown_at is not None]
     delays = tuple(
-        (alert.shown_at - evaluations[alert.evaluation_id].context_since) / 1000
-        for alert in shown
-        if alert.shown_at is not None
+        (alert.shown_at - alert.due_at) / 1000 for alert in shown if alert.shown_at is not None
     )
     found = pairs(day)
     reasons: dict[str, int] = {}

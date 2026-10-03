@@ -10,8 +10,7 @@ from pytestqt.qtbot import QtBot
 
 from jiffin.core.alerts import AlertsView
 from jiffin.core.context import Context
-from jiffin.core.records import Alert, Revision
-from jiffin.core.reminders import Snooze
+from jiffin.core.records import Alert, Revision, Snooze
 from jiffin.ui.alert import AlertSlot
 from jiffin.ui.glass import Glass
 from jiffin.ui.look import Look, Settings
@@ -75,9 +74,9 @@ class Windows:
 
 
 def alert(alert_id: int, action: str = ACTION) -> Alert:
-    revision = Revision(alert_id, alert_id, 1, "quando apro Figma", action)
+    revision = Revision(alert_id, alert_id, 1, "quando apro Figma", action, "quando apro Figma")
     context = Context("figma.exe", "Icone - Figma", None)
-    return Alert(alert_id, alert_id, revision, alert_id, context, 2.0, 0, shown_at=0)
+    return Alert(alert_id, alert_id, revision, alert_id, context, 2.0, 0, 0, shown_at=0)
 
 
 def items(item: QQuickItem) -> Iterator[QQuickItem]:

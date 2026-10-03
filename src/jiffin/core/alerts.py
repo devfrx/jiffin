@@ -44,19 +44,25 @@ class Alerts:
         return [alert for alert in self._open() if alert.reminder_id == reminder_id]
 
     def add(self, alert: Alert, now: int) -> Alert:
-        """Put a new alert on screen, or behind the others when the screen is full."""
+        """Put a new alert on screen, or behind the others when the screen is full. The tray list
+        keeps one alert per reminder, the newest: an older one of its reminder leaves it,
+        unanswered (ADR-0021)."""
+        self._unseen = [a for a in self._unseen if a.reminder_id != alert.reminder_id]
         self._waiting.append(alert)
         shown = self._fill(now)
         return shown[0] if shown else alert
 
     def vanish(self, alert_id: int, now: int) -> list[Alert]:
-        """An alert left the screen unanswered, and goes on top of the tray list."""
+        """An alert left the screen unanswered, and goes on top of the tray list, unless a newer
+        one of its reminder is there already."""
         alert = next((alert for alert in self._visible if alert.id == alert_id), None)
         if alert is None:
             return []
         self._visible.remove(alert)
         vanished = replace(alert, vanished_at=now)
-        self._unseen.insert(0, vanished)
+        if not any(a.reminder_id == alert.reminder_id and a.id > alert.id for a in self._unseen):
+            self._unseen = [a for a in self._unseen if a.reminder_id != alert.reminder_id]
+            self._unseen.insert(0, vanished)
         return [vanished, *self._fill(now)]
 
     def close(self, alert_id: int, now: int) -> list[Alert]:

@@ -41,7 +41,9 @@ stateDiagram-v2
 
 - **Buttons**: Fatto, Rimanda and "…". **Snooze**: Indietro, 15 min, 1 ora
   and Domani. **More**: Indietro, Utile and Non qui. The panels open inside the
-  alert, since a menu window could take the focus.
+  alert, since a menu window could take the focus. Until the alert of 0.2
+  ([#102](https://github.com/devfrx/jiffin/issues/102)), Utile reaches `core` as
+  Alla prossima volta ([ADR-0021](../adr/0021-one-alert-per-unit.md)).
 - The 10 s pause while the mouse is over the alert or a panel is open. When
   they are up, the alert goes to `core` as vanished.
 - Each answer goes to `core` once: a click while the window leaves is ignored.

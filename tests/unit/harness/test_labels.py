@@ -11,7 +11,7 @@ from jiffin.harness.day import Pair
 from jiffin.harness.errors import HarnessError
 
 DAY = date(2026, 10, 5)
-ICONS = Revision(10, 1, 1, "quando apro Figma", "esportare le icone")
+ICONS = Revision(10, 1, 1, "quando apro Figma", "esportare le icone", "quando apro Figma")
 PAIRS = {
     pair.key: pair
     for pair in (

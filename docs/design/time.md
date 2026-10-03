@@ -84,9 +84,8 @@ kinds on purpose ([ADR-0021](../adr/0021-one-alert-per-unit.md)).
   that follow each other from the day written (`frequency_period`); a period
   of months from the 31st ends where the next one starts, on the last day of
   a shorter month.
-- **The next edge** (`next_edge`) is the next start or end of an instance, or
-  the start of the next period of the frequency: when a reminder may start or
-  stop ringing.
+- **The windows** of the instances, how long each may ring, and the units of
+  a reminder are in `units.py`: see [lifecycles.md](lifecycles.md).
 - The calendar works on wall-clock times; `Clock.instant` turns a day and an
   hour into an instant, with the zone's daylight saving.
 
