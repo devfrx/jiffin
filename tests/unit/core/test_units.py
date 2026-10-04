@@ -9,7 +9,15 @@ from jiffin.core.clock import SimulatedClock
 from jiffin.core.meanings import read
 from jiffin.core.records import Revision
 from jiffin.core.schedule import Moment, OnDate, Period, Schedule, Slot
-from jiffin.core.units import Times, Window, by_instance, ended, next_occasion, windows
+from jiffin.core.units import (
+    Times,
+    Window,
+    by_instance,
+    ended,
+    instance_day,
+    next_occasion,
+    windows,
+)
 
 
 def at(day: int, hour: int, minute: int = 0) -> datetime:
@@ -190,6 +198,40 @@ def test_alla_prossima_volta_needs_a_next_unit(
 ) -> None:
     clock = SimulatedClock(round(now.replace(tzinfo=UTC).timestamp() * 1000))
     assert next_occasion(revision(condition, perennial), clock, clock.now()) is expected
+
+
+@pytest.mark.parametrize(
+    ("condition", "rings", "day"),
+    [
+        ("alle 15", at(2, 15, 5), 2),
+        ("alle 15", at(3, 9), 2),
+        ("alle 15", at(3, 15), 3),
+        ("oggi alle 15", at(4, 9), 2),
+        ("alle 2", at(3, 2, 1), 2),
+        ("la sera", at(3, 19), 3),
+    ],
+    ids=[
+        "on time",
+        "late, the next morning",
+        "the next instance",
+        "two days late, with a date",
+        "at night, the day before's",
+        "a slot",
+    ],
+)
+def test_an_alert_rings_for_the_day_of_its_instance(
+    condition: str, rings: datetime, day: int
+) -> None:
+    clock = SimulatedClock(0)
+    moment = round(rings.replace(tzinfo=UTC).timestamp() * 1000)
+    assert instance_day(revision(condition), clock, moment) == date(2026, 10, day)
+
+
+def test_an_alert_without_a_window_has_no_instance_day() -> None:
+    clock = SimulatedClock(0)
+    before = round(at(2, 12).replace(tzinfo=UTC).timestamp() * 1000)
+    assert instance_day(revision("alle 15"), clock, before) is None
+    assert instance_day(revision("quando apro Figma"), clock, before) is None
 
 
 def test_a_period_is_over_after_its_last_day() -> None:

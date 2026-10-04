@@ -1,6 +1,7 @@
 """Win32 for the interface: the glass under a window that is never active, the Windows settings
-Qt does not expose (ADR-0010), the global shortcut, which Qt does not have, and the size and
-colours of the tray icon (#43).
+Qt does not expose (ADR-0010), the global shortcut, which Qt does not have, the size and colours
+of the tray icon (#43), the alerts kept out of screen capture (ADR-0024), and the mouse buttons,
+which a window that never takes the focus does not hear of elsewhere (#83).
 
 Signatures are transcribed from the Windows SDK headers `winuser.h` and `dwmapi.h`.
 """
@@ -35,12 +36,19 @@ _GWL_STYLE = -16
 _WS_CAPTION = 0x00C00000
 _SWP_NOSIZE, _SWP_NOMOVE, _SWP_NOZORDER, _SWP_NOACTIVATE = 0x0001, 0x0002, 0x0004, 0x0010
 _SWP_FRAMECHANGED = 0x0020
+_SWP_NOOWNERZORDER = 0x0200
+_HWND_TOPMOST = -1
 _DWMWA_USE_IMMERSIVE_DARK_MODE = 20
 _DWMWA_WINDOW_CORNER_PREFERENCE = 33
 _DWMWA_SYSTEMBACKDROP_TYPE = 38
 _DWMWCP_ROUND = 2
 _SPI_GETCLIENTAREAANIMATION = 0x1042
 _SM_CXSMICON = 49
+_WDA_NONE = 0x00000000
+_WDA_EXCLUDEFROMCAPTURE = 0x00000011
+"""From Windows 10 2004: the window is left out of every capture that goes through DWM."""
+_VK_LBUTTON, _VK_RBUTTON = 0x01, 0x02
+_KEY_DOWN = 0x8000
 _PERSONALIZE = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
 _ACCENT = r"Software\Microsoft\Windows\CurrentVersion\Explorer\Accent"
 _LIGHT2, _DARK1 = 1, 4
@@ -95,6 +103,8 @@ _USER32: dict[str, tuple[Any, list[Any]]] = {
     "RegisterHotKey": (wintypes.BOOL, [wintypes.HWND, ctypes.c_int, wintypes.UINT, wintypes.UINT]),
     "UnregisterHotKey": (wintypes.BOOL, [wintypes.HWND, ctypes.c_int]),
     "GetSystemMetrics": (ctypes.c_int, [ctypes.c_int]),
+    "SetWindowDisplayAffinity": (wintypes.BOOL, [wintypes.HWND, wintypes.DWORD]),
+    "GetAsyncKeyState": (ctypes.c_short, [ctypes.c_int]),
 }
 _DWMAPI: dict[str, tuple[Any, list[Any]]] = {
     "DwmSetWindowAttribute": (
@@ -248,6 +258,30 @@ def register_hotkey(hotkey_id: int, modifiers: int, key: int) -> int:
 
 def unregister_hotkey(hotkey_id: int) -> None:
     _user32.UnregisterHotKey(None, hotkey_id)
+
+
+def bring_to_front(hwnd: int) -> None:
+    """Put a window always on top above all the others always on top, without activating it.
+    Shown without activation, a window keeps the place it had among them, which may be under a
+    window shown later."""
+    flags = _SWP_NOMOVE | _SWP_NOSIZE | _SWP_NOACTIVATE | _SWP_NOOWNERZORDER
+    _user32.SetWindowPos(hwnd, _HWND_TOPMOST, 0, 0, 0, 0, flags)
+
+
+def exclude_from_capture(hwnd: int, exclude: bool) -> int:
+    """Leave the window out of screen capture, or let it back in: screen sharing, recordings and
+    screenshots show what is under it, while its monitor still shows it. Return 0, or Windows'
+    error."""
+    affinity = _WDA_EXCLUDEFROMCAPTURE if exclude else _WDA_NONE
+    if _user32.SetWindowDisplayAffinity(hwnd, affinity):
+        return 0
+    return ctypes.get_last_error()
+
+
+def mouse_pressed() -> bool:
+    """Whether a mouse button is down, left or right, wherever the mouse is. These are the
+    physical buttons, so a press counts also with the buttons swapped."""
+    return any(_user32.GetAsyncKeyState(key) & _KEY_DOWN for key in (_VK_LBUTTON, _VK_RBUTTON))
 
 
 def _attribute(hwnd: int, attribute: int, value: int) -> None:

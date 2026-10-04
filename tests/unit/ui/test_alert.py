@@ -1,9 +1,25 @@
 from collections.abc import Callable
+from datetime import UTC, date, datetime, time
 
 import pytest
 
-from jiffin.core.records import Snooze
+from jiffin.core.clock import SimulatedClock
+from jiffin.core.context import Context
+from jiffin.core.meanings import read
+from jiffin.core.records import Alert, Revision, Snooze
 from jiffin.ui.alert import AlertSlot
+
+
+def at(day: int, hour: int) -> datetime:
+    """A wall-clock time of October 2026, in UTC as the clock of these tests."""
+    return datetime.combine(date(2026, 10, day), time(hour), tzinfo=UTC)
+
+
+def ms(moment: datetime) -> int:
+    return round(moment.timestamp() * 1000)
+
+
+FRIDAY = at(2, 10)
 
 
 class Answers:
@@ -15,17 +31,41 @@ class Answers:
     def done(self, alert_id: int) -> None:
         self.given.append(("done", alert_id))
 
-    def useful(self, alert_id: int) -> None:
-        self.given.append(("useful", alert_id))
-
     def not_here(self, alert_id: int) -> None:
         self.given.append(("not_here", alert_id))
 
     def snooze(self, alert_id: int, snooze: Snooze) -> None:
         self.given.append(("snooze", alert_id, snooze))
 
+    def close(self, alert_id: int) -> None:
+        self.given.append(("close", alert_id))
+
     def vanished(self, alert_id: int) -> None:
         self.given.append(("vanished", alert_id))
+
+
+def alert(
+    alert_id: int = 7,
+    condition: str = "quando apro Figma",
+    action: str = "esportare le icone",
+    perennial: bool = False,
+    rings: datetime = FRIDAY,
+) -> Alert:
+    """An alert as `core` makes it, its reminder written on Friday at 10:00."""
+    reading = read(condition, FRIDAY)
+    revision = Revision(
+        alert_id,
+        alert_id,
+        1,
+        condition,
+        action,
+        reading.remainder,
+        schedule=reading.schedule,
+        written_at=ms(FRIDAY),
+        perennial=perennial,
+    )
+    context = Context("figma.exe", "Icone - Figma", None)
+    return Alert(alert_id, alert_id, revision, None, context, None, ms(rings), ms(rings))
 
 
 class Scene:
@@ -34,17 +74,18 @@ class Scene:
     def __init__(self) -> None:
         self.answers = Answers()
         self.left: list[AlertSlot] = []
-        self.slot = AlertSlot(self.answers, self.left.append)
+        self.clock = SimulatedClock(ms(FRIDAY))
+        self.slot = AlertSlot(self.answers, self.clock, self.left.append)
         self.told: list[str] = []
         for signal in ("presented", "leaving", "changed"):
             getattr(self.slot, signal).connect(lambda signal=signal: self.told.append(signal))
 
     def qml(self, name: str) -> object:
-        """A property of the slot, as its window reads it."""
+        """A property of the slot, as its windows read it."""
         return self.slot.property(name)
 
-    def present(self, alert_id: int = 7) -> None:
-        self.slot.present(alert_id, "quando apro Figma", "esportare le icone")
+    def present(self, shown: Alert | None = None) -> None:
+        self.slot.present(shown or alert())
         self.told.clear()
 
 
@@ -54,26 +95,37 @@ def scene() -> Scene:
 
 
 def test_a_slot_shows_the_users_words_with_a_capital_to_start(scene: Scene) -> None:
-    scene.slot.present(7, " quando apro Figma", "esportare le icone ")
-    assert (scene.qml("condition"), scene.qml("action")) == (
-        "Quando apro Figma",
-        "Esportare le icone",
-    )
+    scene.slot.present(alert(condition=" quando apro Figma", action="esportare le icone "))
+    assert (scene.qml("line"), scene.qml("action")) == ("Quando apro Figma", "Esportare le icone")
     assert (scene.slot.alert_id, scene.slot.free) == (7, False)
-    assert scene.qml("panel") == AlertSlot.Panel.BUTTONS.value
+    assert not scene.qml("menuOpen")
     assert not scene.qml("paused")
+    assert not scene.qml("perennial")
     assert scene.told == ["changed", "presented"]
+
+
+def test_the_line_has_the_condition_without_its_time_and_the_time_apart(scene: Scene) -> None:
+    scene.present(alert(condition="quando apro Claude dopo le 23", perennial=True))
+    assert scene.qml("line") == "Quando apro Claude · dalle 23:00 alle 04:00"
+    assert scene.qml("perennial")
+
+
+def test_an_alert_with_only_a_time_names_the_day_it_rings_for(scene: Scene) -> None:
+    scene.clock.advance(ms(at(3, 9)) - scene.clock.now())
+    scene.present(alert(condition="alle 15", rings=at(3, 9)))
+    assert scene.qml("line") == "Ieri alle 15:00"
 
 
 @pytest.mark.parametrize(
     ("click", "answer"),
     [
         (AlertSlot.done, ("done", 7)),
-        (AlertSlot.useful, ("useful", 7)),
-        (AlertSlot.notHere, ("not_here", 7)),
+        (AlertSlot.snoozeNextTime, ("snooze", 7, Snooze.NEXT_TIME)),
         (AlertSlot.snoozeQuarterHour, ("snooze", 7, Snooze.QUARTER_HOUR)),
         (AlertSlot.snoozeHour, ("snooze", 7, Snooze.HOUR)),
         (AlertSlot.snoozeTomorrow, ("snooze", 7, Snooze.TOMORROW)),
+        (AlertSlot.notHere, ("not_here", 7)),
+        (AlertSlot.close, ("close", 7)),
         (AlertSlot.expire, ("vanished", 7)),
     ],
 )
@@ -97,7 +149,7 @@ def test_the_slot_is_free_again_once_the_window_has_left(scene: Scene) -> None:
     scene.slot.left()
     assert scene.left == [scene.slot]
     assert (scene.slot.alert_id, scene.slot.free) == (None, True)
-    scene.present(8)
+    scene.present(alert(8))
     assert scene.slot.alert_id == 8
 
 
@@ -120,37 +172,67 @@ def test_the_10_seconds_pause_while_the_mouse_is_over_the_alert(scene: Scene) ->
     assert scene.told == ["changed", "changed"]
 
 
-def test_the_10_seconds_pause_while_a_panel_is_open(scene: Scene) -> None:
+def test_the_10_seconds_pause_while_the_menu_is_open(scene: Scene) -> None:
     scene.present()
-    scene.slot.openSnooze()
-    assert (scene.qml("panel"), scene.qml("paused")) == (AlertSlot.Panel.SNOOZE.value, True)
-    scene.slot.openSnooze()
-    scene.slot.back()
-    assert (scene.qml("panel"), scene.qml("paused")) == (AlertSlot.Panel.BUTTONS.value, False)
-    scene.slot.openMore()
-    assert (scene.qml("panel"), scene.qml("paused")) == (AlertSlot.Panel.MORE.value, True)
-    assert scene.told == ["changed", "changed", "changed"]
+    scene.slot.toggleMenu()
+    assert (scene.slot.menu_open, scene.qml("menuOpen"), scene.qml("paused")) == (True, True, True)
+    scene.slot.toggleMenu()  # a second click on Rimanda
+    assert (scene.qml("menuOpen"), scene.qml("paused")) == (False, False)
+    scene.slot.toggleMenu()
+    scene.slot.close_menu()  # a click outside
+    scene.slot.close_menu()
+    assert (scene.qml("menuOpen"), scene.qml("paused")) == (False, False)
+    assert scene.told == ["changed"] * 4
 
 
-def test_a_new_alert_starts_on_the_buttons_and_running(scene: Scene) -> None:
+@pytest.mark.parametrize(
+    ("condition", "offered"),
+    [
+        ("quando apro Figma", True),
+        ("alle 15", True),
+        ("stasera", False),
+    ],
+    ids=["no time", "a moment that comes back", "tonight"],
+)
+def test_the_menu_offers_alla_prossima_volta_only_with_a_next_unit(
+    scene: Scene, condition: str, offered: bool
+) -> None:
+    scene.clock.advance(ms(at(2, 19)) - scene.clock.now())
+    scene.present(alert(condition=condition, rings=at(2, 19)))
+    scene.slot.toggleMenu()
+    assert scene.qml("nextTime") is offered
+
+
+def test_the_menu_goes_at_once_when_the_alert_leaves(scene: Scene) -> None:
+    scene.present()
+    scene.slot.toggleMenu()
+    scene.told.clear()
+    scene.slot.snoozeHour()
+    assert not scene.slot.menu_open
+    assert scene.told == ["changed", "leaving"]
+    scene.slot.toggleMenu()  # a click while the window leaves
+    scene.slot.close_menu()
+    assert not scene.slot.menu_open
+    assert scene.told == ["changed", "leaving"]
+
+
+def test_an_empty_slot_has_no_menu(scene: Scene) -> None:
+    scene.slot.toggleMenu()
+    assert not scene.slot.menu_open
+    assert scene.told == []
+
+
+def test_a_new_alert_starts_with_the_menu_closed_and_running(scene: Scene) -> None:
     scene.present()
     scene.slot.hover(True)
-    scene.slot.openMore()
+    scene.slot.toggleMenu()
     scene.slot.done()
     scene.slot.left()
-    scene.present(8)
-    assert (scene.qml("panel"), scene.qml("paused")) == (AlertSlot.Panel.BUTTONS.value, False)
+    scene.present(alert(8))
+    assert (scene.qml("menuOpen"), scene.qml("paused")) == (False, False)
 
 
 def test_the_mouse_over_a_hidden_window_is_ignored(scene: Scene) -> None:
     scene.slot.hover(True)  # Qt sends an enter and a leave after hide()
     assert not scene.qml("paused")
     assert scene.told == []
-
-
-def test_the_panel_stays_while_the_window_leaves(scene: Scene) -> None:
-    scene.present()
-    scene.slot.openSnooze()
-    scene.slot.snoozeHour()
-    scene.slot.back()
-    assert scene.qml("panel") == AlertSlot.Panel.SNOOZE.value

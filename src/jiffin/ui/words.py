@@ -80,7 +80,25 @@ def passed(schedule: Schedule, today: date) -> str:
     `meanings` finds one only on a date; any other time gets its whole line."""
     if not isinstance(schedule.days, OnDate):
         return when(schedule, False, today)
-    day = schedule.days.day
+    return _on_day(schedule, schedule.days.day, today)
+
+
+def alert_line(remainder: str, schedule: Schedule | None, day: date | None, today: date) -> str:
+    """The one line of an alert, over what to do (#84): the condition without its time, then the
+    time understood, "Quando apro Claude · dalle 23:00 alle 04:00", where every day goes unsaid,
+    also for a perennial reminder, whose icon says it. With only a time, the day of the instance
+    that rings and its hours, short: "Oggi alle 15:00", "Ieri alle 15:00" when it rings late.
+    `day` is that instance's Jiffin day, if known; `today` the Jiffin day the alert shows on."""
+    if schedule is None:
+        return sentence(remainder)
+    if remainder:
+        return f"{sentence(remainder)} · {_when(schedule, False, today)}"
+    return _on_day(schedule, day or today, today)
+
+
+def _on_day(schedule: Schedule, day: date, today: date) -> str:
+    """The hours of a time on one of its days, short: "Oggi alle 09:00", "Venerdì 2 ottobre dalle
+    23:00 alle 04:00"."""
     words = NEAR.get((day - today).days) or _plain(day, today)
     if schedule.hours is not None:
         words += f" {_hours(schedule.hours)}"

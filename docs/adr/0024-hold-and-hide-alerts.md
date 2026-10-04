@@ -116,3 +116,10 @@ that shows, and its error code goes to the log.
   and are seen at once, in and out; maximized windows and the desktop are not
   ([context capture](../design/context.md)). PowerPoint was not tried: the
   owner has none to use.
+- The exclusion verified on the owner's machine
+  ([#102](https://github.com/devfrx/jiffin/issues/102)): the alerts and
+  Rimanda's menu, Qt Quick windows with their glass, are missing from the
+  Snipping Tool's full-screen captures, also after hiding and showing again,
+  and keep their glass on the monitor; Windows refused no call. Sharing in
+  Meet was not tried yet: it is left to the acceptance day
+  ([#106](https://github.com/devfrx/jiffin/issues/106)).

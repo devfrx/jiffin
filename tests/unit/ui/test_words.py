@@ -21,7 +21,7 @@ from jiffin.core.schedule import (
     Weekdays,
     YearDay,
 )
-from jiffin.ui.words import passed, when
+from jiffin.ui.words import alert_line, passed, when
 
 
 def at(day: int, hour: int, minute: int = 0) -> datetime:
@@ -381,3 +381,44 @@ def test_a_time_already_over_is_named_short_for_salvas_warning(
 
 def test_a_time_not_on_a_date_is_named_by_its_whole_line() -> None:
     assert passed(Schedule(week(0), Moment(time(9))), FRIDAY) == "Ogni lunedì alle 09:00"
+
+
+# The alert's line
+
+
+@pytest.mark.parametrize(
+    ("condition", "line"),
+    [
+        # #84, on a perennial alert: every day goes unsaid, the icon says it.
+        ("quando apro Claude dopo le 23", "Quando apro Claude · dalle 23:00 alle 04:00"),
+        ("quando apro Outlook il lunedì", "Quando apro Outlook · ogni lunedì"),
+        ("domani quando apro Teams", "Quando apro Teams · domani, sabato 3 ottobre"),
+        ("quando apro Figma", "Quando apro Figma"),
+        ("quando apro YouTube verso sera", "Quando apro YouTube verso sera"),
+    ],
+)
+def test_an_alert_names_its_condition_without_the_time_and_the_time_apart(
+    condition: str, line: str
+) -> None:
+    reading = read(condition, WRITTEN)
+    assert alert_line(reading.remainder, reading.schedule, None, FRIDAY) == line
+
+
+@pytest.mark.parametrize(
+    ("condition", "day", "line"),
+    [
+        ("alle 15", FRIDAY, "Oggi alle 15:00"),
+        ("alle 15", date(2026, 10, 1), "Ieri alle 15:00"),
+        ("alle 15", date(2026, 9, 30), "Mercoledì 30 settembre alle 15:00"),
+        ("dopo le 23", FRIDAY, "Oggi dalle 23:00 alle 04:00"),
+        ("alle 2 di notte", FRIDAY, "Oggi alle 02:00 di notte"),
+        ("ogni lunedì", FRIDAY, "Oggi"),
+        ("alle 15", None, "Oggi alle 15:00"),
+    ],
+)
+def test_an_alert_with_only_a_time_names_the_day_it_rings_for(
+    condition: str, day: date | None, line: str
+) -> None:
+    reading = read(condition, WRITTEN)
+    assert reading.remainder == ""
+    assert alert_line(reading.remainder, reading.schedule, day, FRIDAY) == line

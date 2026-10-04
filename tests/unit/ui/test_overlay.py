@@ -1,16 +1,21 @@
+import math
 from collections.abc import Callable, Iterator
+from datetime import datetime
 
 import pytest
 from PySide6.QtCore import QPoint, QPointF, Qt
-from PySide6.QtGui import QColor, QGuiApplication, QWindow
+from PySide6.QtGui import QColor, QCursor, QGuiApplication, QWindow
 from PySide6.QtQml import QQmlEngine, QQmlProperty, qmlContext
 from PySide6.QtQuick import QQuickItem, QQuickWindow
 from PySide6.QtTest import QTest
 from pytestqt.qtbot import QtBot
 
 from jiffin.core.alerts import AlertsView
+from jiffin.core.clock import SimulatedClock
 from jiffin.core.context import Context
+from jiffin.core.meanings import read
 from jiffin.core.records import Alert, Revision, Snooze
+from jiffin.ui import win32
 from jiffin.ui.alert import AlertSlot
 from jiffin.ui.glass import Glass
 from jiffin.ui.look import Look, Settings
@@ -34,11 +39,15 @@ LIGHT_SOLID_STILL = Settings(
 )
 WAIT_MS = 500
 """How long the alerts of these tests wait for an answer, instead of 10 s."""
+FRIDAY = datetime.fromisoformat("2026-10-02T19:00+00:00")
 ACTION = "esportare le icone"
 LONG_ACTION = (
     "esportare le icone del progetto Rossi in tutti i formati che ha chiesto il cliente, "
     "con i nomi giusti e le cartelle in ordine"
 )
+MENU = ("Alla prossima volta", "Tra 15 minuti", "Tra un'ora", "Domani", "Non qui")
+"""Rimanda's menu, from the top (#83)."""
+RIMANDA = "Rimanda"
 
 
 class Answers:
@@ -50,14 +59,14 @@ class Answers:
     def done(self, alert_id: int) -> None:
         self.given.append(("done", alert_id))
 
-    def useful(self, alert_id: int) -> None:
-        self.given.append(("useful", alert_id))
-
     def not_here(self, alert_id: int) -> None:
         self.given.append(("not_here", alert_id))
 
     def snooze(self, alert_id: int, snooze: Snooze) -> None:
         self.given.append(("snooze", alert_id, snooze))
+
+    def close(self, alert_id: int) -> None:
+        self.given.append(("close", alert_id))
 
     def vanished(self, alert_id: int) -> None:
         self.given.append(("vanished", alert_id))
@@ -73,10 +82,69 @@ class Windows:
         return self.settings
 
 
-def alert(alert_id: int, action: str = ACTION) -> Alert:
-    revision = Revision(alert_id, alert_id, 1, "quando apro Figma", action, "quando apro Figma")
+class Capture:
+    """What the overlay asks of screen capture, recorded instead of done: (window, excluded,
+    whether the window showed then)."""
+
+    def __init__(self) -> None:
+        self.asked: list[tuple[int, bool, bool]] = []
+        self.error = 0
+        """What Windows answers: 0, or an error."""
+
+    def exclude(self, hwnd: int, exclude: bool) -> int:
+        window = next(w for w in QGuiApplication.topLevelWindows() if int(w.winId()) == hwnd)
+        self.asked.append((hwnd, exclude, window.isVisible()))
+        return self.error
+
+
+class Front:
+    """The windows the overlay put over all those always on top, in order."""
+
+    def __init__(self) -> None:
+        self.brought: list[int] = []
+
+    def bring(self, hwnd: int) -> None:
+        self.brought.append(hwnd)
+
+
+class Mouse:
+    """The mouse buttons, as Windows says them; the test presses them."""
+
+    def __init__(self) -> None:
+        self.down = False
+        self.reads = 0
+
+    def pressed(self) -> bool:
+        self.reads += 1
+        return self.down
+
+
+def alert(
+    alert_id: int,
+    action: str = ACTION,
+    condition: str = "quando apro Figma",
+    perennial: bool = False,
+) -> Alert:
+    """An alert of a reminder written now, as `core` makes one."""
+    reading = read(condition, FRIDAY)
+    revision = Revision(
+        alert_id,
+        alert_id,
+        1,
+        condition,
+        action,
+        reading.remainder,
+        schedule=reading.schedule,
+        written_at=millis(FRIDAY),
+        perennial=perennial,
+    )
     context = Context("figma.exe", "Icone - Figma", None)
-    return Alert(alert_id, alert_id, revision, alert_id, context, 2.0, 0, 0, shown_at=0)
+    now = millis(FRIDAY)
+    return Alert(alert_id, alert_id, revision, alert_id, context, 2.0, now, now, shown_at=now)
+
+
+def millis(moment: datetime) -> int:
+    return round(moment.timestamp() * 1000)
 
 
 def items(item: QQuickItem) -> Iterator[QQuickItem]:
@@ -94,16 +162,21 @@ def slot(window: QWindow) -> AlertSlot:
 class Screen:
     """The overlay on the offscreen screen, with the answers given there."""
 
-    def __init__(self, qtbot: QtBot) -> None:
+    def __init__(self, qtbot: QtBot, capture: Capture, mouse: Mouse, front: Front) -> None:
         self._qtbot = qtbot
+        self.capture = capture
+        self.mouse = mouse
+        self.front = front
         self.windows = Windows()
         self.look = Look(self.windows.read)
         self.engine = QQmlEngine()
         self.look.provide(self.engine)
         self.answers = Answers()
         before = set(QGuiApplication.topLevelWindows())
-        self.overlay = Overlay(self.engine, self.answers, Glass(self.look))
-        self._windows = [w for w in QGuiApplication.topLevelWindows() if w not in before]
+        clock = SimulatedClock(millis(FRIDAY))
+        self.overlay = Overlay(self.engine, self.answers, Glass(self.look), clock)
+        made = [w for w in QGuiApplication.topLevelWindows() if w not in before]
+        self._windows = [w for w in made if w.title() == "Promemoria"]
         for window in self._windows:
             window.setProperty("duration", WAIT_MS)
 
@@ -121,12 +194,42 @@ class Screen:
         assert isinstance(found, QQuickWindow)
         return found
 
+    def menu(self, alert_id: int) -> QQuickWindow:
+        """Rimanda's menu of the alert, shown or not."""
+        found = self.window(alert_id).property("menu")
+        assert isinstance(found, QQuickWindow)
+        return found
+
+    def menus_shown(self) -> int:
+        return sum(1 for window in self._windows if window.property("menu").isVisible())
+
     def click(self, alert_id: int, name: str) -> None:
-        """Click the button a screen reader calls `name` on the alert."""
-        window = self.window(alert_id)
-        button = self._item(window, lambda item: accessible_name(item) == name)
+        """Click the button a screen reader calls `name`, on the alert or on its open menu."""
+        menu = self.menu(alert_id)
+        window = menu if name in MENU and menu.isVisible() else self.window(alert_id)
+        button = self.item(window, name)
         centre = button.mapToScene(QPointF(button.width() / 2, button.height() / 2)).toPoint()
         QTest.mouseClick(window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, centre)
+
+    def press(self, point: QPoint) -> None:
+        """Press a mouse button at a point of the screen, wherever it is, and let it go."""
+        self.hold(point)
+        self.release()
+
+    def hold(self, point: QPoint) -> None:
+        """Press a mouse button at a point of the screen, until `release`."""
+        QCursor.setPos(point)
+        self.mouse.down = True
+        self.read()
+
+    def release(self) -> None:
+        self.mouse.down = False
+        self.read()
+
+    def read(self) -> None:
+        """Until the overlay has read the buttons once more, or reads them no more."""
+        reads = self.mouse.reads
+        self._qtbot.waitUntil(lambda: self.mouse.reads > reads or not self.menus_shown())
 
     def hover(self, alert_id: int) -> None:
         QTest.mouseMove(self.window(alert_id), QPoint(20, 20))
@@ -136,9 +239,27 @@ class Screen:
 
     def text(self, alert_id: int, shown: str) -> QQuickItem:
         """The text item that shows `shown`."""
-        return self._item(self.window(alert_id), lambda item: item.property("text") == shown)
+        return self._find(self.window(alert_id), lambda item: item.property("text") == shown)
 
-    def _item(self, window: QQuickWindow, wanted: Callable[[QQuickItem], bool]) -> QQuickItem:
+    def item(self, window: QQuickWindow, name: str) -> QQuickItem:
+        """The item a screen reader calls `name`."""
+        return self._find(window, lambda item: accessible_name(item) == name)
+
+    def names(self, window: QQuickWindow) -> list[str]:
+        """What a screen reader calls the visible buttons of a window, from the top left."""
+        for item in items(window.contentItem()):
+            item.ensurePolished()
+        found = [
+            item
+            for item in items(window.contentItem())
+            if item.isVisible() and item.inherits("QQuickAbstractButton")
+        ]
+        found.sort(
+            key=lambda item: (item.mapToScene(QPointF()).y(), item.mapToScene(QPointF()).x())
+        )
+        return [str(accessible_name(item)) for item in found]
+
+    def _find(self, window: QQuickWindow, wanted: Callable[[QQuickItem], bool]) -> QQuickItem:
         # Rows place what they show only when polished, before the next frame.
         for item in items(window.contentItem()):
             item.ensurePolished()
@@ -154,11 +275,34 @@ def accessible_name(item: QQuickItem) -> object:
 
 
 @pytest.fixture
-def screen(qtbot: QtBot, dwm: list[tuple[object, ...]]) -> Iterator[Screen]:
-    screen = Screen(qtbot)
+def capture(monkeypatch: pytest.MonkeyPatch) -> Capture:
+    capture = Capture()
+    monkeypatch.setattr(win32, "exclude_from_capture", capture.exclude)
+    return capture
+
+
+@pytest.fixture
+def mouse(monkeypatch: pytest.MonkeyPatch) -> Mouse:
+    mouse = Mouse()
+    monkeypatch.setattr(win32, "mouse_pressed", mouse.pressed)
+    return mouse
+
+
+@pytest.fixture
+def front(monkeypatch: pytest.MonkeyPatch) -> Front:
+    front = Front()
+    monkeypatch.setattr(win32, "bring_to_front", front.bring)
+    return front
+
+
+@pytest.fixture
+def screen(
+    qtbot: QtBot, dwm: list[tuple[object, ...]], capture: Capture, mouse: Mouse, front: Front
+) -> Iterator[Screen]:
+    screen = Screen(qtbot, capture, mouse, front)
     yield screen
     screen.show()  # every window leaves, and no countdown is left running
-    qtbot.waitUntil(lambda: screen.on_screen() == [])
+    qtbot.waitUntil(lambda: screen.on_screen() == [] and screen.menus_shown() == 0)
 
 
 def top_centre(window: QWindow) -> tuple[int, int]:
@@ -176,16 +320,27 @@ def test_an_alert_shows_at_the_top_centre_with_the_glass(
     assert ("nudge", int(window.winId())) in dwm
 
 
-def test_an_alert_window_never_takes_the_focus(screen: Screen) -> None:
+def test_an_alert_and_its_menu_never_take_the_focus(screen: Screen) -> None:
     screen.show(alert(1))
-    flags = screen.window(1).flags()
-    for flag in (
-        Qt.WindowType.WindowDoesNotAcceptFocus,
-        Qt.WindowType.Tool,
-        Qt.WindowType.WindowStaysOnTopHint,
-        Qt.WindowType.FramelessWindowHint,
-    ):
-        assert flags & flag
+    for window in (screen.window(1), screen.menu(1)):
+        for flag in (
+            Qt.WindowType.WindowDoesNotAcceptFocus,
+            Qt.WindowType.Tool,
+            Qt.WindowType.WindowStaysOnTopHint,
+            Qt.WindowType.FramelessWindowHint,
+        ):
+            assert window.flags() & flag
+
+
+def test_an_alert_has_fatto_rimanda_and_the_x(screen: Screen) -> None:
+    screen.show(alert(1))
+    assert screen.names(screen.window(1)) == ["Fatto", "Rimanda", "Chiudi"]
+
+
+def test_a_perennial_alert_has_the_icon_of_repetition(screen: Screen) -> None:
+    screen.show(alert(1), alert(2, perennial=True))
+    assert screen.text(1, "\ue8a5").isVisible()  # Document
+    assert screen.text(2, "\ue8ee").isVisible()  # RepeatAll
 
 
 def test_alerts_stack_from_the_top_in_the_order_they_came(qtbot: QtBot, screen: Screen) -> None:
@@ -246,12 +401,13 @@ def test_an_alert_core_no_longer_shows_leaves_without_an_answer(
     ("clicks", "answer"),
     [
         (["Fatto"], ("done", 1)),
-        (["Rimanda", "15 min"], ("snooze", 1, Snooze.QUARTER_HOUR)),
-        (["Rimanda", "1 ora"], ("snooze", 1, Snooze.HOUR)),
-        (["Rimanda", "Domani"], ("snooze", 1, Snooze.TOMORROW)),
-        (["Altre azioni", "Utile"], ("useful", 1)),
-        (["Altre azioni", "Non qui"], ("not_here", 1)),
-        (["Rimanda", "Indietro", "Altre azioni", "Indietro", "Fatto"], ("done", 1)),
+        ([RIMANDA, "Alla prossima volta"], ("snooze", 1, Snooze.NEXT_TIME)),
+        ([RIMANDA, "Tra 15 minuti"], ("snooze", 1, Snooze.QUARTER_HOUR)),
+        ([RIMANDA, "Tra un'ora"], ("snooze", 1, Snooze.HOUR)),
+        ([RIMANDA, "Domani"], ("snooze", 1, Snooze.TOMORROW)),
+        ([RIMANDA, "Non qui"], ("not_here", 1)),
+        (["Chiudi"], ("close", 1)),
+        ([RIMANDA, RIMANDA, "Fatto"], ("done", 1)),
     ],
 )
 def test_each_answer_is_a_click_or_two_away(
@@ -261,7 +417,168 @@ def test_each_answer_is_a_click_or_two_away(
     for name in clicks:
         screen.click(1, name)
     assert screen.answers.given == [answer]
+    qtbot.waitUntil(lambda: screen.on_screen() == [] and screen.menus_shown() == 0)
+
+
+def test_rimanda_opens_its_menu_under_the_button(screen: Screen) -> None:
+    screen.windows.settings = LIGHT_SOLID_STILL  # no slide while it enters
+    screen.look.refresh()
+    screen.show(alert(1))
+    window = screen.window(1)
+    screen.click(1, RIMANDA)
+    menu = screen.menu(1)
+    assert menu.isVisible()
+    assert screen.names(menu) == list(MENU)
+    # On Rimanda's left edge, 4 px under it, as QML rounds.
+    button = screen.item(window, RIMANDA)
+    corner = button.mapToItem(window.contentItem(), QPointF(0, button.height() + 4))
+    x, y = (math.floor(value + 0.5) for value in (corner.x(), corner.y()))
+    assert (menu.x(), menu.y()) == (window.x() + x, window.y() + y)
+    # As wide as its longest item and 32 px, 120 px at least (#83).
+    longest = screen.item(menu, "Alla prossima volta")
+    assert menu.width() == max(120, round(longest.implicitWidth()) + 8)
+
+
+def test_the_menu_has_alla_prossima_volta_only_with_a_next_unit(screen: Screen) -> None:
+    screen.show(alert(1, condition="stasera"))
+    screen.click(1, RIMANDA)
+    assert screen.names(screen.menu(1)) == list(MENU[1:])
+    assert screen.menu(1).width() >= 120
+
+
+def test_the_menu_has_the_alerts_glass(screen: Screen, dwm: list[tuple[object, ...]]) -> None:
+    screen.show(alert(1))
+    screen.click(1, RIMANDA)
+    hwnd = int(screen.menu(1).winId())
+    assert ("set_backdrop", hwnd) in [call[:2] for call in dwm]
+    assert ("nudge", hwnd) in dwm
+
+
+def test_a_second_click_on_rimanda_closes_the_menu(qtbot: QtBot, screen: Screen) -> None:
+    screen.show(alert(1))
+    screen.click(1, RIMANDA)
+    screen.click(1, RIMANDA)
+    assert not screen.menu(1).isVisible()
+    assert screen.answers.given == []
+
+
+def test_a_click_outside_the_menu_and_its_alert_closes_the_menu(screen: Screen) -> None:
+    screen.show(alert(1))
+    window = screen.window(1)
+    screen.click(1, RIMANDA)
+    menu = screen.menu(1)
+    screen.press(menu.geometry().center())
+    screen.press(window.geometry().topLeft() + QPoint(20, 20))
+    assert menu.isVisible()
+    screen.press(menu.geometry().bottomRight() + QPoint(40, 40))
+    assert not menu.isVisible()
+    assert screen.answers.given == []
+
+
+def test_a_press_that_began_inside_does_not_close_the_menu_outside(screen: Screen) -> None:
+    screen.show(alert(1))
+    screen.click(1, RIMANDA)
+    menu = screen.menu(1)
+    screen.hold(menu.geometry().center())
+    QCursor.setPos(menu.geometry().bottomRight() + QPoint(40, 40))
+    screen.read()
+    screen.read()
+    assert menu.isVisible()
+    screen.release()
+
+
+def test_a_button_already_down_when_the_menu_opens_is_no_press(screen: Screen) -> None:
+    screen.show(alert(1))
+    QCursor.setPos(screen.window(1).geometry().bottomRight() + QPoint(40, 40))
+    screen.mouse.down = True
+    screen.click(1, RIMANDA)
+    screen.read()
+    screen.read()
+    assert screen.menu(1).isVisible()
+    screen.release()
+
+
+def test_the_mouse_is_read_only_while_a_menu_is_open(qtbot: QtBot, screen: Screen) -> None:
+    screen.show(alert(1))
+    qtbot.wait(100)
+    assert screen.mouse.reads == 0
+    screen.click(1, RIMANDA)
+    qtbot.waitUntil(lambda: screen.mouse.reads > 1)
+    screen.click(1, RIMANDA)
+    reads = screen.mouse.reads
+    qtbot.wait(100)
+    assert screen.mouse.reads == reads
+
+
+def test_alerts_and_menus_go_over_the_windows_always_on_top(screen: Screen) -> None:
+    screen.show(alert(1))
+    hwnd = int(screen.window(1).winId())
+    assert screen.front.brought == [hwnd]
+    screen.click(1, RIMANDA)
+    assert screen.front.brought == [hwnd, int(screen.menu(1).winId())]
+
+
+def test_an_open_menu_stays_over_a_new_alert(screen: Screen) -> None:
+    screen.show(alert(1), alert(2))
+    screen.click(1, RIMANDA)
+    screen.show(alert(1), alert(2), alert(3))
+    new, menu = int(screen.window(3).winId()), int(screen.menu(1).winId())
+    assert screen.front.brought[-2:] == [new, menu]
+
+
+def test_one_menu_is_open_at_a_time(screen: Screen) -> None:
+    screen.show(alert(1), alert(2))
+    screen.click(1, RIMANDA)
+    screen.click(2, RIMANDA)
+    assert (screen.menu(1).isVisible(), screen.menu(2).isVisible()) == (False, True)
+
+
+def test_the_menu_leaves_with_its_alert(qtbot: QtBot, screen: Screen) -> None:
+    screen.show(alert(1))
+    screen.click(1, RIMANDA)
+    menu = screen.menu(1)
+    screen.show()  # `core` no longer shows it
+    assert not menu.isVisible()
     qtbot.waitUntil(lambda: screen.on_screen() == [])
+
+
+def test_the_menu_follows_its_alert_when_it_moves_up(qtbot: QtBot, screen: Screen) -> None:
+    screen.show(alert(1), alert(2))
+    screen.click(2, RIMANDA)
+    menu, window = screen.menu(2), screen.window(2)
+    below = menu.y() - window.y()
+    screen.click(1, "Fatto")
+    qtbot.waitUntil(lambda: screen.on_screen() == [2])
+    qtbot.waitUntil(lambda: window.y() == top_centre(window)[1])
+    assert menu.isVisible()
+    assert menu.y() - window.y() == below
+
+
+def test_alerts_and_menus_are_out_of_screen_capture_while_they_show(
+    qtbot: QtBot, screen: Screen
+) -> None:
+    screen.show(alert(1))
+    hwnd, menu = int(screen.window(1).winId()), int(screen.menu(1).winId())
+    # Out of capture while still hidden, so that no frame of it is captured; back in once hidden.
+    assert screen.capture.asked == [(hwnd, True, False)]
+    screen.click(1, RIMANDA)
+    screen.click(1, "Tra un'ora")
+    qtbot.waitUntil(lambda: screen.on_screen() == [])
+    assert screen.capture.asked == [
+        (hwnd, True, False),
+        (menu, True, False),
+        (menu, False, False),
+        (hwnd, False, False),
+    ]
+
+
+def test_a_refused_exclusion_leaves_the_alert_on_screen_and_says_why(
+    screen: Screen, caplog: pytest.LogCaptureFixture
+) -> None:
+    screen.capture.error = 5
+    screen.show(alert(1))
+    assert screen.on_screen() == [1]
+    assert "Windows error 5" in caplog.text
 
 
 def test_an_alert_vanishes_when_its_time_is_up(qtbot: QtBot, screen: Screen) -> None:
@@ -281,13 +598,13 @@ def test_the_time_stops_while_the_mouse_is_over_the_alert(qtbot: QtBot, screen: 
     qtbot.waitUntil(lambda: screen.answers.given == [("vanished", 1)], timeout=3 * WAIT_MS)
 
 
-def test_the_time_stops_while_a_panel_is_open(qtbot: QtBot, screen: Screen) -> None:
+def test_the_time_stops_while_the_menu_is_open(qtbot: QtBot, screen: Screen) -> None:
     screen.show(alert(1))
-    screen.click(1, "Altre azioni")
+    screen.click(1, RIMANDA)
     screen.leave(1)
     qtbot.wait(2 * WAIT_MS)
     assert screen.answers.given == []
-    screen.click(1, "Indietro")
+    screen.click(1, RIMANDA)
     screen.leave(1)
     qtbot.waitUntil(lambda: screen.answers.given == [("vanished", 1)], timeout=3 * WAIT_MS)
 
@@ -301,6 +618,11 @@ def test_the_alert_follows_a_change_of_look_while_it_is_on_screen(
     screen.windows.settings = LIGHT_SOLID_STILL
     screen.look.refresh()
     assert QColor(action.property("color")) == QColor("#E4000000")
-    screen.click(1, "Rimanda")
+    screen.click(1, RIMANDA)
     screen.click(1, "Domani")
     qtbot.waitUntil(lambda: screen.on_screen() == [])
+
+
+def test_the_line_names_the_time_understood(screen: Screen) -> None:
+    screen.show(alert(1, condition="quando apro Claude dopo le 23"))
+    assert screen.text(1, "Quando apro Claude · dalle 23:00 alle 04:00").isVisible()

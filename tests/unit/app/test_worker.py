@@ -373,6 +373,8 @@ class Recorded:
         ("done", (7,)),
         ("not_here", (7,)),
         ("snooze", (7, Snooze.HOUR)),
+        ("snooze", (7, Snooze.NEXT_TIME)),
+        ("close", (7,)),
         ("vanished", (7,)),
         ("seen", ()),
         ("create", ("quando apro Figma", "esportare le icone", True)),
@@ -387,12 +389,6 @@ def test_each_command_of_the_interface_reaches_core_as_given(
     recorded = Recorded()
     getattr(QueuedCore(cast(Worker, recorded)), name)(*arguments)
     assert recorded.made == [(name, *arguments)]
-
-
-def test_utile_is_alla_prossima_volta_until_the_alert_of_0_2(scene: Scene) -> None:
-    recorded = Recorded()
-    QueuedCore(cast(Worker, recorded)).useful(7)
-    assert recorded.made == [("snooze", 7, Snooze.NEXT_TIME)]
 
 
 def test_the_worker_is_its_own_thread(scene: Scene) -> None:
