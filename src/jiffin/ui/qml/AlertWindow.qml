@@ -229,8 +229,13 @@ Window {
     AlertMenu {
         id: snoozeMenu
 
-        slot: window.slot
+        nextTime: window.slot.nextTime
         x: window.x + Math.round(window.menuAt.x)
         y: window.y + Math.round(window.menuAt.y)
+        onSnoozeNextTime: window.slot.snoozeNextTime()
+        onSnoozeQuarterHour: window.slot.snoozeQuarterHour()
+        onSnoozeHour: window.slot.snoozeHour()
+        onSnoozeTomorrow: window.slot.snoozeTomorrow()
+        onNotHere: window.slot.notHere()
     }
 }

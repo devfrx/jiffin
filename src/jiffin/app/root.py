@@ -87,8 +87,9 @@ class Jiffin:
         self._relay = relay
 
     def start(self) -> None:
-        """Open the database and put on the material and the windows' places it kept, before any
-        window shows; then the model file. Raise what opening the database raised."""
+        """Open the database and put on the material, the windows' places and the return pause it
+        kept, before any window shows; then the model file. Raise what opening the database
+        raised."""
         kept = self._worker.start()
         if kept.material is not None:
             try:
@@ -96,6 +97,7 @@ class Jiffin:
             except ValueError:  # from a later version, after a downgrade
                 log.warning("the kept material %r is unknown: the default stays", kept.material)
         self.interface.places.restore(kept.places)
+        self.interface.preferences.return_pause = kept.return_pause
         self._fetch.fetch()
 
     def close(self) -> None:
@@ -116,6 +118,9 @@ class Jiffin:
 
     def keep_places(self, places: Mapping[str, tuple[int, int]]) -> None:
         self._worker.keep_places(places)
+
+    def keep_return_pause(self, seconds: int) -> None:
+        self._worker.keep_return_pause(seconds)
 
 
 def main() -> None:

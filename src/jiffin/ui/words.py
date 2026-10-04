@@ -7,7 +7,7 @@ when it is one of them, and its year only when it is not the current one. Days c
 Jiffin day, as the meanings do, so hours before 04:00 are the night after their day, and say so.
 """
 
-from datetime import date, time
+from datetime import date, datetime, time
 
 from jiffin.core.schedule import (
     DAY_STARTS_AT,
@@ -94,6 +94,26 @@ def alert_line(remainder: str, schedule: Schedule | None, day: date | None, toda
     if remainder:
         return f"{sentence(remainder)} · {_when(schedule, False, today)}"
     return _on_day(schedule, day or today, today)
+
+
+def appeared(remainder: str, at: datetime, today: date) -> str:
+    """The line of an unseen alert in the tray list (#84): the condition without its time, then
+    when the alert appeared, "Quando apro Claude, ieri alle 23:12"; with only a time, only when
+    it appeared, "Ieri alle 23:12". `at` is local, and its day counts on the calendar."""
+    days = (today - at.date()).days
+    words = f"alle {at:%H:%M}"
+    if days == 1:
+        words = f"ieri {words}"
+    elif days > 1:
+        words = f"{dated(at.date(), today)} {words}"
+    return f"{sentence(remainder)}, {words}" if remainder else sentence(words)
+
+
+def dated(day: date, today: date) -> str:
+    """A day in the middle of a line, with its article: "il 20 ottobre", "l'8 ottobre", "l'1
+    ottobre"; its year only when it is not the current one."""
+    article = "l'" if day.day in (1, 8, 11) else "il "
+    return f"{article}{day.day} {MONTHS[day.month - 1]}{_year(day, today)}"
 
 
 def _on_day(schedule: Schedule, day: date, today: date) -> str:

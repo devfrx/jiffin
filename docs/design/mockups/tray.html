@@ -5,11 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jiffin — lista nella tray</title>
 <!--
-  The tray list, as built in src/jiffin/ui/qml (ADR-0010, ADR-0023, tickets #12 and #43). A card on the
-  alerts' material (B by default) over the tray, 368 px wide. The owner chose on screen in #43
-  the rows (a circle completes, Elimina asks first) and the warnings as a quiet line, without
-  the box of WinUI's InfoBar. Colours are those of Colors.qml; text and icons use Windows 11's
-  system fonts, Segoe UI Variable and Segoe Fluent Icons.
+  The tray list, as built in src/jiffin/ui/qml (ADR-0010, ADR-0023, tickets #12, #43 and #84). A
+  card on the alerts' material (B by default) over the tray, 368 px wide. The owner chose on
+  screen in #43 the rows (a circle completes, Elimina asks first) and the warnings as a quiet
+  line, without the box of WinUI's InfoBar; in #84 the arrows of a reminder of every time, the
+  time on a line of its own, the return pause at the bottom, and the alert's menu on an unseen
+  alert's Rimanda, here open over its button, since the list sits over the tray. Colours are
+  those of Colors.qml; text and icons use Windows 11's system fonts, Segoe UI Variable and
+  Segoe Fluent Icons.
 -->
 <style>
   :root {
@@ -257,6 +260,80 @@
   .row.asking .done {
     visibility: hidden;
   }
+  /* A reminder of every time: the arrows of its alert, an icon in Completa's place. */
+  .repeat {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    color: var(--text-secondary);
+  }
+  /* The time understood, by a clock, written for today. */
+  .when {
+    display: flex;
+    gap: 6px;
+  }
+  .when .glyph {
+    flex: none;
+    margin-top: 2px;
+    font-size: 12px;
+    line-height: 12px;
+  }
+
+  /* Where the list ends: a thin line, the return pause and Cambia. */
+  .divider {
+    height: 1px;
+    margin-top: -4px;
+    background: var(--control-stroke);
+  }
+  .pause {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: -6px;
+    padding: 0 12px 0 16px;
+  }
+  .pause .caption {
+    flex: 1;
+  }
+
+  /* Rimanda's menu, the alert's own (AlertMenu.qml): a window of its own on the glass, over
+     its button where the work area ends. */
+  .anchor {
+    position: relative;
+  }
+  .menu {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 4px);
+    z-index: 1;
+    width: max-content;
+    min-width: 120px;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    border: 1px solid var(--window-stroke);
+    border-radius: 8px;
+    background: var(--card);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.14);
+    font-size: 14px;
+    line-height: 20px;
+  }
+  .menu span {
+    padding: 6px 12px;
+    border-radius: 4px;
+    color: var(--text-primary);
+    white-space: nowrap;
+  }
+  .menu .line {
+    height: 1px;
+    margin: 2px -4px;
+    padding: 0;
+    background: var(--control-stroke);
+  }
 
   /* Fluent 2 buttons, standard, accent and subtle (FluentButton.qml). */
   button {
@@ -309,6 +386,10 @@
   .theme button.subtle::after {
     display: none;
   }
+  button.subtle.text {
+    width: auto;
+    padding: 0 12px;
+  }
   .chevron {
     font-size: 12px;
   }
@@ -324,7 +405,7 @@
 </head>
 <body>
 <h1>Lista nella tray</h1>
-<p class="lead">Un clic sull'icona di Jiffin nella tray apre la lista: cosa impedisce a Jiffin di funzionare del tutto, gli avvisi spariti senza risposta e i promemoria attivi. Qui con il modello fermo e un browser di cui non si legge l'indirizzo; l'ultimo promemoria sta chiedendo se eliminarlo.</p>
+<p class="lead">Un clic sull'icona di Jiffin nella tray apre la lista: cosa impedisce a Jiffin di funzionare del tutto, gli avvisi spariti senza risposta, i promemoria attivi e la pausa di ritorno. Qui con il modello fermo e un browser di cui non si legge l'indirizzo; il menu Rimanda è aperto sull'avviso non visto, e l'ultimo promemoria sta chiedendo se eliminarlo.</p>
 
 <div class="themes">
   <section class="theme light" aria-label="Tema chiaro">
@@ -344,20 +425,26 @@
           <p class="section">Non visti</p>
           <div class="card">
             <div class="card-text"><span class="fresh"></span><div><p>Aggiornare il changelog prima del rilascio</p><p class="caption">Quando lavoro al progetto Rossi, alle 09:12</p></div></div>
-            <div class="card-buttons"><button class="accent">Fatto</button><button>Rimanda <span class="glyph chevron">&#xE70D;</span></button></div>
+            <div class="card-buttons"><button class="accent">Fatto</button><span class="anchor"><button>Rimanda <span class="glyph chevron">&#xE70D;</span></button><span class="menu" role="menu" aria-label="Rimanda"><span>Alla prossima volta</span><span>Tra 15 minuti</span><span>Tra un'ora</span><span>Domani</span><span class="line"></span><span>Non qui</span></span></span></div>
           </div>
         </div>
         <div>
           <p class="section">Attivi</p>
           <div class="row">
-            <button class="subtle done" aria-label="Completa"><span class="glyph">&#xEA3A;</span></button>
-            <div class="row-text"><p>Esportare le icone</p><p class="caption">Quando apro Figma</p><p class="caption">Rimandato: torna tra 12 min</p></div>
+            <span class="glyph repeat" aria-label="Ogni volta">&#xE8EE;</span>
+            <div class="row-text"><p>Bere un bicchiere d'acqua</p><p class="caption">Quando apro Claude</p><p class="caption when"><span class="glyph">&#xE121;</span><span>Ogni giorno dalle 23:00 alle 04:00</span></p></div>
             <button class="subtle" aria-label="Modifica"><span class="glyph">&#xE70F;</span></button>
             <button class="subtle" aria-label="Elimina"><span class="glyph">&#xE74D;</span></button>
           </div>
           <div class="row">
             <button class="subtle done" aria-label="Completa"><span class="glyph">&#xEA3A;</span></button>
-            <div class="row-text"><p>Rispondere a Giulia</p><p class="caption">Quando apro la posta</p><p class="caption">Taciuto in 2 posti</p></div>
+            <div class="row-text"><p>Chiamare Giulia per il preventivo</p><p class="caption when"><span class="glyph">&#xE121;</span><span>Oggi, giovedì 1 ottobre, alle 15:00</span></p><p class="caption">Rimandato: torna tra 12 min</p></div>
+            <button class="subtle" aria-label="Modifica"><span class="glyph">&#xE70F;</span></button>
+            <button class="subtle" aria-label="Elimina"><span class="glyph">&#xE74D;</span></button>
+          </div>
+          <div class="row">
+            <button class="subtle done" aria-label="Completa"><span class="glyph">&#xEA3A;</span></button>
+            <div class="row-text"><p>Scrivere il resoconto</p><p class="caption">Quando apro Teams</p><p class="caption when"><span class="glyph">&#xE121;</span><span>Da lunedì 28 a mercoledì 30 settembre</span></p><p class="caption">Periodo finito il 30 settembre</p></div>
             <button class="subtle" aria-label="Modifica"><span class="glyph">&#xE70F;</span></button>
             <button class="subtle" aria-label="Elimina"><span class="glyph">&#xE74D;</span></button>
           </div>
@@ -366,6 +453,8 @@
             <div class="row-text"><p>Pagare la bolletta della luce</p><p class="caption">Eliminare il promemoria per sempre?</p><div class="card-buttons"><button>Annulla</button><button class="accent">Elimina</button></div></div>
           </div>
         </div>
+        <div class="divider"></div>
+        <div class="pause"><p class="caption">Gli avvisi tornano se riprendi una cosa dopo almeno 2 min.</p><button class="subtle text">Cambia</button></div>
       </div>
       <div class="taskbar"><span class="glyph">&#xE70E;</span><span class="glyph tray-icon">&#xE8A5;</span><span>09:41</span></div>
     </div>
@@ -388,20 +477,26 @@
           <p class="section">Non visti</p>
           <div class="card">
             <div class="card-text"><span class="fresh"></span><div><p>Aggiornare il changelog prima del rilascio</p><p class="caption">Quando lavoro al progetto Rossi, alle 09:12</p></div></div>
-            <div class="card-buttons"><button class="accent">Fatto</button><button>Rimanda <span class="glyph chevron">&#xE70D;</span></button></div>
+            <div class="card-buttons"><button class="accent">Fatto</button><span class="anchor"><button>Rimanda <span class="glyph chevron">&#xE70D;</span></button><span class="menu" role="menu" aria-label="Rimanda"><span>Alla prossima volta</span><span>Tra 15 minuti</span><span>Tra un'ora</span><span>Domani</span><span class="line"></span><span>Non qui</span></span></span></div>
           </div>
         </div>
         <div>
           <p class="section">Attivi</p>
           <div class="row">
-            <button class="subtle done" aria-label="Completa"><span class="glyph">&#xEA3A;</span></button>
-            <div class="row-text"><p>Esportare le icone</p><p class="caption">Quando apro Figma</p><p class="caption">Rimandato: torna tra 12 min</p></div>
+            <span class="glyph repeat" aria-label="Ogni volta">&#xE8EE;</span>
+            <div class="row-text"><p>Bere un bicchiere d'acqua</p><p class="caption">Quando apro Claude</p><p class="caption when"><span class="glyph">&#xE121;</span><span>Ogni giorno dalle 23:00 alle 04:00</span></p></div>
             <button class="subtle" aria-label="Modifica"><span class="glyph">&#xE70F;</span></button>
             <button class="subtle" aria-label="Elimina"><span class="glyph">&#xE74D;</span></button>
           </div>
           <div class="row">
             <button class="subtle done" aria-label="Completa"><span class="glyph">&#xEA3A;</span></button>
-            <div class="row-text"><p>Rispondere a Giulia</p><p class="caption">Quando apro la posta</p><p class="caption">Taciuto in 2 posti</p></div>
+            <div class="row-text"><p>Chiamare Giulia per il preventivo</p><p class="caption when"><span class="glyph">&#xE121;</span><span>Oggi, giovedì 1 ottobre, alle 15:00</span></p><p class="caption">Rimandato: torna tra 12 min</p></div>
+            <button class="subtle" aria-label="Modifica"><span class="glyph">&#xE70F;</span></button>
+            <button class="subtle" aria-label="Elimina"><span class="glyph">&#xE74D;</span></button>
+          </div>
+          <div class="row">
+            <button class="subtle done" aria-label="Completa"><span class="glyph">&#xEA3A;</span></button>
+            <div class="row-text"><p>Scrivere il resoconto</p><p class="caption">Quando apro Teams</p><p class="caption when"><span class="glyph">&#xE121;</span><span>Da lunedì 28 a mercoledì 30 settembre</span></p><p class="caption">Periodo finito il 30 settembre</p></div>
             <button class="subtle" aria-label="Modifica"><span class="glyph">&#xE70F;</span></button>
             <button class="subtle" aria-label="Elimina"><span class="glyph">&#xE74D;</span></button>
           </div>
@@ -410,6 +505,8 @@
             <div class="row-text"><p>Pagare la bolletta della luce</p><p class="caption">Eliminare il promemoria per sempre?</p><div class="card-buttons"><button>Annulla</button><button class="accent">Elimina</button></div></div>
           </div>
         </div>
+        <div class="divider"></div>
+        <div class="pause"><p class="caption">Gli avvisi tornano se riprendi una cosa dopo almeno 2 min.</p><button class="subtle text">Cambia</button></div>
       </div>
       <div class="taskbar"><span class="glyph">&#xE70E;</span><span class="glyph tray-icon">&#xE8A5;</span><span>09:41</span></div>
     </div>
@@ -420,8 +517,11 @@
   <li>La lista prende il focus. Esc, la X, un clic altrove o un altro clic sull'icona la chiudono; Tab passa da un pulsante all'altro, non dalla X, perché Esc fa lo stesso.</li>
   <li>Si trascina da ogni punto vuoto, non dai controlli; si riapre sempre sopra l'icona. Il mouse non la fa più scorrere trascinando: scorre con la rotella o con la barra.</li>
   <li>In cima, solo quando serve, una riga per ciò che impedisce a Jiffin di funzionare del tutto: il modello e i browser di cui non si legge l'indirizzo. Solo l'icona è colorata.</li>
-  <li>Gli avvisi spariti senza risposta stanno sopra i promemoria, i più recenti prima; Rimanda apre 15 min, 1 ora e Domani dentro la scheda. Il puntino dice che la lista mostra l'avviso per la prima volta.</li>
-  <li>Il cerchio a sinistra completa il promemoria, la matita lo apre nella finestra di modifica, il cestino chiede prima di eliminarlo, con Annulla prima di Elimina.</li>
+  <li>Gli avvisi spariti senza risposta stanno sopra i promemoria, i più recenti prima, uno per promemoria, con la condizione senza l'orario e quando sono apparsi; per un promemoria solo a orario, solo quando. Il puntino dice che la lista mostra l'avviso per la prima volta.</li>
+  <li>Rimanda apre il menu dell'avviso, con le stesse voci; Alla prossima volta c'è solo se il promemoria ha una prossima volta. Sta sotto il pulsante, o sopra quando sotto finisce l'area di lavoro. Un clic ovunque nella lista lo chiude e non fa altro; anche Esc, prima della lista. Con la tastiera: le frecce scorrono le voci, Spazio o Invio scelgono.</li>
+  <li>Il cerchio a sinistra completa il promemoria; un promemoria «Ogni volta» non si completa mai, e lì ha le frecce del suo avviso. La matita lo apre nella finestra di modifica, il cestino chiede prima di eliminarlo, con Annulla prima di Elimina.</li>
+  <li>Sotto l'azione, la condizione senza l'orario, poi l'orario capito accanto all'orologio, scritto per oggi; un promemoria solo a orario ha solo quella riga. «Periodo finito il …» quando il suo periodo è passato.</li>
+  <li>In fondo, dopo una riga sottile, la pausa di ritorno, in minuti quando è di minuti interi, e Cambia, che apre le impostazioni.</li>
   <li>La lista cresce verso l'alto fino all'area di lavoro, poi scorre. L'icona ha il puntino finché un avviso aspetta o non è stato visto, e «!» finché l'indirizzo di un browser non si legge.</li>
 </ul>
 </body>

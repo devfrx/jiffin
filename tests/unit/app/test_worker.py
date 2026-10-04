@@ -279,13 +279,13 @@ def test_the_return_pause_is_read_at_the_start_and_a_new_one_is_in_force_at_once
     make_scene: MakeScene,
 ) -> None:
     first = make_scene()
-    first.worker.start()
+    assert first.worker.start().return_pause == RETURN_PAUSE_MS // 1000
     assert first.return_pause() == RETURN_PAUSE_MS
     first.worker.keep_return_pause(30)
     assert first.return_pause() == 30_000
     first.worker.close()
     second = make_scene()
-    second.worker.start()
+    assert second.worker.start().return_pause == 30
     assert second.return_pause() == 30_000
 
 
@@ -301,7 +301,7 @@ def test_a_return_pause_out_of_the_range_or_of_another_shape_is_the_default(
     scene = make_scene()
     with closing(Store.open(scene.database)) as store:
         store.set_setting("return_pause", kept)
-    scene.worker.start()
+    assert scene.worker.start().return_pause == return_pause // 1000
     assert scene.return_pause() == return_pause
 
 

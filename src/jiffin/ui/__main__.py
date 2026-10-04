@@ -27,7 +27,7 @@ from jiffin.core.clock import SystemClock
 from jiffin.core.context import Context
 from jiffin.core.meanings import read
 from jiffin.core.records import Alert, Reminder, Revision, Snooze
-from jiffin.core.reminders import MINUTE_MS, ActiveReminder, RemindersView
+from jiffin.core.reminders import HOUR_MS, MINUTE_MS, ActiveReminder, RemindersView
 from jiffin.ui.first_run import FirstRun, ModelFile, ModelState
 from jiffin.ui.interface import Interface
 from jiffin.ui.look import Material
@@ -41,11 +41,16 @@ SAMPLES = (
 """Condition, action and "Ogni volta" of the alerts: without a time, perennial with one, and with
 only a time."""
 REMINDERS = (
-    ("quando lavoro al progetto Rossi", "aggiornare il changelog prima del rilascio", 12, 0),
-    ("quando apro la posta", "rispondere a Giulia sul preventivo", 0, 2),
-    ("quando prenoto un viaggio", "controllare la scadenza del passaporto", 0, 0),
+    ("quando lavoro al progetto Rossi", "aggiornare il changelog", False, 0, 12, 0),
+    ("quando apro la posta", "rispondere a Giulia sul preventivo", False, 0, 0, 2),
+    ("quando apro Claude dopo le 23", "bere un bicchiere d'acqua", True, 0, 0, 0),
+    ("domani alle 15", "chiamare Giulia per il preventivo", False, 0, 0, 0),
+    ("per tre giorni quando apro Teams", "scrivere il resoconto", False, 5, 0, 0),
+    ("quando prenoto un viaggio", "controllare la scadenza del passaporto", False, 0, 0, 0),
 )
-"""Condition, action, minutes until the snooze ends, and silences."""
+"""Condition, action, "Ogni volta", days since it was written, minutes until the snooze ends, and
+silences: without a time, perennial with one, with only a time, and with a period over."""
+DAY_MS = 24 * HOUR_MS
 NEXT_MS = 2000
 BROWSERS = ("vivaldi.exe", "chrome.exe", "brave.exe")
 _NAME = "spark-x2.5-4b-rizzo-flow-lora-q4_k_m.gguf"
@@ -127,12 +132,13 @@ class Preview:
         self._unseen: list[Alert] = []
         self._reminders: dict[int, ActiveReminder] = {}
         now = self._clock.now()
-        for condition, action, minutes, silences in reversed(REMINDERS):
+        for condition, action, perennial, days, minutes, silences in reversed(REMINDERS):
             reminder_id = next(self._ids)
+            written_at = now - days * DAY_MS
             reminder = Reminder(
                 reminder_id,
-                now,
-                Revision(reminder_id, reminder_id, 1, condition, action, condition),
+                written_at,
+                self._revision(reminder_id, condition, action, perennial, written_at),
                 snoozed_until=now + minutes * MINUTE_MS if minutes else None,
             )
             self._reminders[reminder_id] = ActiveReminder(reminder, silences)
@@ -223,10 +229,20 @@ class Preview:
         where = ", ".join(f"{name} {x},{y}" for name, (x, y) in places.items())
         print(f"posizioni {where}", flush=True)
 
-    def _revision(self, reminder_id: int, condition: str, action: str, perennial: bool) -> Revision:
-        """As `core` makes one: its time read now."""
-        now = self._clock.now()
-        reading = read(condition, self._clock.local(now))
+    def keep_return_pause(self, seconds: int) -> None:
+        print(f"pausa di ritorno {seconds} s", flush=True)
+
+    def _revision(
+        self,
+        reminder_id: int,
+        condition: str,
+        action: str,
+        perennial: bool,
+        written_at: int | None = None,
+    ) -> Revision:
+        """As `core` makes one: its time read when written, now unless said."""
+        written_at = self._clock.now() if written_at is None else written_at
+        reading = read(condition, self._clock.local(written_at))
         return Revision(
             reminder_id,
             reminder_id,
@@ -235,7 +251,7 @@ class Preview:
             action,
             reading.remainder,
             schedule=reading.schedule,
-            written_at=now,
+            written_at=written_at,
             perennial=perennial,
         )
 

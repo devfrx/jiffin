@@ -21,7 +21,7 @@ from jiffin.core.schedule import (
     Weekdays,
     YearDay,
 )
-from jiffin.ui.words import alert_line, passed, when
+from jiffin.ui.words import alert_line, appeared, dated, passed, when
 
 
 def at(day: int, hour: int, minute: int = 0) -> datetime:
@@ -422,3 +422,65 @@ def test_an_alert_with_only_a_time_names_the_day_it_rings_for(
     reading = read(condition, WRITTEN)
     assert reading.remainder == ""
     assert alert_line(reading.remainder, reading.schedule, day, FRIDAY) == line
+
+
+# The tray list
+
+
+@pytest.mark.parametrize(
+    ("shown_at", "line"),
+    [
+        (at(2, 9, 31), "Quando apro Claude, alle 09:31"),
+        (at(1, 23, 12), "Quando apro Claude, ieri alle 23:12"),
+        (
+            datetime.fromisoformat("2026-09-28T09:05"),
+            "Quando apro Claude, il 28 settembre alle 09:05",
+        ),
+        (
+            datetime.fromisoformat("2026-09-01T12:00"),
+            "Quando apro Claude, l'1 settembre alle 12:00",
+        ),
+        (
+            datetime.fromisoformat("2025-10-08T18:00"),
+            "Quando apro Claude, l'8 ottobre 2025 alle 18:00",
+        ),
+        # The clock went back: no day to name.
+        (at(3, 8), "Quando apro Claude, alle 08:00"),
+    ],
+)
+def test_an_unseen_alert_names_its_condition_without_the_time_and_when_it_appeared(
+    shown_at: datetime, line: str
+) -> None:
+    reading = read("quando apro Claude dopo le 23", WRITTEN)
+    assert appeared(reading.remainder, shown_at, FRIDAY) == line
+
+
+@pytest.mark.parametrize(
+    ("shown_at", "line"),
+    [
+        (at(2, 15), "Alle 15:00"),
+        (at(1, 15), "Ieri alle 15:00"),
+        (datetime.fromisoformat("2026-09-11T15:00"), "L'11 settembre alle 15:00"),
+    ],
+)
+def test_an_unseen_alert_with_only_a_time_names_only_when_it_appeared(
+    shown_at: datetime, line: str
+) -> None:
+    """#84: the time is in its line already, as the card's own time."""
+    assert appeared("", shown_at, FRIDAY) == line
+
+
+@pytest.mark.parametrize(
+    ("day", "words"),
+    [
+        (date(2026, 10, 20), "il 20 ottobre"),
+        (date(2026, 10, 1), "l'1 ottobre"),
+        (date(2026, 10, 8), "l'8 ottobre"),
+        (date(2026, 10, 11), "l'11 ottobre"),
+        (date(2027, 1, 2), "il 2 gennaio 2027"),
+    ],
+)
+def test_a_day_in_a_line_takes_its_article_and_its_year_only_when_not_this_one(
+    day: date, words: str
+) -> None:
+    assert dated(day, FRIDAY) == words

@@ -45,6 +45,11 @@ class Upkeep(Protocol):
         """The material the user chose, to set on `look.material` at the next start."""
         ...
 
+    def keep_return_pause(self, seconds: int) -> None:
+        """The return pause the user chose: in force at once, and set on
+        `preferences.return_pause` at the next start (ADR-0021)."""
+        ...
+
     def keep_places(self, places: Mapping[str, tuple[int, int]]) -> None:
         """Where the user left the windows, by name, to give `places.restore` at the next
         start."""
@@ -53,7 +58,8 @@ class Upkeep(Protocol):
 
 class Interface:
     """Make it on the interface thread, after the application and before any window, and set
-    the kept material on `look.material` and the kept places on `places` before anything shows.
+    the kept material on `look.material`, the kept places on `places` and the kept return pause
+    on `preferences.return_pause` before anything shows.
     The `show_` methods take, on this thread, what `core`, the context capture, the engine and the
     model file say."""
 
@@ -82,17 +88,23 @@ class Interface:
         self.first_run = FirstRun(
             self.engine, model, upkeep.fetch_model, self.glass, self.places, clock
         )
+        self.preferences = Preferences(
+            self.engine,
+            self.look,
+            upkeep.keep_material,
+            upkeep.keep_return_pause,
+            self.glass,
+            self.places,
+        )
         self.tray_list = TrayList(
             self.engine,
             core,
             self.creation,
             upkeep.restart_engine,
             self.first_run,
+            self.preferences,
             self.glass,
             clock,
-        )
-        self.preferences = Preferences(
-            self.engine, self.look, upkeep.keep_material, self.glass, self.places
         )
         self.tray = Tray(self.engine, self.look, self.tray_list.toggle, self.preferences.open)
         self.tray.install()

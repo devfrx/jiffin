@@ -64,7 +64,9 @@ stateDiagram-v2
   as its longest item and 32 px, 120 px at least: WinUI's MenuFlyout, with 4 px
   around the items, 2 px between them and items of 32 px. It covers the alerts
   below for a moment, and follows its alert when that moves up. One menu is
-  open at a time.
+  open at a time. `AlertMenu.qml` knows only its items: it says which one was
+  chosen, and the window that holds it places it and answers; the tray list's
+  unseen alerts open the same menu ([tray](tray.md)).
 - The menu closes on a second click on Rimanda, on a press outside it and its
   alert, or when the alert leaves. Its windows never take the focus, so they
   hear of no click elsewhere: while a menu is open, and only then, the overlay

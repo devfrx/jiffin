@@ -335,6 +335,9 @@ class Upkeep:
     def keep_places(self, places: Mapping[str, tuple[int, int]]) -> None:
         pass
 
+    def keep_return_pause(self, seconds: int) -> None:
+        pass
+
 
 class Screen:
     """The app's interface, made as the app makes it, with core's part played by the test."""

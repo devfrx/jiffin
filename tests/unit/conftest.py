@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QObject, QPoint, Qt
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QGuiApplication, QWindow
 from PySide6.QtQuick import QQuickItem, QQuickWindow
 from PySide6.QtTest import QTest
 
@@ -34,6 +34,26 @@ def collected(request: pytest.FixtureRequest) -> None:
     deleted". Collected before each test with Qt, they go now."""
     if "qapp" in request.fixturenames:
         gc.collect()
+
+
+@pytest.fixture
+def focus_stays(qapp: QGuiApplication) -> Iterator[None]:
+    """Windows never activates a window that takes no focus, as the menus and lists that open
+    over a window that keeps it; the offscreen platform activates every window it shows. The
+    window gives the focus back at once, as it never lost it on Windows."""
+    last: list[QWindow] = []
+
+    def changed(window: QWindow | None) -> None:
+        if window is None:
+            return
+        if not window.flags() & Qt.WindowType.WindowDoesNotAcceptFocus:
+            last[:] = [window]
+        elif last and last[0].isVisible():
+            last[0].requestActivate()
+
+    qapp.focusWindowChanged.connect(changed)
+    yield
+    qapp.focusWindowChanged.disconnect(changed)
 
 
 @pytest.fixture
