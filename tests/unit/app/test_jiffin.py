@@ -130,8 +130,10 @@ def desk(
     monkeypatch: pytest.MonkeyPatch,
     dwm: list[tuple[object, ...]],
 ) -> Iterator[Desk]:
-    # The offscreen platform has no tray, and the test leaves the machine's shortcut alone.
+    # The offscreen platform has no tray, and its windows no handle Windows knows; the test
+    # leaves the machine's shortcut alone.
     monkeypatch.setattr(Tray, "install", lambda tray: None)
+    monkeypatch.setattr(win32, "exclude_from_capture", lambda hwnd, exclude: 0)
     monkeypatch.setattr(win32, "register_hotkey", lambda hotkey_id, modifiers, key: 0)
     monkeypatch.setattr(win32, "unregister_hotkey", lambda hotkey_id: None)
     desk = Desk(qapp, tmp_path)
@@ -162,7 +164,7 @@ def test_a_reminder_alerts_in_its_context_and_its_answer_is_kept(qtbot: QtBot, d
     qtbot.waitUntil(lambda: desk.alert() is not None)
     slot = desk.alert()
     assert slot is not None
-    assert (slot.property("condition"), slot.property("action")) == (
+    assert (slot.property("line"), slot.property("action")) == (
         "Quando apro Figma",
         "Esportare le icone",
     )

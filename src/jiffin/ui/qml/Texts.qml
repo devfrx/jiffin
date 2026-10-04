@@ -5,17 +5,19 @@ import Jiffin
 
 // Every string of the interface, in Italian, in one place (#12).
 QtObject {
-    // The alert
+    // The alert, and Rimanda's menu (#83)
     readonly property string reminder: "Promemoria"
     readonly property string done: "Fatto"
     readonly property string snooze: "Rimanda"
-    readonly property string more: "Altre azioni"
+    readonly property string nextTime: "Alla prossima volta"
+    readonly property string inQuarterHour: "Tra 15 minuti"
+    readonly property string inHour: "Tra un'ora"
+    readonly property string tomorrow: "Domani"
+    readonly property string notHere: "Non qui"
+    // Rimanda in the tray list's unseen cards, until it becomes the alert's menu (#84)
     readonly property string back: "Indietro"
     readonly property string quarterHour: "15 min"
     readonly property string hour: "1 ora"
-    readonly property string tomorrow: "Domani"
-    readonly property string useful: "Utile"
-    readonly property string notHere: "Non qui"
 
     // The creation window
     readonly property string newReminder: "Nuovo promemoria"

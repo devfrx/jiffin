@@ -5,10 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jiffin — avviso nell'overlay</title>
 <!--
-  The alert of the overlay, as built in src/jiffin/ui/qml (ADR-0010, tickets #12, #25 and #42),
-  ported from the board "A — Parte di Windows: scelta" of the visual direction. Material B: the
-  glass with the veil of Windows' menus. Colours are those of Colors.qml; text and icons use
-  Windows 11's system fonts, Segoe UI Variable and Segoe Fluent Icons.
+  The alert of the overlay, as built in src/jiffin/ui/qml (ADR-0010, ADR-0023, ADR-0024, tickets
+  #12, #25, #42, #83 and #84), ported from the board "A — Parte di Windows: scelta" of the visual
+  direction. Material B: the glass with the veil of Windows' menus. Colours are those of
+  Colors.qml; text and icons use Windows 11's system fonts, Segoe UI Variable and Segoe Fluent
+  Icons.
 -->
 <style>
   :root {
@@ -29,6 +30,7 @@
     --control-fill: rgba(255, 255, 255, 0.702);
     --control-stroke: rgba(0, 0, 0, 0.059);
     --control-edge: rgba(0, 0, 0, 0.161);
+    --subtle-hover: rgba(0, 0, 0, 0.035);
     --accent: #005fb8;
     --accent-stroke: rgba(255, 255, 255, 0.078);
     --accent-edge: rgba(0, 0, 0, 0.4);
@@ -48,6 +50,7 @@
     --control-fill: rgba(255, 255, 255, 0.059);
     --control-stroke: rgba(255, 255, 255, 0.071);
     --control-edge: rgba(255, 255, 255, 0.094);
+    --subtle-hover: rgba(255, 255, 255, 0.059);
     --accent: #60cdff;
     --accent-stroke: rgba(255, 255, 255, 0.078);
     --accent-edge: rgba(0, 0, 0, 0.137);
@@ -108,7 +111,6 @@
 
   .alert {
     position: relative;
-    overflow: hidden;
     display: flex;
     align-items: center;
     gap: 12px;
@@ -118,6 +120,10 @@
     background: var(--veil);
     backdrop-filter: blur(30px) saturate(125%);
     box-shadow: var(--shadow);
+  }
+  /* The alert whose menu is open: the menu covers the alerts below, which do not move. */
+  .alert.open {
+    z-index: 1;
   }
   .badge {
     flex: none;
@@ -151,13 +157,15 @@
     font-weight: 600;
     color: var(--text-primary);
   }
-  /* As wide as the widest panel, so the words keep their width when a panel opens. */
   .buttons {
     flex: none;
-    min-width: 248px;
     display: flex;
-    justify-content: flex-end;
     gap: 8px;
+  }
+  /* Rimanda, which its menu hangs from. */
+  .anchor {
+    position: relative;
+    display: inline-flex;
   }
   .icon {
     font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets", sans-serif;
@@ -221,18 +229,50 @@
     padding: 0;
     justify-content: center;
   }
+  /* The X, 8 px after Rimanda (ADR-0023). */
+  .close {
+    margin-left: -4px;
+  }
+
+  /* Rimanda's menu (AlertMenu.qml): under the button, on its left edge, 4 px down. */
+  .menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 120px;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    border: 1px solid var(--stroke);
+    border-radius: 8px;
+    background: var(--veil);
+    box-shadow: var(--shadow);
+    font-size: 14px;
+    line-height: 32px;
+    color: var(--text-primary);
+    white-space: nowrap;
+  }
+  .item {
+    padding: 0 12px;
+    border-radius: 4px;
+  }
+  .item.hover {
+    background: var(--subtle-hover);
+  }
+  .line {
+    height: 1px;
+    margin: 2px -4px;
+    background: var(--stroke);
+  }
 
   .time {
     position: absolute;
     left: 0;
     bottom: 0;
     height: 2px;
+    border-bottom-left-radius: 8px;
     background: var(--accent);
-  }
-  .caption {
-    margin: 0 0 4px;
-    font-size: 12px;
-    color: #3d3d3d;
   }
   .notes {
     margin: 24px 0 0;
@@ -245,14 +285,14 @@
 </head>
 <body>
 <h1>Avviso nell'overlay</h1>
-<p class="lead">Fino a tre avvisi in alto al centro dello schermo, il più vecchio in cima. Ognuno mostra il «Quando…» dell'utente sopra cosa fare, e una barretta che segna i 10 secondi. Rimanda e «…» aprono i loro pannelli dentro l'avviso.</p>
+<p class="lead">Fino a tre avvisi in alto al centro dello schermo, il più vecchio in cima. Ognuno mostra il «Quando…» dell'utente, senza l'orario e con l'orario capito a parte, sopra cosa fare; poi Fatto, Rimanda e la X, e una barretta che segna i 10 secondi. Rimanda apre il suo menu sotto il bottone.</p>
 
 <div class="themes">
   <section class="theme light" aria-label="Tema chiaro">
     <h2>Chiaro</h2>
     <div class="desk">
       <div class="stack">
-        <div class="alert">
+        <div class="alert open">
           <span class="badge icon" aria-hidden="true">&#xE8A5;</span>
           <div class="words">
             <span class="condition">Quando lavoro al progetto Rossi</span>
@@ -260,36 +300,45 @@
           </div>
           <div class="buttons">
             <button class="accent">Fatto</button>
-            <button>Rimanda<span class="chevron" aria-hidden="true">&#xE70D;</span></button>
-            <button class="subtle square" aria-label="Altre azioni"><span class="icon" aria-hidden="true">&#xE712;</span></button>
+            <span class="anchor">
+              <button>Rimanda<span class="chevron" aria-hidden="true">&#xE70D;</span></button>
+              <span class="menu" role="menu">
+                <span class="item" role="menuitem">Alla prossima volta</span>
+                <span class="item hover" role="menuitem">Tra 15 minuti</span>
+                <span class="item" role="menuitem">Tra un'ora</span>
+                <span class="item" role="menuitem">Domani</span>
+                <span class="line" role="separator"></span>
+                <span class="item" role="menuitem">Non qui</span>
+              </span>
+            </span>
           </div>
+          <button class="subtle square close" aria-label="Chiudi"><span class="icon" aria-hidden="true">&#xE711;</span></button>
           <span class="time" style="width: 64%"></span>
         </div>
         <div class="alert">
-          <span class="badge icon" aria-hidden="true">&#xE8A5;</span>
+          <span class="badge icon" aria-hidden="true">&#xE8EE;</span>
           <div class="words">
-            <span class="condition">Quando apro il gestionale delle fatture</span>
-            <span class="action">Controllare la scadenza dell'F24</span>
+            <span class="condition">Quando apro Claude · dalle 23:00 alle 04:00</span>
+            <span class="action">Bere un bicchiere d'acqua</span>
           </div>
           <div class="buttons">
-            <button class="subtle square" aria-label="Indietro"><span class="icon" aria-hidden="true">&#xE72B;</span></button>
-            <button>15 min</button>
-            <button>1 ora</button>
-            <button>Domani</button>
+            <button class="accent">Fatto</button>
+            <button>Rimanda<span class="chevron" aria-hidden="true">&#xE70D;</span></button>
           </div>
+          <button class="subtle square close" aria-label="Chiudi"><span class="icon" aria-hidden="true">&#xE711;</span></button>
           <span class="time" style="width: 40%"></span>
         </div>
         <div class="alert">
           <span class="badge icon" aria-hidden="true">&#xE8A5;</span>
           <div class="words">
-            <span class="condition">Quando scrivo una mail a Giulia</span>
-            <span class="action">Allegare il preventivo firmato</span>
+            <span class="condition">Ieri alle 15:00</span>
+            <span class="action">Chiamare Giulia per il preventivo</span>
           </div>
           <div class="buttons">
-            <button class="subtle square" aria-label="Indietro"><span class="icon" aria-hidden="true">&#xE72B;</span></button>
-            <button>Utile</button>
-            <button>Non qui</button>
+            <button class="accent">Fatto</button>
+            <button>Rimanda<span class="chevron" aria-hidden="true">&#xE70D;</span></button>
           </div>
+          <button class="subtle square close" aria-label="Chiudi"><span class="icon" aria-hidden="true">&#xE711;</span></button>
           <span class="time" style="width: 88%"></span>
         </div>
       </div>
@@ -300,7 +349,7 @@
     <h2>Scuro</h2>
     <div class="desk">
       <div class="stack">
-        <div class="alert">
+        <div class="alert open">
           <span class="badge icon" aria-hidden="true">&#xE8A5;</span>
           <div class="words">
             <span class="condition">Quando lavoro al progetto Rossi</span>
@@ -308,36 +357,45 @@
           </div>
           <div class="buttons">
             <button class="accent">Fatto</button>
-            <button>Rimanda<span class="chevron" aria-hidden="true">&#xE70D;</span></button>
-            <button class="subtle square" aria-label="Altre azioni"><span class="icon" aria-hidden="true">&#xE712;</span></button>
+            <span class="anchor">
+              <button>Rimanda<span class="chevron" aria-hidden="true">&#xE70D;</span></button>
+              <span class="menu" role="menu">
+                <span class="item" role="menuitem">Alla prossima volta</span>
+                <span class="item hover" role="menuitem">Tra 15 minuti</span>
+                <span class="item" role="menuitem">Tra un'ora</span>
+                <span class="item" role="menuitem">Domani</span>
+                <span class="line" role="separator"></span>
+                <span class="item" role="menuitem">Non qui</span>
+              </span>
+            </span>
           </div>
+          <button class="subtle square close" aria-label="Chiudi"><span class="icon" aria-hidden="true">&#xE711;</span></button>
           <span class="time" style="width: 64%"></span>
         </div>
         <div class="alert">
-          <span class="badge icon" aria-hidden="true">&#xE8A5;</span>
+          <span class="badge icon" aria-hidden="true">&#xE8EE;</span>
           <div class="words">
-            <span class="condition">Quando apro il gestionale delle fatture</span>
-            <span class="action">Controllare la scadenza dell'F24</span>
+            <span class="condition">Quando apro Claude · dalle 23:00 alle 04:00</span>
+            <span class="action">Bere un bicchiere d'acqua</span>
           </div>
           <div class="buttons">
-            <button class="subtle square" aria-label="Indietro"><span class="icon" aria-hidden="true">&#xE72B;</span></button>
-            <button>15 min</button>
-            <button>1 ora</button>
-            <button>Domani</button>
+            <button class="accent">Fatto</button>
+            <button>Rimanda<span class="chevron" aria-hidden="true">&#xE70D;</span></button>
           </div>
+          <button class="subtle square close" aria-label="Chiudi"><span class="icon" aria-hidden="true">&#xE711;</span></button>
           <span class="time" style="width: 40%"></span>
         </div>
         <div class="alert">
           <span class="badge icon" aria-hidden="true">&#xE8A5;</span>
           <div class="words">
-            <span class="condition">Quando scrivo una mail a Giulia</span>
-            <span class="action">Allegare il preventivo firmato</span>
+            <span class="condition">Ieri alle 15:00</span>
+            <span class="action">Chiamare Giulia per il preventivo</span>
           </div>
           <div class="buttons">
-            <button class="subtle square" aria-label="Indietro"><span class="icon" aria-hidden="true">&#xE72B;</span></button>
-            <button>Utile</button>
-            <button>Non qui</button>
+            <button class="accent">Fatto</button>
+            <button>Rimanda<span class="chevron" aria-hidden="true">&#xE70D;</span></button>
           </div>
+          <button class="subtle square close" aria-label="Chiudi"><span class="icon" aria-hidden="true">&#xE711;</span></button>
           <span class="time" style="width: 88%"></span>
         </div>
       </div>
@@ -346,7 +404,10 @@
 </div>
 
 <ul class="notes">
-  <li>In alto: i pulsanti, con i 10 secondi che passano. Al centro: Rimanda aperto. In basso: «…» aperto, con Utile e Non qui. Con un pannello aperto, o il mouse sopra, il tempo si ferma.</li>
+  <li>In alto: Rimanda aperto. Il menu sta sotto il bottone, allineato a sinistra e 4 px più giù, e copre per un attimo l'avviso sotto, che non si sposta. Alla prossima volta c'è solo se il promemoria ha una prossima volta. Si chiude con un secondo clic su Rimanda, con un clic fuori, o quando l'avviso se ne va; mentre è aperto, o col mouse sopra, il tempo si ferma.</li>
+  <li>Al centro: un promemoria «Ogni volta», con le frecce in cerchio. Fatto vuol dire «fatto questa volta».</li>
+  <li>In basso: un promemoria solo a orario. La riga dice il giorno e l'ora capiti, rispetto a quando suona: qui suona in ritardo, il giorno dopo.</li>
+  <li>La X chiude senza risposta. Avvisi e menu non compaiono quando condividi lo schermo, nelle registrazioni e negli screenshot; sul tuo monitor sì.</li>
   <li>Entrata dall'alto in 250 ms, uscita in 167 ms; con le animazioni di Windows spente, solo dissolvenza. La barretta segna il tempo anche senza animazioni.</li>
   <li>Il vetro è quello del materiale B: Acrylic con il velo dei menu di Windows. Con la trasparenza spenta, o col risparmio energetico, la superficie è piena.</li>
 </ul>

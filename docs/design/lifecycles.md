@@ -79,9 +79,8 @@ stateDiagram-v2
 | 10 s without an answer | nothing | waits for its next unit; among the unseen |
 
 "Domani" ends at 08:00 of the next day, local time, or of the same day when
-snoozed before 04:00. Until the alert of version 0.2
-([#102](https://github.com/devfrx/jiffin/issues/102)) the interface still has
-Utile, which `app` sends as Alla prossima volta; `utile` stays in older rows.
+snoozed before 04:00. `utile`, the answer of version 0.1 that Alla prossima
+volta replaced, stays in older rows.
 
 ## Alert
 

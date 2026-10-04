@@ -34,10 +34,12 @@ from jiffin.ui.look import Material
 from jiffin.ui.tray_list import TrayList
 
 SAMPLES = (
-    ("quando lavoro al progetto Rossi", "aggiornare il changelog prima del rilascio"),
-    ("quando apro il gestionale delle fatture", "controllare la scadenza dell'F24"),
-    ("quando scrivo una mail a Giulia", "allegare il preventivo firmato"),
+    ("quando lavoro al progetto Rossi", "aggiornare il changelog prima del rilascio", False),
+    ("quando apro Claude dopo le 23", "bere un bicchiere d'acqua", True),
+    ("alle 15", "chiamare Giulia per il preventivo", False),
 )
+"""Condition, action and "Ogni volta" of the alerts: without a time, perennial with one, and with
+only a time."""
 REMINDERS = (
     ("quando lavoro al progetto Rossi", "aggiornare il changelog prima del rilascio", 12, 0),
     ("quando apro la posta", "rispondere a Giulia sul preventivo", 0, 2),
@@ -144,14 +146,14 @@ class Preview:
     def done(self, alert_id: int) -> None:
         self._answered(alert_id, "Fatto")
 
-    def useful(self, alert_id: int) -> None:
-        self._answered(alert_id, "Utile")
-
     def not_here(self, alert_id: int) -> None:
         self._answered(alert_id, "Non qui")
 
     def snooze(self, alert_id: int, snooze: Snooze) -> None:
         self._answered(alert_id, f"Rimanda, {snooze.name.lower()}")
+
+    def close(self, alert_id: int) -> None:
+        self._answered(alert_id, "chiuso con la X")
 
     def vanished(self, alert_id: int) -> None:
         print(f"avviso {alert_id}: sparito dopo 10 s", flush=True)
@@ -259,8 +261,8 @@ class Preview:
 
     def _alert(self) -> Alert:
         alert_id = next(self._ids)
-        condition, action = next(self._texts)
-        revision = Revision(alert_id, alert_id, 1, condition, action, condition)
+        condition, action, perennial = next(self._texts)
+        revision = self._revision(alert_id, condition, action, perennial)
         context = Context("code.exe", "changelog.md - rossi", None)
         now = self._clock.now()
         return Alert(alert_id, alert_id, revision, alert_id, context, 2.0, now, now, shown_at=now)

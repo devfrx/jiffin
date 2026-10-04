@@ -294,16 +294,14 @@ class QueuedCore:
     def done(self, alert_id: int) -> None:
         self._worker.command(lambda core: core.done(alert_id))
 
-    def useful(self, alert_id: int) -> None:
-        """Utile, until the alert of version 0.2 replaces it with its Rimanda menu (#102): its
-        meaning is now "Alla prossima volta" (ADR-0021)."""
-        self._worker.command(lambda core: core.snooze(alert_id, Snooze.NEXT_TIME))
-
     def not_here(self, alert_id: int) -> None:
         self._worker.command(lambda core: core.not_here(alert_id))
 
     def snooze(self, alert_id: int, snooze: Snooze) -> None:
         self._worker.command(lambda core: core.snooze(alert_id, snooze))
+
+    def close(self, alert_id: int) -> None:
+        self._worker.command(lambda core: core.close(alert_id))
 
     def vanished(self, alert_id: int) -> None:
         self._worker.command(lambda core: core.vanished(alert_id))

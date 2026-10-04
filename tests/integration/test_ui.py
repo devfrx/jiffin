@@ -36,10 +36,12 @@ TARGET = [sys.executable, str(Path(__file__).with_name("target_window.py"))]
 ROUNDS = 20
 ANSWERS: tuple[tuple[tuple[str, ...], tuple[object, ...]], ...] = (
     (("Fatto",), ("done",)),
-    (("Rimanda", "1 ora"), ("snooze", Snooze.HOUR)),
-    (("Altre azioni", "Utile"), ("useful",)),
+    (("Rimanda", "Tra un'ora"), ("snooze", Snooze.HOUR)),
+    (("Rimanda", "Alla prossima volta"), ("snooze", Snooze.NEXT_TIME)),
+    (("Chiudi",), ("close",)),
 )
-"""How the rounds answer, in turn: the buttons clicked, and the answer they give."""
+"""How the rounds answer, in turn: the buttons clicked, on the alert or on Rimanda's menu, and
+the answer they give."""
 ON_THE_TEXT = QPointF(100, 20)
 """A point of an alert over its text, away from the buttons."""
 VANISH_MS = 15_000
@@ -290,14 +292,14 @@ class Core:
     def done(self, alert_id: int) -> None:
         self.given.append(("done", alert_id))
 
-    def useful(self, alert_id: int) -> None:
-        self.given.append(("useful", alert_id))
-
     def not_here(self, alert_id: int) -> None:
         self.given.append(("not_here", alert_id))
 
     def snooze(self, alert_id: int, snooze: Snooze) -> None:
         self.given.append(("snooze", alert_id, snooze))
+
+    def close(self, alert_id: int) -> None:
+        self.given.append(("close", alert_id))
 
     def vanished(self, alert_id: int) -> None:
         self.given.append(("vanished", alert_id))
@@ -398,6 +400,13 @@ def button(window: QQuickWindow, name: str) -> QPointF:
     return found.mapToScene(QPointF(found.width() / 2, found.height() / 2))
 
 
+def holder(window: QQuickWindow) -> QQuickWindow:
+    """Where the next button is: Rimanda's menu while it is open, else the alert."""
+    menu = window.property("menu")
+    assert isinstance(menu, QQuickWindow)
+    return menu if menu.isVisible() else window
+
+
 def on_screen(window: QQuickWindow, point: QPointF) -> tuple[int, int]:
     """A point of the window, in physical pixels on the screen."""
     left, top, _, _ = rect(int(window.winId()))
@@ -452,10 +461,11 @@ def test_an_alert_never_takes_the_focus_from_where_the_user_types(
 
         names, (what, *rest) = ANSWERS[turn % len(ANSWERS)]
         for name in names:
-            x, y = on_screen(window, button(window, name))
+            target = holder(window)
+            x, y = on_screen(target, button(target, name))
             move_mouse(x, y)
             qtbot.wait(200)
-            click(int(window.winId()), x, y)
+            click(int(target.winId()), x, y)
             qtbot.wait(300)
             desk.check(f"{turn} clicked {name}")
         expected.append((what, turn, *rest))

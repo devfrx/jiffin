@@ -1,6 +1,7 @@
-// One alert: a strip at the top of the screen that never takes the focus (#12, ADR-0010).
-// The user's "Quando…" over what to do, Fatto, Rimanda and "…", and a bar for the 10 s.
-// Rimanda and "…" open panels in the strip itself: a menu window could take the focus.
+// One alert: a strip at the top of the screen that never takes the focus (#12, ADR-0010). The
+// user's "Quando…" and the time understood over what to do, then Fatto, Rimanda and the X (#83,
+// ADR-0023), and a bar for the 10 s. Rimanda opens its menu under the button: a window of its
+// own, which the alert places and the overlay shows.
 import QtQuick
 import QtQuick.Layouts
 import Jiffin
@@ -12,6 +13,12 @@ Window {
     // How long the alert waits for an answer (#12).
     property int duration: 10000
     property real progress: 1
+    // Rimanda's menu, for the overlay to show and hide: a QtObject, since PySide has no
+    // converter for the Window type of QML.
+    readonly property QtObject menu: snoozeMenu
+    // Where the menu opens in the window: under Rimanda, on its left edge and 4 px down, as
+    // Windows' menus do. Taken at each click, in the strip, without the slide of its entrance.
+    property point menuAt
 
     width: 540
     height: strip.implicitHeight
@@ -60,7 +67,7 @@ Window {
 
                 Text {
                     anchors.centerIn: parent
-                    text: "" // Document
+                    text: window.slot.perennial ? "" : "" // RepeatAll, Document
                     color: Colors.textSecondary
                     font.family: Typography.iconFont
                     font.pixelSize: Typography.icon
@@ -73,7 +80,7 @@ Window {
 
                 Text {
                     Layout.fillWidth: true
-                    text: window.slot.condition
+                    text: window.slot.line
                     color: Colors.textSecondary
                     font.family: Typography.captionFont
                     font.pixelSize: Typography.caption
@@ -97,83 +104,33 @@ Window {
                 }
             }
 
-            // As wide as the widest panel, so the text keeps its width when a panel opens.
-            Item {
-                Layout.preferredWidth: Math.max(buttons.implicitWidth, snooze.implicitWidth, more.implicitWidth)
-                Layout.preferredHeight: 32
+            Row {
+                spacing: 8
 
-                Row {
-                    id: buttons
-
-                    anchors.right: parent.right
-                    spacing: 8
-                    visible: window.slot.panel === AlertSlot.BUTTONS
-
-                    FluentButton {
-                        kind: FluentButton.Accent
-                        text: Texts.done
-                        onClicked: window.slot.done()
-                    }
-                    FluentButton {
-                        text: Texts.snooze
-                        chevron: true
-                        onClicked: window.slot.openSnooze()
-                    }
-                    FluentButton {
-                        kind: FluentButton.Subtle
-                        glyph: "" // More
-                        Accessible.name: Texts.more
-                        onClicked: window.slot.openMore()
-                    }
+                FluentButton {
+                    kind: FluentButton.Accent
+                    text: Texts.done
+                    onClicked: window.slot.done()
                 }
-                Row {
+                FluentButton {
                     id: snooze
 
-                    anchors.right: parent.right
-                    spacing: 8
-                    visible: window.slot.panel === AlertSlot.SNOOZE
-
-                    FluentButton {
-                        kind: FluentButton.Subtle
-                        glyph: "" // Back
-                        Accessible.name: Texts.back
-                        onClicked: window.slot.back()
-                    }
-                    FluentButton {
-                        text: Texts.quarterHour
-                        onClicked: window.slot.snoozeQuarterHour()
-                    }
-                    FluentButton {
-                        text: Texts.hour
-                        onClicked: window.slot.snoozeHour()
-                    }
-                    FluentButton {
-                        text: Texts.tomorrow
-                        onClicked: window.slot.snoozeTomorrow()
+                    text: Texts.snooze
+                    chevron: true
+                    onClicked: {
+                        window.menuAt = snooze.mapToItem(strip, 0, snooze.height + 4);
+                        window.slot.toggleMenu();
                     }
                 }
-                Row {
-                    id: more
+            }
 
-                    anchors.right: parent.right
-                    spacing: 8
-                    visible: window.slot.panel === AlertSlot.MORE
-
-                    FluentButton {
-                        kind: FluentButton.Subtle
-                        glyph: "" // Back
-                        Accessible.name: Texts.back
-                        onClicked: window.slot.back()
-                    }
-                    FluentButton {
-                        text: Texts.useful
-                        onClicked: window.slot.useful()
-                    }
-                    FluentButton {
-                        text: Texts.notHere
-                        onClicked: window.slot.notHere()
-                    }
-                }
+            // The X closes without an answer (ADR-0023), 8 px after Rimanda.
+            FluentButton {
+                Layout.leftMargin: -4
+                kind: FluentButton.Subtle
+                glyph: "" // Cancel
+                Accessible.name: Texts.close
+                onClicked: window.slot.close()
             }
         }
     }
@@ -266,5 +223,14 @@ Window {
             enter.stop();
             leave.restart();
         }
+    }
+
+    // It follows the alert when the alerts above leave and it moves up.
+    AlertMenu {
+        id: snoozeMenu
+
+        slot: window.slot
+        x: window.x + Math.round(window.menuAt.x)
+        y: window.y + Math.round(window.menuAt.y)
     }
 }

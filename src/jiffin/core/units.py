@@ -8,7 +8,7 @@ volta". Times are wall-clock times, as in `schedule`.
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 
 from jiffin.core.clock import Clock
 from jiffin.core.records import Revision
@@ -124,6 +124,22 @@ def next_occasion(revision: Revision, clock: Clock, now: int) -> bool:
         elif current is None or window.unit > current.unit:
             return True
     return False
+
+
+def instance_day(revision: Revision, clock: Clock, at: int) -> date | None:
+    """The Jiffin day of the instance of its time that a reminder rings for at `at`: what the
+    alert of a reminder with only a time names, "Ieri alle 15:00" when it rings late (#84). None
+    without a time, or when `at` is in no window."""
+    schedule, written_at = revision.schedule, revision.written_at
+    if schedule is None or written_at is None:
+        return None
+    moment = _wall(clock.local(at))
+    for window in windows(schedule, revision.perennial, clock.local(written_at)):
+        if window.start > moment:
+            return None
+        if window.end is None or moment < window.end:
+            return jiffin_day(window.start)
+    return None
 
 
 def ended(schedule: Schedule | None, at: datetime) -> bool:
