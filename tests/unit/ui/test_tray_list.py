@@ -184,6 +184,17 @@ def rounded(value: float) -> int:
     return math.floor(value + 0.5)
 
 
+def ringed(item: QQuickItem) -> bool:
+    """Whether the item shows WinUI's focus ring: its 2 px outer stroke."""
+    return any(
+        child.inherits("QQuickRectangle")
+        and child.isVisible()
+        and (context := qmlContext(child)) is not None
+        and QQmlProperty(child, "border.width", context).read() == 2
+        for child in items(item)
+    )
+
+
 class Screen:
     """The tray list on the offscreen screen, with what it asked of `core` and the creation
     window."""
@@ -517,6 +528,13 @@ def test_a_reminder_shows_its_condition_without_the_time_and_the_time_written_fo
     assert len(clocks) == 2
 
 
+def test_the_time_is_written_for_the_jiffin_day_which_ends_at_4(screen: Screen) -> None:
+    screen.list.show_reminders(RemindersView((active(1, "domani alle 15", "chiamare Giulia"),)))
+    screen.clock.advance(15 * HOUR_MS)  # 01:00 on Friday: still Thursday's night
+    screen.open()
+    assert "Domani, venerdì 2 ottobre, alle 15:00" in screen.lines()
+
+
 def test_a_perennial_reminder_has_the_arrows_of_its_alert_where_completa_was(
     screen: Screen,
 ) -> None:
@@ -812,8 +830,7 @@ def test_the_menu_by_keyboard(screen: Screen) -> None:
     screen.press(Qt.Key.Key_Return)
     assert screen.menu.isVisible()
     assert screen.menu.property("current") == 0
-    first = screen.menu_items()[0]
-    assert any(item.inherits("QQuickRectangle") and item.isVisible() for item in items(first))
+    assert [ringed(item) for item in screen.menu_items()] == [True, False, False, False, False]
     # Round from the first to the last, as in Windows' menus.
     screen.press(Qt.Key.Key_Up)
     assert screen.menu.property("current") == len(MENU) - 1
@@ -844,10 +861,20 @@ def test_opened_under_the_mouse_the_menu_waits_for_a_key_to_mark_an_item(screen:
     screen.open()
     screen.click("Rimanda", F24)
     assert screen.menu.property("current") == -1
+    assert not any(ringed(item) for item in screen.menu_items())
     screen.press(Qt.Key.Key_Down)
     assert screen.menu.property("current") == 0
     screen.press(Qt.Key.Key_Return)
     assert screen.commands.sent[-1] == ("snooze", 8, Snooze.NEXT_TIME)
+
+
+def test_enter_before_a_key_moves_is_a_click_on_rimanda(screen: Screen) -> None:
+    screen.list.show_alerts(AlertsView((), 0, (unseen(8, F24, at(1, 9, 31)),)))
+    screen.open()
+    screen.click("Rimanda", F24)
+    screen.press(Qt.Key.Key_Return)
+    assert not screen.menu.isVisible()
+    assert screen.commands.sent == [("seen",)]
 
 
 def test_the_menu_goes_with_its_alert_and_with_the_list(screen: Screen) -> None:
