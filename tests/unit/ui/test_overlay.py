@@ -97,6 +97,16 @@ class Capture:
         return self.error
 
 
+class Front:
+    """The windows the overlay put over all those always on top, in order."""
+
+    def __init__(self) -> None:
+        self.brought: list[int] = []
+
+    def bring(self, hwnd: int) -> None:
+        self.brought.append(hwnd)
+
+
 class Mouse:
     """The mouse buttons, as Windows says them; the test presses them."""
 
@@ -152,10 +162,11 @@ def slot(window: QWindow) -> AlertSlot:
 class Screen:
     """The overlay on the offscreen screen, with the answers given there."""
 
-    def __init__(self, qtbot: QtBot, capture: Capture, mouse: Mouse) -> None:
+    def __init__(self, qtbot: QtBot, capture: Capture, mouse: Mouse, front: Front) -> None:
         self._qtbot = qtbot
         self.capture = capture
         self.mouse = mouse
+        self.front = front
         self.windows = Windows()
         self.look = Look(self.windows.read)
         self.engine = QQmlEngine()
@@ -278,10 +289,17 @@ def mouse(monkeypatch: pytest.MonkeyPatch) -> Mouse:
 
 
 @pytest.fixture
+def front(monkeypatch: pytest.MonkeyPatch) -> Front:
+    front = Front()
+    monkeypatch.setattr(win32, "bring_to_front", front.bring)
+    return front
+
+
+@pytest.fixture
 def screen(
-    qtbot: QtBot, dwm: list[tuple[object, ...]], capture: Capture, mouse: Mouse
+    qtbot: QtBot, dwm: list[tuple[object, ...]], capture: Capture, mouse: Mouse, front: Front
 ) -> Iterator[Screen]:
-    screen = Screen(qtbot, capture, mouse)
+    screen = Screen(qtbot, capture, mouse, front)
     yield screen
     screen.show()  # every window leaves, and no countdown is left running
     qtbot.waitUntil(lambda: screen.on_screen() == [] and screen.menus_shown() == 0)
@@ -490,6 +508,22 @@ def test_the_mouse_is_read_only_while_a_menu_is_open(qtbot: QtBot, screen: Scree
     reads = screen.mouse.reads
     qtbot.wait(100)
     assert screen.mouse.reads == reads
+
+
+def test_alerts_and_menus_go_over_the_windows_always_on_top(screen: Screen) -> None:
+    screen.show(alert(1))
+    hwnd = int(screen.window(1).winId())
+    assert screen.front.brought == [hwnd]
+    screen.click(1, RIMANDA)
+    assert screen.front.brought == [hwnd, int(screen.menu(1).winId())]
+
+
+def test_an_open_menu_stays_over_a_new_alert(screen: Screen) -> None:
+    screen.show(alert(1), alert(2))
+    screen.click(1, RIMANDA)
+    screen.show(alert(1), alert(2), alert(3))
+    new, menu = int(screen.window(3).winId()), int(screen.menu(1).winId())
+    assert screen.front.brought[-2:] == [new, menu]
 
 
 def test_one_menu_is_open_at_a_time(screen: Screen) -> None:

@@ -134,6 +134,7 @@ def desk(
     # leaves the machine's shortcut alone.
     monkeypatch.setattr(Tray, "install", lambda tray: None)
     monkeypatch.setattr(win32, "exclude_from_capture", lambda hwnd, exclude: 0)
+    monkeypatch.setattr(win32, "bring_to_front", lambda hwnd: None)
     monkeypatch.setattr(win32, "register_hotkey", lambda hotkey_id, modifiers, key: 0)
     monkeypatch.setattr(win32, "unregister_hotkey", lambda hotkey_id: None)
     desk = Desk(qapp, tmp_path)

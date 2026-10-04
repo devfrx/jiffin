@@ -23,6 +23,10 @@ behaviour comes from decision tickets
 - The three windows are made at start, each with its menu, and stay hidden
   until needed: each has its native handle, and its glass, before it first
   shows.
+- A window shown without activation keeps the place it had among the windows
+  always on top: a menu went under the alert below, shown later. So each
+  window, as it shows, goes over them all, and an open menu goes back over a
+  new alert.
 - An alert answered here, or vanished, never shows again, even when a view of
   `core` from before the answer arrives later. A new alert waits until a window
   has finished leaving.

@@ -153,6 +153,12 @@ class Overlay(QObject):
         self._capture(window, exclude=True)
         window.show()
         self._glass.shown(int(window.winId()))
+        # Shown without activation, a window keeps its old place among those always on top,
+        # maybe under an alert shown later: it goes over them all, and an open menu over it.
+        win32.bring_to_front(int(window.winId()))
+        for menu in self._menus.values():
+            if menu.isVisible() and menu is not window:
+                win32.bring_to_front(int(menu.winId()))
 
     def _vanish(self, window: QQuickWindow) -> None:
         window.hide()

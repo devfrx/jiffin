@@ -36,6 +36,8 @@ _GWL_STYLE = -16
 _WS_CAPTION = 0x00C00000
 _SWP_NOSIZE, _SWP_NOMOVE, _SWP_NOZORDER, _SWP_NOACTIVATE = 0x0001, 0x0002, 0x0004, 0x0010
 _SWP_FRAMECHANGED = 0x0020
+_SWP_NOOWNERZORDER = 0x0200
+_HWND_TOPMOST = -1
 _DWMWA_USE_IMMERSIVE_DARK_MODE = 20
 _DWMWA_WINDOW_CORNER_PREFERENCE = 33
 _DWMWA_SYSTEMBACKDROP_TYPE = 38
@@ -256,6 +258,14 @@ def register_hotkey(hotkey_id: int, modifiers: int, key: int) -> int:
 
 def unregister_hotkey(hotkey_id: int) -> None:
     _user32.UnregisterHotKey(None, hotkey_id)
+
+
+def bring_to_front(hwnd: int) -> None:
+    """Put a window always on top above all the others always on top, without activating it.
+    Shown without activation, a window keeps the place it had among them, which may be under a
+    window shown later."""
+    flags = _SWP_NOMOVE | _SWP_NOSIZE | _SWP_NOACTIVATE | _SWP_NOOWNERZORDER
+    _user32.SetWindowPos(hwnd, _HWND_TOPMOST, 0, 0, 0, 0, flags)
 
 
 def exclude_from_capture(hwnd: int, exclude: bool) -> int:
