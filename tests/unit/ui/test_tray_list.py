@@ -628,6 +628,18 @@ def test_the_return_pause_shows_at_the_bottom_and_cambia_opens_the_settings(
     assert screen.window_titled("Impostazioni").isVisible()
 
 
+def test_cambia_closes_the_list_itself_and_the_icon_opens_it_again_at_once(
+    qtbot: QtBot, screen: Screen
+) -> None:
+    """Not closed by the settings taking the focus, which would hold the icon's next click for
+    REOPEN_MS."""
+    screen.open()
+    screen.click("Cambia")
+    qtbot.waitUntil(screen.window_titled("Impostazioni").isActive)
+    screen.list.toggle()
+    assert screen.window.isVisible()
+
+
 def test_unseen_alerts_sit_on_top_with_fatto_and_rimanda(screen: Screen) -> None:
     alert = unseen(8, "controllare la scadenza dell'F24", at(1, 9, 31))
     screen.list.show_alerts(AlertsView((), 0, (alert,)))

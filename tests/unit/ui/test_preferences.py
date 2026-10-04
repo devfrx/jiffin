@@ -421,6 +421,27 @@ def test_the_arrows_step_the_pause_and_stop_at_the_ends_of_its_range(screen: Scr
     assert (up.isEnabled(), down.isEnabled()) == (True, False)
 
 
+def test_any_number_for_the_pause_comes_back_within_the_range_of_its_unit(
+    screen: Screen,
+) -> None:
+    """Whatever number reaches the settings, not only through the box."""
+    screen.preferences.setPause(500)
+    screen.preferences.setPause(0)
+    assert screen.paused == [7200, 60]
+    screen.preferences.setMinutes(False)
+    screen.preferences.setPause(3)
+    screen.preferences.setPause(9000)
+    assert screen.paused == [7200, 60, 10, 7200]
+
+
+def test_a_pause_that_does_not_change_is_not_kept_again(screen: Screen) -> None:
+    screen.open()
+    screen.preferences.setMinutes(False)
+    screen.preferences.setMinutes(True)
+    screen.preferences.setPause(2)
+    assert (screen.pause(), screen.paused) == (("2", "minuti"), [])
+
+
 def test_another_unit_converts_the_pause_to_the_nearest_minute(screen: Screen) -> None:
     screen.preferences.return_pause = 90
     screen.open()

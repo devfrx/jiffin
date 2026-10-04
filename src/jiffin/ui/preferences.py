@@ -129,17 +129,19 @@ class Preferences(QObject):  # type: ignore[operator]  # QmlUncreatable's stub h
 
     @Property(int, notify=changed)
     def pauseFrom(self) -> int:
-        return SHORTEST_MINUTES if self._minutes else SHORTEST_PAUSE
+        return self._range()[0]
 
     @Property(int, notify=changed)
     def pauseTo(self) -> int:
-        return LONGEST_PAUSE // MINUTE if self._minutes else LONGEST_PAUSE
+        return self._range()[1]
 
     @Slot(int)
     def setPause(self, value: int) -> None:
-        """A number for the pause, in its unit, brought back within the range."""
-        seconds = value * MINUTE if self._minutes else value
-        self._set_pause(max(SHORTEST_PAUSE, min(LONGEST_PAUSE, seconds)))
+        """A number for the pause, in its unit, brought back within that unit's range: in
+        minutes, never under one minute."""
+        lowest, highest = self._range()
+        value = max(lowest, min(highest, value))
+        self._set_pause(value * MINUTE if self._minutes else value)
         # Also unchanged: the number box shows the pause again, in range.
         self.changed.emit()
 
@@ -201,6 +203,12 @@ class Preferences(QObject):  # type: ignore[operator]  # QmlUncreatable's stub h
     def close(self) -> None:
         self.closeUnits()
         self._window.hide()
+
+    def _range(self) -> tuple[int, int]:
+        """The pause's range in its unit."""
+        if self._minutes:
+            return SHORTEST_MINUTES, LONGEST_PAUSE // MINUTE
+        return SHORTEST_PAUSE, LONGEST_PAUSE
 
     def _set_pause(self, seconds: int) -> None:
         if seconds != self._return_pause:
