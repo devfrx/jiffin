@@ -7,7 +7,8 @@ from collections.abc import Sequence
 from datetime import date, datetime
 from pathlib import Path
 
-from jiffin.core.clock import SystemClock
+from jiffin.core.clock import Clock, SystemClock
+from jiffin.core.meanings import read
 from jiffin.core.model import ModelError
 from jiffin.core.records import Revision
 from jiffin.harness import (
@@ -238,7 +239,7 @@ def _forget(options: argparse.Namespace) -> None:
 def _statements(options: argparse.Namespace) -> None:
     data = folders.data_folder(options.data)
     copy = options.copy or snapshot.latest(data)
-    log.info("the page is %s", statements.page(snapshot.read(copy), copy, data))
+    log.info("the page is %s", statements.page(snapshot.read(copy), copy, data, SystemClock()))
 
 
 def _label(options: argparse.Namespace) -> None:
@@ -253,11 +254,12 @@ def _label(options: argparse.Namespace) -> None:
         page.serve(server, open_browser=not options.no_browser)
         return
     copy = options.copy or snapshot.latest(data)
-    day = days.select(snapshot.read(copy), options.day, SystemClock())
+    clock = SystemClock()
+    day = days.select(snapshot.read(copy), options.day, clock)
     path = labels.path_for(data, day.day)
     pairs = days.pairs(day)
     if options.reminders:
-        pairs |= _invented_pairs(day, max(options.reminders))
+        pairs |= _invented_pairs(day, max(options.reminders), clock)
     labelled = labels.prepare(pairs, path, day.day)
     log.info(
         "%d pairs in %s: Claude labelled %d, the owner %d",
@@ -279,7 +281,7 @@ def _report(options: argparse.Namespace) -> None:
     final = {} if labelled is None else labelled.final()
     monitor_path = options.monitor or data / f"monitor-{day.day.isoformat()}.csv"
     used = report.machine(monitor_path) if options.monitor or monitor_path.exists() else None
-    print(report.markdown(days.summarize(day, final), labelled, used))
+    print(report.markdown(days.summarize(day, final, clock), labelled, used))
     source = f"Dalla copia {copy.name}"
     path = data / f"report-{day.day.isoformat()}.html"
     log.info("the page is %s", report.page(day, final, clock, source, path))
@@ -304,12 +306,12 @@ def _replay(options: argparse.Namespace) -> None:
             if options.engine:
                 again = replay.Replay(whole, day, model, rewrite=True)
                 rows.append(("this engine", "engine", again.run()))
-            real = days.summarize(day, {}).reminders
+            real = days.summarize(day, {}, clock).reminders
             for level in options.reminders or []:
                 extra = fixtures.reminders(_extra(level, real))
                 again = replay.Replay(whole, day, model, rewrite=True, extra=extra)
                 rows.append((f"{level} reminders", f"reminders-{level}", again.run()))
-    print(report.replays([(name, replayed) for name, _, replayed in rows], final))
+    print(report.replays([(name, replayed) for name, _, replayed in rows], final, clock))
     if not final:
         log.info("no labels for %s yet: run label", day.day)
     for name, slug, replayed in rows[1:]:
@@ -337,13 +339,16 @@ def _convert(options: argparse.Namespace) -> None:
     )
 
 
-def _invented_pairs(day: days.Day, level: int) -> dict[str, days.Pair]:
-    """The pairs the invented reminders that reach `level` would have in the day's contexts."""
-    real = days.summarize(day, {}).reminders
+def _invented_pairs(day: days.Day, level: int, clock: Clock) -> dict[str, days.Pair]:
+    """The pairs the invented reminders that reach `level` would have in the day's contexts,
+    with the remainder `core` reads from each condition."""
+    real = days.summarize(day, {}, clock).reminders
     contexts = dict.fromkeys(e.context for e in day.evaluations if not e.failed)
+    start = clock.local(day.evaluations[0].context_since)
     pairs = {}
     for number, (condition, action) in enumerate(fixtures.reminders(_extra(level, real)), 1):
-        revision = Revision(-number, -number, 1, condition, action, condition)
+        remainder = read(condition, start).remainder
+        revision = Revision(-number, -number, 1, condition, action, remainder)
         for context in contexts:
             pair = days.Pair(context, revision)
             pairs[pair.key] = pair

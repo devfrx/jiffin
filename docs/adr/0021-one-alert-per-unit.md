@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-03
 - **Deciders:** devfrx
-- **Sources:** the [0.2 decision map](https://github.com/devfrx/jiffin/issues/75): tickets [#76](https://github.com/devfrx/jiffin/issues/76) (occasion and return pause), [#78](https://github.com/devfrx/jiffin/issues/78) (perennial reminders), [#83](https://github.com/devfrx/jiffin/issues/83) (the alert and Rimanda), [#84](https://github.com/devfrx/jiffin/issues/84) (tray list and settings), [#81](https://github.com/devfrx/jiffin/issues/81), [#82](https://github.com/devfrx/jiffin/issues/82), [#89](https://github.com/devfrx/jiffin/issues/89), [#91](https://github.com/devfrx/jiffin/issues/91) and [#92](https://github.com/devfrx/jiffin/issues/92) (time), [#86](https://github.com/devfrx/jiffin/issues/86) (alerts measured), [#88](https://github.com/devfrx/jiffin/issues/88) (core design); amends [ADR-0014](0014-feedback-data-retention.md)
+- **Sources:** the [0.2 decision map](https://github.com/devfrx/jiffin/issues/75): tickets [#76](https://github.com/devfrx/jiffin/issues/76) (occasion and return pause), [#78](https://github.com/devfrx/jiffin/issues/78) (perennial reminders), [#83](https://github.com/devfrx/jiffin/issues/83) (the alert and Rimanda), [#84](https://github.com/devfrx/jiffin/issues/84) (tray list and settings), [#81](https://github.com/devfrx/jiffin/issues/81), [#82](https://github.com/devfrx/jiffin/issues/82), [#89](https://github.com/devfrx/jiffin/issues/89), [#91](https://github.com/devfrx/jiffin/issues/91) and [#92](https://github.com/devfrx/jiffin/issues/92) (time), [#86](https://github.com/devfrx/jiffin/issues/86) (alerts measured), [#88](https://github.com/devfrx/jiffin/issues/88) (core design); amends [ADR-0014](0014-feedback-data-retention.md) and [ADR-0017](0017-evaluation-harness-subpackage.md)
 
 ## Context
 
@@ -280,6 +280,16 @@ with only a time have no cache entries.
   at the right time, the lock at once and the sleep 0.1 s after the display
   went off, also when the lid closed, and the capture now takes both
   ([context capture](../design/context.md)).
+- Built in the harness ([#104](https://github.com/devfrx/jiffin/issues/104)):
+  the statements page writes the time understood as the creation window does,
+  with `ui/words.py`
+  ([ADR-0020](0020-read-the-time-in-core.md)), which is pure Python, without
+  Qt: the one import of `ui` in the harness, allowed by name in its
+  import-linter contract. A label is on the remainder, so a pair counts as
+  relevant only where its reminder's time held. The captured day of
+  2026-09-28, converted through this `core` with the default pause, gives the
+  103 alerts of [#86](https://github.com/devfrx/jiffin/issues/86), the same
+  ones.
 - When this is built, `docs/design/` follows in the same changes:
   `lifecycles.md` (these states and answers), `pipeline.md` (outcomes and time
   deadlines), `data-model.md` (migration 0002), `architecture.md` (the capture

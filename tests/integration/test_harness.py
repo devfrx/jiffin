@@ -15,7 +15,7 @@ from jiffin.core.clock import SystemClock
 from jiffin.core.context import Context
 from jiffin.core.model import EngineBuild
 from jiffin.harness import __main__ as harness
-from jiffin.harness import capture, folders, metrics, replay, sample, snapshot
+from jiffin.harness import capture, engine, folders, metrics, replay, sample, snapshot
 from jiffin.harness import day as days
 
 pytestmark = pytest.mark.integration
@@ -93,3 +93,22 @@ def test_the_day_of_2026_09_28_replays_to_its_evaluations(tmp_path: Path) -> Non
     assert day.day.isoformat() == "2026-09-28"
     assert (len(replayed.evaluations), len(contexts)) == (234, 69)
     assert (len(day.evaluations), len({e.context for e in day.evaluations})) == (234, 69)
+
+
+def test_the_day_of_2026_09_28_rings_once_per_occasion(tmp_path: Path) -> None:
+    """The ticket's check (#104): the captured day, judged by the engine under the occasions of
+    0.2 with the default pause, gives the 103 alerts on 43 pairs that #86 simulated, and a replay
+    at its own threshold gives them back."""
+    if not (CAPTURE.is_file() and folders.SAMPLE.is_file() and MODEL.is_dir()):
+        pytest.skip(f"the capture, the sample or the model is not in {folders.NO_GIT}")
+    copy = tmp_path / "log-20260928-capture.db"
+    with engine.running(MODEL) as model:
+        capture.convert(capture.read(CAPTURE), sample.reminders(folders.SAMPLE), model, copy)
+    log = snapshot.read(copy)
+    clock = SystemClock()
+    day = days.select(log, None, clock)
+    recorded = days.summarize(day, {}, clock)
+    replayed = days.summarize(replay.Replay(log, day).run(), {}, clock)
+    print(f"\n{recorded.shown} alerts on {recorded.alerted} pairs")
+    assert (recorded.shown, recorded.alerted, recorded.pauses) == (103, 43, (120_000,))
+    assert (replayed.shown, replayed.alerted) == (103, 43)

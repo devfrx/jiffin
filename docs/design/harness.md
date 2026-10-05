@@ -1,6 +1,7 @@
 # Evaluation harness
 
 How the app is measured against the thresholds of
+[ADR-0022](../adr/0022-acceptance-thresholds-v0-2.md), which amends
 [ADR-0003](../adr/0003-acceptance-thresholds.md), on the acceptance day and
 whenever the engine changes ([ADR-0017](../adr/0017-evaluation-harness-subpackage.md)).
 The code is `jiffin.harness`, run from a checkout with
@@ -84,21 +85,30 @@ flowchart LR
 - **`forget`** deletes the copies. A copy keeps what the user deletes in the
   app afterwards, so it goes once the analysis is done; labels and pages stay
   in the data folder.
-- **`statements`** writes a page with every reminder's condition beside the
-  English statement the engine judges, to check on the acceptance day that
-  they say the same thing
-  ([ADR-0008](../adr/0008-rewrite-conditions-english-statements.md)).
+- **`statements`** writes a page with every reminder's condition, the time
+  understood, the remainder and the English statement the engine judges, to
+  check on the acceptance day that each time is read right and that each
+  statement says what its remainder says
+  ([ADR-0008](../adr/0008-rewrite-conditions-english-statements.md),
+  [ADR-0021](../adr/0021-one-alert-per-unit.md)). The time is written as the
+  creation window writes it, by `ui/words.py`
+  ([ADR-0020](../adr/0020-read-the-time-in-core.md)): pure Python, without Qt,
+  the one module of `ui` the harness imports. A time not understood shows its
+  words: that reminder rings at any time.
 - **A day** is a local day: the last one with evaluations unless `--day` says
   otherwise.
 
 ### `label`
 
 - **The pairs** are every (evaluated context, reminder) the engine judged that
-  day, into `labels-<day>.json`. A label says whether the reminder's condition
-  is true in that context, not whether the reminder would have helped. A pair
-  is keyed by its texts (app, title, address, condition), so labels outlive a
-  new copy, a replay or another threshold, and preparing the file again keeps
-  them.
+  day, into `labels-<day>.json`. A label says whether the reminder's
+  remainder, its condition without the time, is true in that context, not
+  whether the reminder would have helped: the code checks the time
+  ([ADR-0021](../adr/0021-one-alert-per-unit.md)). A pair is keyed by its
+  texts (app, title, address, remainder), so labels outlive a new copy, a
+  replay or another threshold, and preparing the file again keeps them. In a
+  log of 0.1 the remainder is the whole condition. Reminders with only a time
+  are never judged, so they have no pairs.
 - **Claude** labels every pair, with the file in front of it, as on 2026-09-28:
   true or false under `claude`, and the keys it is unsure of under
   `uncertain`.
@@ -112,14 +122,18 @@ flowchart LR
 ### `report`
 
 The summary, numbers only, compares the day with the thresholds of
-[ADR-0003](../adr/0003-acceptance-thresholds.md); a page in the data folder,
-`report-<day>.html`, holds the texts behind the numbers.
+[ADR-0022](../adr/0022-acceptance-thresholds-v0-2.md), and says the return
+pause the day was judged with, which the acceptance day keeps at its default;
+a page in the data folder, `report-<day>.html`, holds the texts behind the
+numbers.
 
 | Measure | From |
 |---|---|
-| Delay, p50 and p95 | each alert on screen: when it appeared, minus when it became due (in 0.1, when its context came to the foreground) |
-| Missed reminders | relevant pairs never on screen that day, over all relevant pairs; each with why, from the candidate that came closest: waited for a place, same occasion, held back by the once-an-hour rule of 0.1, snoozed, silenced, out of time, below the threshold |
-| False alarms | alerts on screen whose pair is labelled not relevant |
+| Delay, p50 and p95 | each alert on screen, those of reminders with only a time too: when it appeared, minus when it became due (in 0.1, when its context came to the foreground) |
+| Missed reminders | relevant pairs never on screen that day and not kept quiet as already reminded, over all relevant pairs ([ADR-0025](../adr/0025-kept-quiet-not-missed.md)); a pair is relevant when labelled true and judged at least once while its reminder's time held. Each with why, from the candidate that came closest then: waited for a place and never shown, or below the threshold |
+| Kept quiet as already reminded | relevant pairs never on screen because their reminder had rung in the same unit (same occasion, or held back by the once-an-hour rule of 0.1) or the user had answered it (snoozed, silenced): counted apart by why, not missed |
+| False alarms | pairs on screen labelled not relevant, each once however often it rang, since "Non qui" silences it ([ADR-0022](../adr/0022-acceptance-thresholds-v0-2.md)) |
+| Alerts of reminders with only a time | counted apart: they are right when the time is read right, which the statements page shows |
 | Evaluations per hour | the evaluations, over the time from the first context evaluated to the last evaluation; of them, those that asked the engine and those that failed |
 | VRAM, RAM, CPU, battery | the day's `monitor` rows, when there are any: VRAM and the RAM of app and engine at their peak, their CPU on average |
 
@@ -164,6 +178,10 @@ sequenceDiagram
   says (from 0.2 on). In a log of 0.1, a context evaluated twice in a row was
   left in between, so a moment with no context separates the two. A context
   judged again while it stayed (a snooze or a time that ended) comes back once.
+- **The return pause**: `core` judges with the pause each evaluation recorded
+  (from 0.2 on). A pause counts only when a context is judged, so a change
+  from the settings is in force right after the last evaluation judged with
+  the one before. A log of 0.1 is replayed with the default.
 - **The scores**: without an engine, d comes from the log by context and
   statement, and an evaluation the log recorded as failed fails again. A pair
   the day never judged has no score, so its evaluation fails, as with the
@@ -171,13 +189,19 @@ sequenceDiagram
 - **The owner**: an alert the log also had, by reminder, context and time, gets
   the same answer after as long on screen; any other alert goes unanswered.
   Utile, in a log of 0.1, is replayed as Alla prossima volta. The kind of a
-  Rimanda is in the log from 0.2 on; in 0.1 it is the one of 15 minutes, an
-  hour or "domani" whose end falls between the reminder's last judgement as
-  snoozed and its first as free.
-- **The reminders**: those created before the day start as they were; the
-  others are created, edited and completed when the log says, an edit when it
-  was made (in 0.1, when the context of the new text's first evaluation came to
-  the foreground).
+  Rimanda is in the log from 0.2 on, also for one answered before the day,
+  which still holds, or once over lets the reminder ring again within its
+  unit; in 0.1 it is the one of 15 minutes, an hour or "domani" whose end
+  falls between the reminder's last judgement as snoozed and its first as
+  free.
+- **The reminders**: those created before the day start as they were then;
+  the others are created, edited and completed when the log says, an edit when
+  it was made, also one of a reminder with only a time (in 0.1, when the
+  context of the new text's first evaluation came to the foreground). A
+  reminder with only a time rings as in the app, in any stable context,
+  without being judged: the replay runs to the last evaluation, or to a later
+  alert of such a reminder. The times are read in this machine's time zone,
+  where the app wrote its log.
 - **Labels**: the day's labels serve every replay, since they are keyed by
   texts. The invented reminders need theirs: `label --reminders 80` adds their
   pairs with the day's contexts to the file for Claude.
@@ -190,11 +214,16 @@ may be private is no context, typing in the bar gives no address, an address
 counts only in the browsers), through `core` with the reminders of the sample,
 judged by the engine, with nobody answering.
 
-The captured day of 2026-09-28 gives 116 evaluations of 36 contexts, converted
-and replayed alike. Ticket [#11](https://github.com/devfrx/jiffin/issues/11)
-counted 37: the 37th was a Vivaldi window whose privacy the capture could not
-tell, which the app ignores since
-[#41](https://github.com/devfrx/jiffin/issues/41).
+The captured day of 2026-09-28 gave 116 evaluations of 36 contexts with the
+20 s debounce of [ADR-0007](../adr/0007-single-stage-pipeline.md) (ticket
+[#11](https://github.com/devfrx/jiffin/issues/11) counted 37: the 37th was a
+Vivaldi window whose privacy the capture could not tell, which the app ignores
+since [#41](https://github.com/devfrx/jiffin/issues/41)), and gives 234 of 69
+with the 5 s of [ADR-0019](../adr/0019-five-second-debounce.md), converted and
+replayed alike. Judged by the engine under the occasions of 0.2, with the
+default pause, it gives 103 alerts on 43 pairs, 10 of them false alarms with
+the labels of [#86](https://github.com/devfrx/jiffin/issues/86): the very
+alerts that #86 simulated, one by one ([#104](https://github.com/devfrx/jiffin/issues/104)).
 
 ## `monitor`
 

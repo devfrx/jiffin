@@ -1,6 +1,6 @@
 # ADR-0022: Accept version 0.2 with false alarms counted once per pair, target 10 and cap 20
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR-0025](0025-kept-quiet-not-missed.md) (pairs kept quiet as already reminded are not missed)
 - **Date:** 2026-10-03
 - **Deciders:** devfrx
 - **Sources:** the [0.2 decision map](https://github.com/devfrx/jiffin/issues/75): tickets [#87](https://github.com/devfrx/jiffin/issues/87) (thresholds), [#86](https://github.com/devfrx/jiffin/issues/86) (alerts measured) and [#76](https://github.com/devfrx/jiffin/issues/76) (return pause); amends [ADR-0003](0003-acceptance-thresholds.md)

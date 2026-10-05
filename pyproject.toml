@@ -209,6 +209,9 @@ name = "harness imports neither ui nor platform"
 type = "forbidden"
 source_modules = ["jiffin.harness"]
 forbidden_modules = ["jiffin.ui", "jiffin.platform"]
+# The statements page writes the time understood as the interface does (ADR-0021): ui.words is
+# pure Python, without Qt.
+ignore_imports = ["jiffin.harness.statements -> jiffin.ui.words"]
 
 [[tool.importlinter.contracts]]
 name = "Nothing imports harness"

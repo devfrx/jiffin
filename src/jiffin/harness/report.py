@@ -1,4 +1,4 @@
-"""`report`: a day against the thresholds of ADR-0003, numbers only, and a page with the texts.
+"""`report`: a day against the thresholds of ADR-0022, numbers only, and a page with the texts.
 
 The summary is Markdown fit for an issue; the page, with titles and reminder texts, stays in
 the data folder.
@@ -17,7 +17,9 @@ from jiffin.harness.labels import Labels
 
 DELAY_P95_S = 30
 MISSED_SHARE = 0.20
-FALSE_ALARMS_TARGET, FALSE_ALARMS_CAP = 5, 10
+FALSE_ALARMS_TARGET, FALSE_ALARMS_CAP = 10, 20
+"""Wrong pairs shown in the day, each once (ADR-0022): twice those of ADR-0003, as the occasions
+of version 0.2 double them."""
 VRAM_MIB = 4096
 RAM_MIB = 2_000_000_000 >> 20
 """2 GB of RAM for all the app's processes, in MiB."""
@@ -81,7 +83,7 @@ def markdown(summary: days.Summary, labels: Labels | None, used: Machine | None)
         (
             f"{summary.evaluations} evaluations in {summary.hours:.1f} hours ({per_hour:.1f} per "
             f"hour): {summary.judged} asked the engine, {summary.failed} failed. "
-            f"{summary.reminders} reminders judged."
+            f"{summary.reminders} reminders judged{_pauses(summary.pauses)}."
         ),
     ]
     if labels is None:
@@ -93,20 +95,29 @@ def markdown(summary: days.Summary, labels: Labels | None, used: Machine | None)
             f"the owner agrees with Claude on {agree} of {both}."
         )
     rows = [_delay(summary), *_labelled(summary, labels), *_machine(used)]
-    lines += ["", "| Measure | Value | Threshold (ADR-0003) | Within |", "|---|---|---|---|"]
+    lines += ["", "| Measure | Value | Threshold (ADR-0022) | Within |", "|---|---|---|---|"]
     lines += ["| " + " | ".join(row) + " |" for row in rows]
     if labels is not None:
-        right = summary.shown - summary.false_alarms - summary.unlabelled_alerts
-        lines += [
-            "",
-            (
-                f"Alerts shown: {summary.shown}: {right} right, {summary.false_alarms} false "
-                f"alarms, {summary.unlabelled_alerts} not labelled."
-            ),
-        ]
+        right = summary.alerted - summary.false_alarms - summary.unlabelled
+        judged = (
+            f"on {summary.alerted} pairs: {right} right, {summary.false_alarms} wrong, "
+            f"{summary.unlabelled} not labelled"
+        )
+        if summary.time_only:
+            shown = (
+                f"Alerts shown: {summary.shown}; {summary.shown - summary.time_only} of them "
+                f"{judged}; {summary.time_only} of reminders with only a time, right when their "
+                "time is read right (the statements page shows it)."
+            )
+        else:
+            shown = f"Alerts shown: {summary.shown}, {judged}."
+        lines += ["", shown]
         if summary.missed:
-            reasons = ", ".join(f"{why} {count}" for why, count in sorted(summary.missed.items()))
-            lines.append(f"Missed, by why: {reasons}.")
+            lines.append(f"Missed, by why: {_whys(summary.missed)}.")
+        if summary.reminded:
+            lines.append(
+                f"Kept quiet as already reminded, not missed, by why: {_whys(summary.reminded)}."
+            )
     if used is not None:
         lines.append(
             "The CPU the browsers spend on accessibility is not in the monitor's rows: "
@@ -115,19 +126,19 @@ def markdown(summary: days.Summary, labels: Labels | None, used: Machine | None)
     return "\n".join(lines)
 
 
-def replays(rows: Sequence[tuple[str, days.Day]], labels: Mapping[str, bool]) -> str:
+def replays(rows: Sequence[tuple[str, days.Day]], labels: Mapping[str, bool], clock: Clock) -> str:
     """One line per replay of a day, numbers only, with the day as recorded first."""
     lines = [
         f"## Replays of {rows[0][1].day.isoformat()}",
         "",
         (
-            "| Replay | reminders | threshold | evaluations | failed | alerts shown "
-            "| false alarms | missed reminders | alerts not labelled | delay p95 |"
+            "| Replay | reminders | threshold | evaluations | failed | alerts shown | pairs "
+            "| false alarms | missed reminders | pairs not labelled | delay p95 |"
         ),
-        "|---|---|---|---|---|---|---|---|---|---|",
+        "|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for name, day in rows:
-        summary = days.summarize(day, labels)
+        summary = days.summarize(day, labels, clock)
         thresholds = sorted({evaluation.threshold for evaluation in day.evaluations})
         missed = sum(summary.missed.values())
         p95 = days.delay(summary, 95)
@@ -138,11 +149,12 @@ def replays(rows: Sequence[tuple[str, days.Day]], labels: Mapping[str, bool]) ->
             str(summary.evaluations),
             str(summary.failed),
             str(summary.shown),
+            str(summary.alerted),
             str(summary.false_alarms) if labels else "no labels",
             f"{missed / summary.relevant:.0%} ({missed} of {summary.relevant})"
             if labels and summary.relevant
             else "no labels",
-            str(summary.unlabelled_alerts),
+            str(summary.unlabelled),
             "" if p95 is None else f"{p95:.1f} s",
         ]
         lines.append("| " + " | ".join(cells) + " |")
@@ -159,45 +171,74 @@ def page(day: days.Day, labels: Mapping[str, bool], clock: Clock, source: str, p
             "condition": alert.revision.condition,
             "action": alert.revision.action,
             "d": "" if alert.d is None else f"{alert.d:.2f}",
-            "label": labels.get(days.key(alert.context, alert.revision.condition)),
+            "time_only": alert.evaluation_id is None,
+            "label": labels.get(days.Pair(alert.context, alert.revision).key),
             "answer": "" if alert.answer is None else alert.answer.value,
             "delay": f"{(alert.shown_at - alert.due_at) / 1000:.0f} s",
         }
         for alert in day.alerts
         if alert.shown_at is not None
     ]
-    missed = [
-        {
-            "app": pair.pair.context.app,
-            "title": pair.pair.context.title,
-            "address": pair.pair.context.address,
-            "condition": pair.pair.revision.condition,
-            "action": pair.pair.revision.action,
-            "why": _WHY[pair.why],
-            "d": f"{pair.d:.2f}",
-        }
-        for pair in days.missed(day, labels)
-    ]
+    unshown = days.unshown(day, labels, clock)
     return render.page(
-        "report.html", path, day=day.day.isoformat(), source=source, alerts=alerts, missed=missed
+        "report.html",
+        path,
+        day=day.day.isoformat(),
+        source=source,
+        alerts=alerts,
+        missed=[_unshown(pair) for pair in unshown if pair.missed],
+        reminded=[_unshown(pair) for pair in unshown if not pair.missed],
     )
 
 
+def _unshown(pair: days.Unshown) -> dict[str, str | None]:
+    context, revision = pair.pair.context, pair.pair.revision
+    return {
+        "app": context.app,
+        "title": context.title,
+        "address": context.address,
+        "condition": revision.condition,
+        "action": revision.action,
+        "why": _WHY[pair.why],
+        "d": f"{pair.d:.2f}",
+    }
+
+
+def _pauses(pauses: Sequence[int]) -> str:
+    """ ", with a return pause of 2 min", the setting the day was judged with (ADR-0022); nothing
+    for a day of version 0.1."""
+    if not pauses:
+        return ""
+    return ", with a return pause of " + ", then ".join(_duration(pause) for pause in pauses)
+
+
+def _duration(milliseconds: int) -> str:
+    seconds = milliseconds // 1000
+    return f"{seconds // 60} min" if seconds % 60 == 0 else f"{seconds} s"
+
+
 def _delay(summary: days.Summary) -> list[str]:
+    name = "Delay from when the alert became due, p95"
     p95, p50 = days.delay(summary, 95), days.delay(summary, 50)
     if p95 is None or p50 is None:
-        return ["Delay from the context change to the alert, p95", "no alert shown", "", ""]
+        return [name, "no alert shown", "", ""]
     return [
-        "Delay from the context change to the alert, p95",
+        name,
         f"{p95:.1f} s (p50 {p50:.1f} s)",
         f"at most {DELAY_P95_S} s",
         _yes(p95 <= DELAY_P95_S),
     ]
 
 
+def _whys(counts: Mapping[str, int]) -> str:
+    return ", ".join(f"{why} {count}" for why, count in sorted(counts.items()))
+
+
 def _labelled(summary: days.Summary, labels: Labels | None) -> list[list[str]]:
-    missed_label = "Missed reminders: relevant pairs never shown"
-    false_label = "False alarms in the day"
+    missed_label = (
+        "Missed reminders: relevant pairs never shown, unless kept quiet as already reminded"
+    )
+    false_label = "False alarms in the day, once per pair"
     if labels is None:
         return [[missed_label, "no labels", "", ""], [false_label, "no labels", "", ""]]
     missed = sum(summary.missed.values())
