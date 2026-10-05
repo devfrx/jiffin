@@ -28,7 +28,7 @@ the tickets it comes from.
 | [0014](0014-feedback-data-retention.md) | Keep evaluations for 30 days and answered alerts until the reminder is deleted | Accepted; amended by [0021](0021-one-alert-per-unit.md) |
 | [0015](0015-package-pyinstaller-velopack.md) | Package with PyInstaller and Velopack, and download the model on first run | Accepted |
 | [0016](0016-quality-tooling.md) | Enforce quality with Ruff, mypy, pytest and import-linter, in pre-commit and Windows CI | Accepted |
-| [0017](0017-evaluation-harness-subpackage.md) | Ship the evaluation harness as a subpackage, outside the app bundle | Accepted |
+| [0017](0017-evaluation-harness-subpackage.md) | Ship the evaluation harness as a subpackage, outside the app bundle | Accepted; amended by [0021](0021-one-alert-per-unit.md) |
 | [0018](0018-keep-exe-in-the-app-name.md) | Keep `.exe` in the app name the judge sees | Accepted |
 | [0019](0019-five-second-debounce.md) | Evaluate a context after 5 s in the foreground | Accepted |
 | [0020](0020-read-the-time-in-core.md) | Read the time of a condition with our own grammar in `core` | Accepted |

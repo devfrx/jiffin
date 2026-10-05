@@ -1,6 +1,7 @@
 import json
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -10,7 +11,7 @@ import pytest
 from jiffin.core.clock import SimulatedClock
 from jiffin.core.context import Context, Observation, normalize
 from jiffin.core.model import EngineBuild, ModelError
-from jiffin.core.records import Alert, Answer, Evaluation, Left, Snooze
+from jiffin.core.records import Alert, Answer, Evaluation, Left, Outcome, Snooze
 from jiffin.core.reminders import HOUR_MS, Reminders
 from jiffin.harness import __main__ as harness
 from jiffin.harness import day as days
@@ -242,6 +243,127 @@ def test_recorded_scores_fail_where_the_log_did(recorded: tuple[Log, days.Day]) 
         scores.judge(judged.context, {1: statement})
 
 
+def test_a_rimanda_of_0_1_without_its_kind_is_found_from_the_judgements(
+    recorded: tuple[Log, days.Day],
+) -> None:
+    """Version 0.1 did not record which Rimanda: the one whose end falls between the reminder's
+    last judgement as snoozed and its first as free."""
+    log, day = recorded
+    unknown = tuple(
+        replace(alert, snooze=None) if alert.snooze is Snooze.QUARTER_HOUR else alert
+        for alert in day.alerts
+    )
+    assert unknown != day.alerts
+    assert signature(replay.Replay(log, replace(day, alerts=unknown)).run()) == signature(day)
+
+
+# Version 0.2: the return pause, the times, and a Rimanda from the day before (ADR-0021)
+
+YESTERDAY = T0 - 15 * HOUR_MS  # 2026-10-04 18:00 UTC
+MINUTE = 60_000
+CODE = Context("code.exe", "changelog.md - verdi - Visual Studio Code", None)
+MAIL = Context("outlook.exe", "Posta in arrivo - Outlook", None)
+NEWS = Context("vivaldi.exe", "Notizie", "notizie.it")
+CHAT = Context("teams.exe", "Chat - Teams", None)
+"""Yesterday's only: a replay starts with an empty cache, so a context judged yesterday too
+would ask again what the app found in its cache, a difference no summary shows."""
+CALL = ("alle 18:05", "chiamare Rossi")
+STANDUP = ("alle 9:05", "aprire la riunione")
+STANDUP_LATER = "alle 9:20"
+REPORT = ("alle 10:30", "mandare il resoconto")
+
+
+def a_day_of_times(path: Path) -> Log:
+    """Version 0.2 through the app's own core, in UTC: a return pause of 30 s, then of 5 minutes;
+    reminders with only a time: one that rang yesterday and was put off to today with Domani,
+    one edited after it rang, one that rings after the day's last evaluation."""
+    clock = SimulatedClock(YESTERDAY, UTC)
+    core = Reminders(FakeEngine(), clock, lambda view: None, lambda view: None, return_pause=30_000)
+    answers: dict[str, list[tuple[Snooze | str, int]]] = {
+        CALL[0]: [(Snooze.TOMORROW, 3_000), ("done", 2_000)],
+        STANDUP[0]: [("close", 2_000)],
+    }
+
+    def owner(timeline: replay.Timeline, alert: Alert) -> None:
+        replay.passive(timeline, alert)
+        planned = answers.get(alert.revision.condition)
+        if planned and alert.shown_at is not None:
+            what, after = planned.pop(0)
+
+            def answer(core: Reminders) -> None:
+                if isinstance(what, Snooze):
+                    core.snooze(alert.id, what)
+                else:
+                    getattr(core, what)(alert.id)
+
+            timeline.at(alert.shown_at + after, answer)
+
+    def longer_pause(core: Reminders) -> None:
+        core.return_pause = 5 * MINUTE
+
+    timeline = replay.Timeline(core, clock, owner)
+
+    def see(at: int, context: Context | None) -> None:
+        timeline.at(at, replay.observe(Observation(at, context)))
+
+    for condition, action in (VERDI, CALL, STANDUP, REPORT):
+        timeline.at(YESTERDAY, replay.new_reminder(condition, action))
+    see(YESTERDAY + 4 * MINUTE, CHAT)  # the call rings at 18:05, and is put off to tomorrow
+    see(YESTERDAY + 10 * MINUTE, None)
+    see(T0, CODE)  # Verdi rings; the call returns, and is done; the stand-up rings at 09:05
+    see(T0 + 6 * MINUTE, NEWS)
+    see(T0 + 7 * MINUTE, CODE)  # away 60 s, more than the pause: Verdi rings again
+    timeline.at(T0 + 10 * MINUTE, lambda core: core.edit(3, STANDUP_LATER, STANDUP[1]))
+    timeline.at(T0 + 12 * MINUTE, longer_pause)
+    see(T0 + 15 * MINUTE, NEWS)
+    see(T0 + 16 * MINUTE, CODE)  # away 60 s, less than the pause: the same occasion
+    see(T0 + 60 * MINUTE, MAIL)  # the last evaluation; the report rings at 10:30, after it
+    see(T0 + 105 * MINUTE, None)
+    timeline.run(T0 + 2 * HOUR_MS)
+    store = Store.open(path)
+    store.save(timeline.records)
+    log = store.log()
+    store.close()
+    return log
+
+
+@pytest.fixture(scope="module")
+def times(tmp_path_factory: pytest.TempPathFactory) -> tuple[Log, days.Day]:
+    log = a_day_of_times(tmp_path_factory.mktemp("times") / "jiffin.db")
+    return log, days.select(log, None, SimulatedClock(T0, UTC))
+
+
+def test_the_day_of_times_holds_what_version_0_2_adds(times: tuple[Log, days.Day]) -> None:
+    log, day = times
+    assert [evaluation.return_pause for evaluation in day.evaluations] == [30_000] * 3 + [
+        5 * MINUTE
+    ] * 3
+    rang = [
+        candidate.outcome
+        for evaluation in day.evaluations
+        for candidate in evaluation.candidates
+        if candidate.outcome is not Outcome.BELOW_THRESHOLD
+    ]
+    assert rang == [Outcome.ALERT, Outcome.ALERT, Outcome.SAME_OCCASION]
+    alone = [alert for alert in day.alerts if alert.evaluation_id is None]
+    assert [(alert.revision.condition, alert.answer) for alert in alone] == [
+        (CALL[0], Answer.DONE),
+        (STANDUP[0], Answer.CLOSED),
+        (STANDUP_LATER, None),
+        (REPORT[0], None),
+    ]
+    assert alone[-1].created_at > day.evaluations[-1].at
+    (put_off,) = (alert for alert in log.alerts if alert.snooze is Snooze.TOMORROW)
+    assert put_off.created_at < day.evaluations[0].at  # yesterday
+
+
+def test_a_day_of_0_2_replays_with_its_pauses_its_times_and_yesterdays_rimanda(
+    times: tuple[Log, days.Day],
+) -> None:
+    log, day = times
+    assert signature(replay.Replay(log, day, zone=UTC).run()) == signature(day)
+
+
 # The commands
 
 
@@ -302,9 +424,19 @@ def test_more_reminders_than_the_day_has_are_needed(
 def test_label_adds_the_pairs_of_the_invented_reminders(data: Path) -> None:
     assert harness.main(["label", "--data", str(data), "--reminders", "6"]) == 0
     labelled = labels.load(labels.path_for(data, date(2026, 10, 5)))
-    conditions = {pair["condition"] for pair in labelled.pairs}
+    conditions = {pair["remainder"] for pair in labelled.pairs}
     assert {condition for condition, _ in fixtures.reminders(2)} <= conditions
     assert fixtures.reminders(3)[2][0] not in conditions  # 4 of the day and 2 invented make 6
+
+
+def test_the_pairs_of_an_invented_reminder_are_keyed_by_its_remainder(
+    data: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    invented = [("quando apro Figma dopo le 23", "salvare il file")]
+    monkeypatch.setattr(fixtures, "reminders", lambda count: invented[:count])
+    assert harness.main(["label", "--data", str(data), "--reminders", "5"]) == 0
+    labelled = labels.load(labels.path_for(data, date(2026, 10, 5)))
+    assert "quando apro Figma" in {pair["remainder"] for pair in labelled.pairs}
 
 
 def test_a_replay_runs_again_from_the_start(recorded: tuple[Log, days.Day]) -> None:

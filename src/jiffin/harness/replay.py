@@ -6,7 +6,9 @@ exact time (pipeline.md). `core` starts from the state the log had when the day 
 reminders come, change and go as the log recorded them; the owner answers the alerts the log
 also had, after the same time on screen, and every other alert leaves the screen after 10 s.
 What changes is one thing at a time: the threshold, the reminders or the engine. Replayed at its
-own threshold with its own scores, a day gives its alerts back.
+own threshold with its own scores, a day gives its alerts back, those of the reminders with only
+a time too, which ring without being judged. From version 0.2 on, `core` judges with the return
+pause each evaluation recorded; a log of 0.1 is replayed with the default one.
 
 What the log does not keep is inferred from what it does:
 - when a context left, from version 0.2 on; before, a context seen twice in a row was left in
@@ -22,7 +24,7 @@ import itertools
 import math
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import UTC, timedelta
+from datetime import UTC, tzinfo
 
 from jiffin.core.clock import Clock, SimulatedClock, SystemClock
 from jiffin.core.context import Context, Observation
@@ -40,8 +42,7 @@ from jiffin.core.records import (
     Snapshot,
     Snooze,
 )
-from jiffin.core.reminders import HOUR_MS, MINUTE_MS, THRESHOLD, TOMORROW_AT, Reminders
-from jiffin.core.schedule import jiffin_day
+from jiffin.core.reminders import THRESHOLD, Reminders, snooze_end
 from jiffin.harness.day import Day
 from jiffin.harness.errors import HarnessError
 from jiffin.store.store import Log
@@ -145,7 +146,9 @@ class Timeline:
             self._collect()
 
     def _move(self, time: int) -> None:
-        self._clock.advance(time - self._clock.now())
+        """Forward to `time`: a deadline already past, as the end of a Rimanda from before the
+        day, is handled at once."""
+        self._clock.advance(max(time - self._clock.now(), 0))
 
     def _collect(self) -> None:
         for record in self.core.take_records():
@@ -200,12 +203,20 @@ def observe(observation: Observation) -> Command:
     return lambda core: core.observe(observation)
 
 
+def return_pause(milliseconds: int) -> Command:
+    def change(core: Reminders) -> None:
+        core.return_pause = milliseconds
+
+    return change
+
+
 class Replay:
     """One day of the log through `core` again, with one thing changed.
 
     Without `model` the scores are those the log keeps; with one, the engine judges and
     `rewrite` has it write every statement again. `extra` adds reminders, as (condition,
-    action), from the start of the day; `answers` replays the owner's answers.
+    action), from the start of the day; `answers` replays the owner's answers. The times of the
+    reminders are read in `zone`: this machine's by default, where the app wrote its log.
     """
 
     def __init__(
@@ -218,6 +229,7 @@ class Replay:
         rewrite: bool = False,
         extra: Sequence[tuple[str, str]] = (),
         answers: bool = True,
+        zone: tzinfo | None = None,
     ) -> None:
         if not day.evaluations:
             raise HarnessError("the day has no evaluation")
@@ -230,8 +242,18 @@ class Replay:
         self._answers = answers
         self._seen = observations(day.evaluations, log.left)
         self._begin = self._seen[0].at - 1
-        self._until = max(evaluation.at for evaluation in day.evaluations)
-        self._zone = SystemClock().local(self._begin).tzinfo or UTC
+        self._until = max(
+            *(evaluation.at for evaluation in day.evaluations),
+            *(alert.created_at for alert in day.alerts),
+        )
+        """The last evaluation, or a later alert of a reminder with only a time, which rings at
+        a deadline without one."""
+        self._made_known = any(
+            evaluation.return_pause is not None for evaluation in day.evaluations
+        )
+        """From version 0.2 on the log records when each revision was made and which Rimanda
+        answered an alert; it judges with a return pause, which 0.1 did not have."""
+        self._zone = zone or SystemClock().local(self._begin).tzinfo or UTC
         self._calendar = SimulatedClock(self._begin, self._zone)
         """For local days and hours only: it never moves."""
         self._ids: dict[int, int] = {}
@@ -293,20 +315,39 @@ class Replay:
         return reminder.completed_at is not None and reminder.completed_at < self._begin
 
     def _revisions(self, reminder: Reminder) -> list[tuple[int, Revision]]:
-        """Its revisions in the order the day judged them, each with when the context of its
-        first evaluation came to the foreground; the current one if the day judged none."""
+        """Its revisions over the day, each with when it took effect, the one in force when the
+        day began first; the current one if the log tells nothing."""
+        chain = self._made(reminder) if self._made_known else self._judged_in_turn(reminder)
+        if not chain:
+            chain = [(self._begin, reminder.revision)]
+        if self._rewrite:
+            chain = [(when, replace(r, statement=None, statement_build=None)) for when, r in chain]
+        return chain
+
+    def _made(self, reminder: Reminder) -> list[tuple[int, Revision]]:
+        """From version 0.2 on: the last revision made before the day, then each made during
+        it, when it was made, also those of a reminder with only a time, never judged. A
+        revision of 0.1 without that time was made before 0.2, so before the day."""
+        chain: list[tuple[int, Revision]] = []
+        mine = (r for r in self._log.revisions.values() if r.reminder_id == reminder.id)
+        for revision in sorted(mine, key=lambda r: r.number):
+            made = revision.created_at
+            if made is None or made < self._begin:
+                chain = [(self._begin, revision)]
+            elif made <= self._until:
+                chain.append((made, revision))
+        return chain
+
+    def _judged_in_turn(self, reminder: Reminder) -> list[tuple[int, Revision]]:
+        """In version 0.1: its revisions in the order the day judged them, each with when the
+        context of its first evaluation came to the foreground."""
         chain: list[tuple[int, Revision]] = []
         for evaluation in sorted(self._day.evaluations, key=lambda e: e.at):
             for candidate in evaluation.candidates:
                 revision = self._day.revisions[candidate.revision_id]
                 known = any(revision.id == earlier.id for _, earlier in chain)
                 if revision.reminder_id == reminder.id and not known:
-                    made = revision.created_at
-                    chain.append((evaluation.context_since if made is None else made, revision))
-        if not chain:
-            chain = [(self._begin, reminder.revision)]
-        if self._rewrite:
-            chain = [(when, replace(r, statement=None, statement_build=None)) for when, r in chain]
+                    chain.append((evaluation.context_since, revision))
         return chain
 
     def _judged(self, reminder_id: int, after: int) -> list[tuple[int, Outcome]]:
@@ -320,7 +361,20 @@ class Replay:
         ]
 
     def _snoozed_at_start(self, reminder: Reminder) -> int | None:
-        """A snooze from before the day: until the reminder was first judged free."""
+        """A Rimanda from before the day, even one over already: a reminder that has not rung
+        since comes back within its unit (ADR-0021). From its recorded kind, from version 0.2
+        on; before, until the reminder was first judged free."""
+        answered = [
+            alert
+            for alert in self._log.alerts
+            if alert.reminder_id == reminder.id
+            and alert.answer is Answer.SNOOZE
+            and alert.answered_at is not None
+            and alert.answered_at < self._begin
+        ]
+        last = max(answered, key=lambda alert: alert.answered_at or 0, default=None)
+        if last is not None and last.snooze is not None and last.answered_at is not None:
+            return snooze_end(last.snooze, self._calendar, last.answered_at)
         judged = self._judged(reminder.id, self._begin)
         if not judged or judged[0][1] is not Outcome.SNOOZED:
             return None
@@ -339,7 +393,7 @@ class Replay:
     # What happens during the day
 
     def _commands(self) -> list[tuple[int, Command]]:
-        commands: list[tuple[int, Command]] = []
+        commands = self._pauses()
         for reminder in self._log.reminders:
             if self._gone(reminder) or reminder.created_at > self._until:
                 continue
@@ -352,6 +406,20 @@ class Replay:
                 # A millisecond late, so that a replayed Fatto completes it first, as it did.
                 commands.append((reminder.completed_at + 1, self._complete(reminder.id)))
         commands += [(observation.at, observe(observation)) for observation in self._seen]
+        return commands
+
+    def _pauses(self) -> list[tuple[int, Command]]:
+        """The return pauses the day was judged with, as its evaluations recorded them. A pause
+        counts only when a context is judged, so a change from the settings is in force right
+        after the last evaluation judged with the one before."""
+        commands: list[tuple[int, Command]] = []
+        before, since = None, self._begin
+        for evaluation in sorted(self._day.evaluations, key=lambda e: e.at):
+            pause = evaluation.return_pause
+            if pause is not None and pause != before:
+                commands.append((since, return_pause(pause)))
+                before = pause
+            since = evaluation.at
         return commands
 
     def _create(self, log_id: int, revision: Revision) -> Command:
@@ -405,9 +473,10 @@ class Replay:
         return reply
 
     def _snooze(self, original: Alert) -> Snooze:
-        """For version 0.1, which did not record it: the snooze whose end falls after the reminder's last judgement as snoozed and by its
-        first judgement as free. A reminder the day never judged again stays snoozed until
-        tomorrow, so the replay does not judge it where the day did not."""
+        """For version 0.1, which did not record it: the Rimanda whose end falls after the
+        reminder's last judgement as snoozed and by its first judgement as free. A reminder the
+        day never judged again stays snoozed until tomorrow, so the replay does not judge it
+        where the day did not."""
         answered = original.answered_at
         assert answered is not None
         judged = self._judged(original.reminder_id, answered)
@@ -418,13 +487,11 @@ class Replay:
             (at for at, outcome in judged if outcome is not Outcome.SNOOZED and at > low),
             default=math.inf,
         )
-        tomorrow = jiffin_day(self._calendar.local(answered)) + timedelta(days=1)
-        ends = (
-            (Snooze.QUARTER_HOUR, answered + 15 * MINUTE_MS),
-            (Snooze.HOUR, answered + HOUR_MS),
-            (Snooze.TOMORROW, self._calendar.instant(tomorrow, TOMORROW_AT)),
-        )
-        return next((kind for kind, end in ends if low < end <= high), Snooze.HOUR)
+        for kind in (Snooze.QUARTER_HOUR, Snooze.HOUR, Snooze.TOMORROW):
+            end = snooze_end(kind, self._calendar, answered)
+            if end is not None and low < end <= high:
+                return kind
+        return Snooze.HOUR
 
     # The replayed day
 

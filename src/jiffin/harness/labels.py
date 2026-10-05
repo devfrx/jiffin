@@ -1,10 +1,11 @@
-"""`label`: whether each condition is true in each context the engine judged (ADR-0003).
+"""`label`: whether each remainder is true in each context the engine judged (ADR-0003, ADR-0021).
 
 Every (evaluated context, reminder) pair of a day goes into `labels-<day>.json` in the data
 folder. Claude labels them all, with the texts in front of it, as on 2026-09-28; then the owner
 labels a share of them on a local page, without seeing Claude's labels, and where both labelled
-a pair the owner's label counts. Labels are keyed by the texts, so they outlive a new copy of
-the log, a replay or another threshold.
+a pair the owner's label counts. A label is on the remainder, the condition without its time:
+the code checks the time. Labels are keyed by the texts, so they outlive a new copy of the log,
+a replay or another threshold.
 """
 
 import json
@@ -19,14 +20,16 @@ from typing import Any
 from jiffin.harness.day import Pair
 from jiffin.harness.errors import HarnessError
 
-FORMAT = 1
+FORMAT = 2
+"""Format 1 named the condition: from 0.2 a pair carries the remainder (ADR-0021)."""
 OWNER_SHARE = 30
 """Pairs the owner labels by default: as many alerts as the owner judged on 2026-09-28."""
 
 INSTRUCTIONS = (
-    "For every pair, decide whether the reminder's condition (the Quando box) is true in that "
-    "context: not whether the reminder would have been useful. Put true or false under "
-    '"claude", by key, and list under "uncertain" the keys you are unsure about.'
+    "For every pair, decide whether the reminder's remainder (the Quando box without its time: "
+    "the code checks the time) is true in that context: not whether the reminder would have been "
+    'useful. Put true or false under "claude", by key, and list under "uncertain" the keys you '
+    "are unsure about."
 )
 
 
@@ -35,7 +38,7 @@ class Labels:
     path: Path
     day: date
     pairs: list[dict[str, Any]]
-    """The pairs to label, texts included: key, app, title, address, condition, action."""
+    """The pairs to label, texts included: key, app, title, address, remainder, action."""
     claude: dict[str, bool] = field(default_factory=dict)
     uncertain: list[str] = field(default_factory=list)
     owner: dict[str, bool] = field(default_factory=dict)
@@ -86,7 +89,10 @@ def load(path: Path) -> Labels:
     except json.JSONDecodeError as error:
         raise HarnessError(f"{path.name} is not valid JSON: {error}") from None
     if record.get("format") != FORMAT:
-        raise HarnessError(f"{path.name} has format {record.get('format')}, not {FORMAT}")
+        raise HarnessError(
+            f"{path.name} has format {record.get('format')}, not {FORMAT}: "
+            "move it away and run label again"
+        )
     return Labels(
         path,
         date.fromisoformat(record["day"]),
@@ -106,7 +112,7 @@ def prepare(pairs: Mapping[str, Pair], path: Path, day: date) -> Labels:
             "app": pair.context.app,
             "title": pair.context.title,
             "address": pair.context.address,
-            "condition": pair.revision.condition,
+            "remainder": pair.revision.remainder,
             "action": pair.revision.action,
         }
         for pair_key, pair in pairs.items()

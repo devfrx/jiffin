@@ -72,6 +72,20 @@ def tomorrow(clock: Clock, now: int) -> int:
     return clock.instant(day, TOMORROW_AT)
 
 
+def snooze_end(snooze: Snooze, clock: Clock, now: int) -> int | None:
+    """When a Rimanda answered at `now` ends; Alla prossima volta has no end, only a next unit.
+    The harness replays the snoozes of a log with it."""
+    match snooze:
+        case Snooze.NEXT_TIME:
+            return None
+        case Snooze.QUARTER_HOUR:
+            return now + 15 * MINUTE_MS
+        case Snooze.HOUR:
+            return now + HOUR_MS
+        case Snooze.TOMORROW:
+            return tomorrow(clock, now)
+
+
 class Pause(Enum):
     """Sospendi, in the tray icon's menu (ADR-0024)."""
 
@@ -385,7 +399,7 @@ class Reminders:
         alert = self._answer(alert_id, Answer.SNOOZE, snooze)
         reminder = None if alert is None else self._reminders.get(alert.reminder_id)
         if reminder is not None:
-            until = self._snooze_end(snooze)
+            until = snooze_end(snooze, self._clock, self._clock.now())
             if until != reminder.snoozed_until:
                 self._save(replace(reminder, snoozed_until=until))
             if until is None:
@@ -775,19 +789,6 @@ class Reminders:
         for alert in self._alerts.of(reminder_id):
             self._records.extend(self._alerts.close(alert.id, now))
             self._alerts_changed = True
-
-    def _snooze_end(self, snooze: Snooze) -> int | None:
-        """When a snooze with a time ends; Alla prossima volta has none."""
-        now = self._clock.now()
-        match snooze:
-            case Snooze.NEXT_TIME:
-                return None
-            case Snooze.QUARTER_HOUR:
-                return now + 15 * MINUTE_MS
-            case Snooze.HOUR:
-                return now + HOUR_MS
-            case Snooze.TOMORROW:
-                return tomorrow(self._clock, now)
 
     def _publish(self) -> None:
         if self._alerts_changed:

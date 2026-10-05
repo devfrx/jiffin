@@ -24,7 +24,7 @@
         <td>{{ alert.app }} · {{ alert.title }}{% if alert.address %}<div class="address">{{ alert.address }}</div>{% endif %}</td>
         <td>{{ alert.condition }} <span class="muted">→ {{ alert.action }}</span></td>
         <td class="number">{{ alert.d }}</td>
-        <td>{% if alert.label is none %}<span class="muted">—</span>{% elif alert.label %}<span class="yes">giusto</span>{% else %}<span class="no">falso allarme</span>{% endif %}</td>
+        <td>{% if alert.time_only %}<span class="muted">solo orario</span>{% elif alert.label is none %}<span class="muted">—</span>{% elif alert.label %}<span class="yes">giusto</span>{% else %}<span class="no">falso allarme</span>{% endif %}</td>
         <td class="muted">{{ alert.answer }}</td>
         <td class="number">{{ alert.delay }}</td>
       </tr>
@@ -33,7 +33,7 @@
   </table>
 
   <h2>Promemoria persi ({{ missed | length }})</h2>
-  <p>Coppie pertinenti che non sono mai arrivate sullo schermo, con il motivo e il d più alto della giornata.</p>
+  <p>Coppie pertinenti, giudicate almeno una volta nel loro orario, che non sono mai arrivate sullo schermo, con il motivo e il d più alto della giornata.</p>
   <table>
     <thead><tr><th>Contesto</th><th>Promemoria</th><th>Perché</th><th>d più alto</th></tr></thead>
     <tbody>

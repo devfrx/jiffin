@@ -61,7 +61,7 @@
     </div>
   </section>
   <nav><button id="back" type="button">← Indietro</button><button id="skip" type="button">Avanti →</button></nav>
-  <p class="hint">Tasti: 1 = sì, 2 = no, Backspace torna indietro. Giudica solo se la condizione era vera in quel contesto, non se il promemoria ti sarebbe servito. Ogni risposta si salva subito e passa alla coppia dopo.</p>
+  <p class="hint">Tasti: 1 = sì, 2 = no, Backspace torna indietro. Giudica solo se la condizione era vera in quel contesto, non se il promemoria ti sarebbe servito. L'orario non c'è: lo controlla Jiffin. Ogni risposta si salva subito e passa alla coppia dopo.</p>
   <p id="status" class="status" role="status"></p>
 </main>
 <script>
@@ -135,7 +135,7 @@ function show(i) {
   card.append(element("div", "label", `Eri su ${pair.app}`),
     element("div", "title", pair.title || "(finestra senza titolo)"));
   if (pair.address) card.append(element("div", "address", pair.address));
-  card.append(element("div", "label", "Il promemoria:"), element("div", "condition", pair.condition),
+  card.append(element("div", "label", "Il promemoria:"), element("div", "condition", pair.remainder),
     element("div", "action", `ricordami di ${pair.action}`));
   if (isDone(pair)) card.append(element("div", "done", "✓ già fatta: puoi cambiare risposta"));
   $("yes").setAttribute("aria-pressed", String(data.answers[pair.key] === true));

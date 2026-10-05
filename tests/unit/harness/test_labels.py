@@ -33,7 +33,7 @@ def test_the_pairs_are_written_with_their_texts(tmp_path: Path) -> None:
         "app": "vivaldi.exe",
         "title": "Banca Rossi",
         "address": "bancarossi.it",
-        "condition": "quando apro Figma",
+        "remainder": "quando apro Figma",
         "action": "esportare le icone",
     }
     assert (record["claude"], record["uncertain"], record["owner"]) == ({}, [], {})
@@ -89,8 +89,8 @@ def test_labels_in_the_wrong_shape_are_refused(tmp_path: Path) -> None:
     path.write_text(json.dumps(record | {"claude": {FIGMA: "sì"}}), encoding="utf-8")
     with pytest.raises(HarnessError, match='under "claude" must be true or false'):
         labels.load(path)
-    path.write_text(json.dumps(record | {"format": 2}), encoding="utf-8")
-    with pytest.raises(HarnessError, match="format 2"):
+    path.write_text(json.dumps(record | {"format": 1}), encoding="utf-8")  # it named conditions
+    with pytest.raises(HarnessError, match="format 1, not 2: move it away"):
         labels.load(path)
     path.write_text("{", encoding="utf-8")
     with pytest.raises(HarnessError, match="not valid JSON"):

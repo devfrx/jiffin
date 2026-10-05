@@ -35,6 +35,8 @@ from jiffin.core.reminders import (
     Pause,
     Reminders,
     RemindersView,
+    snooze_end,
+    tomorrow,
 )
 from jiffin.core.schedule import OnDate, Schedule, Slot
 
@@ -821,6 +823,16 @@ def test_tomorrow_is_the_next_morning_at_eight(
     scene.stay(FIGMA)
     scene.reminders.snooze(scene.alert().id, Snooze.TOMORROW)
     assert scene.reminders.deadline == milliseconds(back)
+
+
+def test_each_rimanda_ends_after_its_time_but_alla_prossima_volta() -> None:
+    clock = SimulatedClock(START, UTC)
+    assert [snooze_end(snooze, clock, START) for snooze in Snooze] == [
+        None,
+        START + 15 * MINUTE_MS,
+        START + HOUR_MS,
+        tomorrow(clock, START),
+    ]
 
 
 def test_a_snoozed_reminder_keeps_quiet_until_the_snooze_ends() -> None:
