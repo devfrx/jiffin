@@ -120,6 +120,10 @@ QtObject {
     // The tray icon and its list
     readonly property string appName: "Jiffin"
     readonly property string quit: "Esci"
+    readonly property string pauseHour: "Sospendi per un'ora"
+    readonly property string pauseTomorrow: "Sospendi fino a domani"
+    readonly property string resume: "Riprendi"
+    readonly property string paused: "In pausa"
     readonly property string reminders: "Promemoria"
     readonly property string newOne: "Nuovo"
     readonly property string unseen: "Non visti"
@@ -172,6 +176,12 @@ QtObject {
         if (silences > 0)
             parts.push("Taciuto in " + silences + (silences === 1 ? " posto" : " posti"));
         return parts.join(" · ");
+    }
+
+    // At the top of the tray list while Jiffin is paused (ADR-0024): "In pausa fino alle 15:30.",
+    // "In pausa fino a domani alle 08:00.".
+    function pausedUntil(at: string, tomorrow: bool): string {
+        return "In pausa fino " + (tomorrow ? "a domani " : "") + "alle " + at + ".";
     }
 
     // At the bottom of the tray list (#84): the return pause, in minutes when it is whole

@@ -208,6 +208,7 @@ class Screen:
         self.commands = Commands()
         self.writer = Writer()
         self.retries = 0
+        self.resumes = 0
         self.fetches = 0
         self.first_run = FirstRun(
             self.engine,
@@ -230,6 +231,7 @@ class Screen:
             self.commands,
             self.writer,
             self._retry,
+            self._resume,
             self.first_run,
             self.preferences,
             Glass(self.look),
@@ -347,6 +349,9 @@ class Screen:
 
     def _retry(self) -> None:
         self.retries += 1
+
+    def _resume(self) -> None:
+        self.resumes += 1
 
     def _fetch(self) -> None:
         self.fetches += 1
@@ -1114,6 +1119,42 @@ def test_an_unreadable_address_shows_a_banner_naming_the_browsers(screen: Screen
     assert screen.lines() == ["Promemoria", "Attivi", "Nessun promemoria attivo.", PAUSE]
 
 
+def test_the_pause_from_the_tray_shows_first_until_it_ends_and_riprendi_ends_it(
+    screen: Screen,
+) -> None:
+    """ADR-0024: the list opens at 10:00 in Rome."""
+    stopped = (
+        "Il modello si è fermato quattro volte in un'ora."
+        " Finché non riparte, i promemoria non avvisano."
+    )
+    screen.list.show_engine(TrayList.Engine.FAILURES)
+    screen.list.show_reminders(RemindersView((), at(1, 15, 30)))
+    screen.open()
+    assert screen.lines()[:3] == ["Promemoria", "In pausa fino alle 15:30.", stopped]
+    screen.click("Riprendi")
+    assert screen.resumes == 1
+    screen.list.show_reminders(RemindersView((), at(2, 8, 0)))
+    assert screen.lines()[1] == "In pausa fino a domani alle 08:00."
+    screen.list.show_reminders(RemindersView(()))
+    assert screen.lines()[:2] == ["Promemoria", stopped]
+
+
+def test_a_pause_until_eight_is_no_longer_tomorrow_after_midnight(
+    qtbot: QtBot,
+    monkeypatch: pytest.MonkeyPatch,
+    dwm: list[tuple[object, ...]],
+    focus_stays: None,
+) -> None:
+    monkeypatch.setattr(tray_list, "REFRESH_MS", 50)
+    screen = Screen(qtbot)
+    screen.list.show_reminders(RemindersView((), at(2, 8, 0)))
+    screen.open()
+    assert screen.lines()[1] == "In pausa fino a domani alle 08:00."
+    screen.clock.advance(at(2, 0, 30) - START)
+    qtbot.waitUntil(lambda: screen.lines()[1] == "In pausa fino alle 08:00.")
+    screen.list.close()
+
+
 def test_the_model_on_its_way_shows_on_top_and_dettagli_opens_its_window(
     screen: Screen,
 ) -> None:
@@ -1176,7 +1217,15 @@ def test_the_list_goes_with_the_engine_and_no_binding_reads_it_gone(
         Places(lambda places: None),
     )
     trays = TrayList(
-        engine, Commands(), Writer(), lambda: None, first_run, preferences, Glass(look), clock
+        engine,
+        Commands(),
+        Writer(),
+        lambda: None,
+        lambda: None,
+        first_run,
+        preferences,
+        Glass(look),
+        clock,
     )
     trays.show_reminders(RemindersView((active(1, "quando apro Figma", "esportare le icone"),)))
     gone: list[str] = []

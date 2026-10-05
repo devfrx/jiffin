@@ -27,6 +27,7 @@ from pytestqt.qtbot import QtBot
 from jiffin.core.alerts import AlertsView
 from jiffin.core.context import Context
 from jiffin.core.records import Alert, Revision, Snooze
+from jiffin.core.reminders import Pause
 from jiffin.ui.alert import AlertSlot
 from jiffin.ui.first_run import ModelFile
 from jiffin.ui.interface import Interface
@@ -336,6 +337,12 @@ class Upkeep:
         pass
 
     def keep_return_pause(self, seconds: int) -> None:
+        pass
+
+    def pause(self, pause: Pause) -> None:
+        pass
+
+    def resume(self) -> None:
         pass
 
 

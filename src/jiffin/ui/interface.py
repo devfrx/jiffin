@@ -11,7 +11,7 @@ from PySide6.QtQuick import QQuickWindow
 
 from jiffin.core.alerts import AlertsView
 from jiffin.core.clock import Clock, SystemClock
-from jiffin.core.reminders import RemindersView
+from jiffin.core.reminders import Pause, RemindersView
 from jiffin.ui.alert import Answers
 from jiffin.ui.creation import Changes, Creation
 from jiffin.ui.first_run import FirstRun, ModelFile, ModelState
@@ -53,6 +53,15 @@ class Upkeep(Protocol):
     def keep_places(self, places: Mapping[str, tuple[int, int]]) -> None:
         """Where the user left the windows, by name, to give `places.restore` at the next
         start."""
+        ...
+
+    def pause(self, pause: Pause) -> None:
+        """Sospendi, in the tray icon's menu: in force at once, and kept through a restart until
+        it ends (ADR-0024)."""
+        ...
+
+    def resume(self) -> None:
+        """Riprendi, in the tray icon's menu or on the pause's line in its list."""
         ...
 
 
@@ -101,12 +110,20 @@ class Interface:
             core,
             self.creation,
             upkeep.restart_engine,
+            upkeep.resume,
             self.first_run,
             self.preferences,
             self.glass,
             clock,
         )
-        self.tray = Tray(self.engine, self.look, self.tray_list.toggle, self.preferences.open)
+        self.tray = Tray(
+            self.engine,
+            self.look,
+            self.tray_list.toggle,
+            self.preferences.open,
+            upkeep.pause,
+            upkeep.resume,
+        )
         self.tray.install()
         self.hotkey = Hotkey(self.creation.new)
         app.installNativeEventFilter(self.hotkey)
@@ -120,6 +137,7 @@ class Interface:
 
     def show_reminders(self, view: RemindersView) -> None:
         self.tray_list.show_reminders(view)
+        self.tray.show_reminders(view)
 
     def show_unreadable(self, apps: frozenset[str]) -> None:
         self.tray_list.show_unreadable(apps)

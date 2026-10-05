@@ -145,6 +145,17 @@ Window {
                     }
                 }
 
+                // The pause from the tray (ADR-0024), until it ends or Riprendi.
+                FluentInfoBar {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 8
+                    Layout.rightMargin: 8
+                    visible: window.trayList.pausedAt.length > 0
+                    severity: FluentInfoBar.Informational
+                    message: Texts.pausedUntil(window.trayList.pausedAt, window.trayList.pausedTomorrow)
+                    action: Texts.resume
+                    onTriggered: window.trayList.resume()
+                }
                 // The model file on its way (ADR-0015): the download, or what stopped it.
                 FluentInfoBar {
                     Layout.fillWidth: true

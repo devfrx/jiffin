@@ -32,6 +32,7 @@ from jiffin.core.reminders import (
     RETURN_PAUSE_MS,
     THRESHOLD,
     ActiveReminder,
+    Pause,
     Reminders,
     RemindersView,
 )
@@ -102,6 +103,7 @@ class Scene:
         zone: tzinfo = UTC,
         saved: Snapshot | None = None,
         return_pause: int = RETURN_PAUSE_MS,
+        paused_until: int | None = None,
     ) -> None:
         self.model = model or FakeModel()
         self.clock = SimulatedClock(start, zone)
@@ -114,6 +116,7 @@ class Scene:
             self.lists.append,
             saved,
             return_pause=return_pause,
+            paused_until=paused_until,
         )
         self.records: list[Record] = []
 
@@ -939,6 +942,126 @@ def test_the_tray_list_keeps_one_unseen_alert_per_reminder() -> None:
     assert not scene.view.unseen
     scene.reminders.vanished(second.id)
     assert [alert.id for alert in scene.view.unseen] == [second.id]
+
+
+# The pause from the tray (ADR-0024)
+
+
+def test_a_pause_holds_every_alert_until_it_ends_then_rings_as_after_being_away() -> None:
+    scene = figma()
+    scene.stay(BANK)
+    end = scene.reminders.pause(Pause.HOUR)
+    assert end == START + DEBOUNCE_MS + HOUR_MS
+    assert scene.lists[-1].paused_until == end == scene.reminders.deadline
+    assert scene.saved(Left)[-1] == Left(BANK, START, START + DEBOUNCE_MS)
+    scene.stay(FIGMA, 10 * MINUTE_MS)
+    scene.until(end + DEBOUNCE_MS - 1)
+    assert scene.view.visible == ()
+    assert len(scene.saved(Evaluation)) == 1  # Banca, before the pause
+    assert scene.lists[-1].paused_until is None
+    scene.wait(1)
+    assert scene.outcomes() == [Outcome.ALERT]
+    assert scene.saved(Evaluation)[-1].context_since == end
+    assert scene.alert().created_at == end + DEBOUNCE_MS
+
+
+def test_what_came_due_before_the_pause_is_handled_first() -> None:
+    """The worker may take the pause before it polls: `core` still goes in order."""
+    scene = figma()
+    scene.reminders.observe(Observation(START, FIGMA))
+    scene.clock.advance(DEBOUNCE_MS + 1)
+    scene.reminders.pause(Pause.HOUR)
+    assert scene.outcomes() == [Outcome.ALERT]
+    assert scene.saved(Left)[-1] == Left(FIGMA, START, START + DEBOUNCE_MS + 1)
+
+
+def test_riprendi_ends_the_pause_at_once() -> None:
+    scene = figma()
+    scene.reminders.pause(Pause.TOMORROW)
+    scene.stay(FIGMA, HOUR_MS)
+    assert scene.view.visible == ()
+    scene.reminders.resume()
+    assert scene.lists[-1].paused_until is None
+    assert scene.reminders.deadline == scene.clock.now() + DEBOUNCE_MS
+    scene.wait(DEBOUNCE_MS)
+    assert scene.outcomes() == [Outcome.ALERT]
+    views = len(scene.lists)
+    scene.reminders.resume()
+    assert len(scene.lists) == views
+
+
+def test_a_pause_is_an_absence_for_the_occasions() -> None:
+    scene = figma()
+    scene.stay(FIGMA)
+    scene.reminders.vanished(scene.alert().id)
+    scene.reminders.pause(Pause.HOUR)
+    scene.wait(RETURN_PAUSE_MS - 1)
+    scene.reminders.resume()
+    scene.wait(DEBOUNCE_MS)
+    assert scene.outcomes() == [Outcome.SAME_OCCASION]
+    scene.reminders.pause(Pause.HOUR)
+    scene.wait(RETURN_PAUSE_MS)
+    scene.reminders.resume()
+    scene.wait(DEBOUNCE_MS)
+    assert scene.outcomes() == [Outcome.ALERT]
+
+
+def test_a_moment_that_came_during_the_pause_rings_once_it_ends() -> None:
+    """Due when the user is back, as after being away (ADR-0022)."""
+    scene = Scene(start=at(2, 14, 30))
+    scene.create("alle 15", "chiamare Mario")
+    scene.stay(FIGMA)
+    end = scene.reminders.pause(Pause.HOUR)
+    scene.until(end + DEBOUNCE_MS - 1)
+    assert scene.view.visible == ()
+    scene.wait(1)
+    assert (scene.alert().created_at, scene.alert().due_at) == (end + DEBOUNCE_MS, end)
+
+
+def test_a_snooze_that_ends_during_the_pause_waits_for_its_end() -> None:
+    scene = figma()
+    scene.stay(FIGMA)
+    scene.reminders.snooze(scene.alert().id, Snooze.QUARTER_HOUR)
+    end = scene.reminders.pause(Pause.HOUR)
+    scene.until(end + DEBOUNCE_MS - 1)
+    assert scene.view.visible == ()
+    scene.wait(1)
+    assert scene.alert().shown_at == end + DEBOUNCE_MS
+
+
+@pytest.mark.parametrize(
+    ("paused", "until"),
+    [
+        (
+            datetime(2026, 9, 21, 14, 13, tzinfo=ROME_SUMMER),
+            datetime(2026, 9, 22, 8, tzinfo=ROME_SUMMER),
+        ),
+        (
+            datetime(2026, 9, 22, 1, 0, tzinfo=ROME_SUMMER),
+            datetime(2026, 9, 22, 8, tzinfo=ROME_SUMMER),
+        ),
+    ],
+    ids=["afternoon", "one in the night"],
+)
+def test_a_pause_until_tomorrow_ends_at_eight_of_the_next_jiffin_day(
+    paused: datetime, until: datetime
+) -> None:
+    scene = Scene(start=milliseconds(paused), zone=ROME_SUMMER)
+    assert scene.reminders.pause(Pause.TOMORROW) == milliseconds(until)
+
+
+def test_a_pause_kept_in_the_settings_goes_on_after_a_restart() -> None:
+    scene = Scene(paused_until=START + HOUR_MS)
+    scene.wait(0)
+    assert scene.lists == [RemindersView((), START + HOUR_MS)]
+    assert scene.reminders.deadline == START + HOUR_MS
+    scene.create("quando apro Figma")
+    scene.model.says(FIGMA, "quando apro Figma")
+    scene.stay(FIGMA)
+    scene.until(START + HOUR_MS + DEBOUNCE_MS - 1)
+    assert scene.view.visible == ()
+    scene.wait(1)
+    assert scene.alert().created_at == START + HOUR_MS + DEBOUNCE_MS
 
 
 # After a restart
