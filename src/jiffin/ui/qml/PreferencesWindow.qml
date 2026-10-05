@@ -1,8 +1,8 @@
-// The settings window (#43): the material of Jiffin's windows, as four radio buttons. A card like
-// the creation window, on the material it sets, with an X on its title's line and no Chiudi, as
-// Windows' own Settings (ADR-0010, ADR-0023). A click applies the material at once, as there. It
-// takes the focus, on the material in use; Tab moves on, Space chooses, and Esc or the X closes
-// it. It drags from any point no control takes.
+// The settings window (#43, #84): the return pause, a number and its unit, then the material of
+// Jiffin's windows, as four radio buttons. A card like the creation window, on the material it
+// sets, with an X on its title's line and no Chiudi, as Windows' own Settings (ADR-0010,
+// ADR-0023). A change applies at once, as there. It takes the focus, on the pause; Tab moves on,
+// Space chooses, and Esc or the X closes it. It drags from any point no control takes.
 pragma ComponentBehavior: Bound
 
 import QtQuick
@@ -13,6 +13,9 @@ Window {
     id: window
 
     required property Preferences preferences
+    // The unit's list, for the settings to show with the glass: a QtObject, since PySide has no
+    // converter for the Window type of QML.
+    readonly property QtObject units: unitBox.list
 
     width: 400
     height: content.implicitHeight + 40
@@ -20,6 +23,13 @@ Window {
     title: Texts.settings
     // No button in the taskbar, as Windows' own panels: the tray icon's menu brings it back.
     flags: Qt.Tool | Qt.FramelessWindowHint
+
+    // A click in another window closes the unit's list, which belongs to this one: a window
+    // stays active while its list has the focus.
+    onActiveChanged: {
+        if (!active)
+            window.preferences.closeUnits();
+    }
 
     // As the alert: without glass, the surface is painted here; with material B, a veil goes
     // over the glass.
@@ -57,7 +67,7 @@ Window {
         x: 24
         y: 20
         width: window.width - 48
-        spacing: 16
+        spacing: 20
 
         Text {
             id: title
@@ -74,37 +84,50 @@ Window {
             lineHeightMode: Text.FixedHeight
         }
 
+        // The return pause (ADR-0021), as a number and its unit; changing the unit converts it.
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 8
 
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 0
+            Heading {
+                title: Texts.returnPause
+                hint: Texts.returnPauseHint
+            }
+            Row {
+                spacing: 8
 
-                Text {
-                    Layout.fillWidth: true
-                    text: Texts.material
-                    color: Colors.textPrimary
-                    font.family: Typography.textFont
-                    font.pixelSize: Typography.body
-                    lineHeight: Typography.bodyLine
-                    lineHeightMode: Text.FixedHeight
+                FluentNumberBox {
+                    id: pauseBox
+
+                    accessibleName: Texts.returnPause
+                    value: window.preferences.pauseValue
+                    from: window.preferences.pauseFrom
+                    to: window.preferences.pauseTo
+                    onEdited: value => window.preferences.setPause(value)
                 }
-                Text {
-                    Layout.fillWidth: true
-                    text: Texts.materialHint
-                    color: Colors.textSecondary
-                    font.family: Typography.captionFont
-                    font.pixelSize: Typography.caption
-                    lineHeight: Typography.captionLine
-                    lineHeightMode: Text.FixedHeight
-                    wrapMode: Text.Wrap
+                FluentComboBox {
+                    id: unitBox
+
+                    model: Texts.units
+                    currentIndex: window.preferences.minutes ? 1 : 0
+                    open: window.preferences.unitsOpen
+                    Accessible.name: Texts.unit
+                    onClicked: window.preferences.toggleUnits()
+                    onActivated: index => window.preferences.setMinutes(index === 1)
+                    onDismissed: window.preferences.closeUnits()
                 }
             }
-            Repeater {
-                id: choices
+        }
 
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            Heading {
+                title: Texts.material
+                hint: Texts.materialHint
+            }
+            Repeater {
                 model: window.preferences.materials
 
                 // The check follows the look, never the click: the click asks for the material,
@@ -146,20 +169,66 @@ Window {
         onClicked: window.preferences.close()
     }
 
+    // While the unit's list is open, a press anywhere in the window closes it and does nothing
+    // else, as Windows' light dismiss: the list never takes the focus, so the window hears it.
+    // It keeps the press until the button goes up, so that no drag starts.
+    MouseArea {
+        id: dismiss
+
+        anchors.fill: parent
+        visible: window.preferences.unitsOpen || dismiss.pressed
+        acceptedButtons: Qt.AllButtons
+        onPressed: window.preferences.closeUnits()
+        onWheel: window.preferences.closeUnits()
+    }
+
+    // Esc closes the unit's list first.
     Shortcut {
         sequences: [StandardKey.Cancel]
-        onActivated: window.preferences.close()
+        onActivated: {
+            if (window.preferences.unitsOpen)
+                window.preferences.closeUnits();
+            else
+                window.preferences.close();
+        }
     }
 
     Connections {
         target: window.preferences
 
         function onOpened(): void {
-            for (let index = 0; index < choices.count; ++index) {
-                const choice = choices.itemAt(index) as FluentRadioButton;
-                if (choice.checked)
-                    choice.forceActiveFocus();
-            }
+            pauseBox.forceActiveFocus();
+        }
+    }
+
+    // A setting's name, with what it does under it.
+    component Heading: ColumnLayout {
+        id: heading
+
+        property string title
+        property string hint
+
+        Layout.fillWidth: true
+        spacing: 0
+
+        Text {
+            Layout.fillWidth: true
+            text: heading.title
+            color: Colors.textPrimary
+            font.family: Typography.textFont
+            font.pixelSize: Typography.body
+            lineHeight: Typography.bodyLine
+            lineHeightMode: Text.FixedHeight
+        }
+        Text {
+            Layout.fillWidth: true
+            text: heading.hint
+            color: Colors.textSecondary
+            font.family: Typography.captionFont
+            font.pixelSize: Typography.caption
+            lineHeight: Typography.captionLine
+            lineHeightMode: Text.FixedHeight
+            wrapMode: Text.Wrap
         }
     }
 }

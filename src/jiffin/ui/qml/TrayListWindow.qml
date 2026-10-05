@@ -1,8 +1,9 @@
-// The tray list (#12, #43): what keeps Jiffin from working fully, the model file on its way
-// first, the alerts that vanished unanswered, with Fatto and Rimanda, and the active reminders,
-// with Nuovo, Modifica, Completa and Elimina. A card on the alerts' material, over the tray, with
-// an X after Nuovo (ADR-0010, ADR-0023). It takes the focus; Tab moves from button to button, and
-// Esc, the X or a click elsewhere closes it. It drags from any point no control takes.
+// The tray list (#12, #43, #84): what keeps Jiffin from working fully, the model file on its way
+// first, the alerts that vanished unanswered, with Fatto and Rimanda, the active reminders, with
+// Nuovo, Modifica, Completa and Elimina, and the return pause, with Cambia. A card on the alerts'
+// material, over the tray, with an X after Nuovo (ADR-0010, ADR-0023). It takes the focus; Tab
+// moves from button to button, and Esc, the X or a click elsewhere closes it. It drags from any
+// point no control takes. Rimanda opens the alert's menu, a window of its own.
 // Bound: the rows take their data as required properties, and reach the list by its id.
 pragma ComponentBehavior: Bound
 
@@ -16,6 +17,12 @@ Window {
 
     required property TrayList trayList
     required property FirstRun firstRun
+    required property Preferences preferences
+    // Rimanda's menu, for the list to show and hide: a QtObject, since PySide has no converter
+    // for the Window type of QML.
+    readonly property QtObject menu: snoozeMenu
+    // The Rimanda the menu opens from, in the window: taken at each click, as the list scrolls.
+    property rect menuButton
 
     // Scrolls the list to the item Tab has reached.
     function reveal(item: Item): void {
@@ -25,6 +32,15 @@ Window {
             scroller.contentY = Math.max(0, top);
         else if (bottom > scroller.contentY + scroller.height)
             scroller.contentY = Math.min(scroller.contentHeight - scroller.height, bottom - scroller.height);
+    }
+
+    // Rimanda on an unseen alert: the menu opens under the button, on its first item when the
+    // keyboard reached the button, or closes.
+    function toggleMenu(alertId: int, button: T.AbstractButton): void {
+        const corner = button.mapToItem(null, 0, 0);
+        window.menuButton = Qt.rect(corner.x, corner.y, button.width, button.height);
+        snoozeMenu.current = button.visualFocus ? 0 : -1;
+        window.trayList.toggleMenu(alertId);
     }
 
     width: 368
@@ -197,24 +213,9 @@ Window {
                             id: card
 
                             required property int alertId
-                            required property string condition
                             required property string action
+                            required property string line
                             required property bool fresh
-                            required property int daysAgo
-                            required property int day
-                            required property int month
-                            required property string time
-                            property bool snoozing: false
-
-                            // Rimanda opens its choices in the card, and Indietro closes them;
-                            // the focus goes along when it was on the button.
-                            function swap(snoozing: bool, from: T.AbstractButton, to: T.AbstractButton): void {
-                                const focused = from.activeFocus;
-                                const reason = from.visualFocus ? Qt.TabFocusReason : Qt.OtherFocusReason;
-                                card.snoozing = snoozing;
-                                if (focused)
-                                    to.forceActiveFocus(reason);
-                            }
 
                             Layout.fillWidth: true
                             Layout.leftMargin: 8
@@ -251,15 +252,15 @@ Window {
                                         BodyText {
                                             text: card.action
                                         }
+                                        // Its condition without the time, and when it appeared.
                                         CaptionText {
-                                            text: Texts.appeared(card.condition, card.daysAgo, card.day, card.month, card.time)
+                                            text: card.line
                                         }
                                     }
                                 }
                                 Row {
                                     Layout.leftMargin: 17
                                     spacing: 8
-                                    visible: !card.snoozing
 
                                     FluentButton {
                                         kind: FluentButton.Accent
@@ -267,52 +268,23 @@ Window {
                                         focusPolicy: Qt.StrongFocus
                                         onClicked: window.trayList.done(card.alertId)
                                     }
+                                    // The alert's menu (#84), with the same items.
                                     FluentButton {
                                         id: snoozeButton
+
+                                        readonly property bool menuOpen: window.trayList.menuFor === card.alertId
 
                                         text: Texts.snooze
                                         chevron: true
                                         focusPolicy: Qt.StrongFocus
-                                        onClicked: card.swap(true, snoozeButton, backButton)
+                                        onClicked: window.toggleMenu(card.alertId, snoozeButton)
+                                        // Tab moving on closes the menu; the window losing the
+                                        // focus closes the whole list.
+                                        onActiveFocusChanged: {
+                                            if (!activeFocus && menuOpen && focusReason !== Qt.ActiveWindowFocusReason)
+                                                window.trayList.closeMenu();
+                                        }
                                     }
-                                }
-                                Row {
-                                    Layout.leftMargin: 17
-                                    spacing: 8
-                                    visible: card.snoozing
-
-                                    FluentButton {
-                                        id: backButton
-
-                                        kind: FluentButton.Subtle
-                                        glyph: "" // Back
-                                        Accessible.name: Texts.back
-                                        focusPolicy: Qt.StrongFocus
-                                        onClicked: card.swap(false, backButton, snoozeButton)
-                                    }
-                                    FluentButton {
-                                        text: Texts.quarterHour
-                                        focusPolicy: Qt.StrongFocus
-                                        onClicked: window.trayList.snoozeQuarterHour(card.alertId)
-                                    }
-                                    FluentButton {
-                                        text: Texts.hour
-                                        focusPolicy: Qt.StrongFocus
-                                        onClicked: window.trayList.snoozeHour(card.alertId)
-                                    }
-                                    FluentButton {
-                                        text: Texts.tomorrow
-                                        focusPolicy: Qt.StrongFocus
-                                        onClicked: window.trayList.snoozeTomorrow(card.alertId)
-                                    }
-                                }
-                            }
-
-                            Connections {
-                                target: window.trayList
-
-                                function onOpened(): void {
-                                    card.snoozing = false;
                                 }
                             }
                         }
@@ -336,13 +308,16 @@ Window {
                             id: row
 
                             required property int reminderId
-                            required property string condition
                             required property string action
+                            required property string remainder
+                            required property string when
+                            required property bool perennial
+                            required property string endedOn
                             required property int returnsIn
                             required property string returnsAt
                             required property bool returnsTomorrow
                             required property int silences
-                            readonly property string status: Texts.status(returnsIn, returnsAt, returnsTomorrow, silences)
+                            readonly property string status: Texts.status(endedOn, returnsIn, returnsAt, returnsTomorrow, silences)
                             // Elimina asks first: the reminder goes for good, with all it knows.
                             property bool confirming: false
 
@@ -368,19 +343,36 @@ Window {
                                 spacing: 4
 
                                 // Completa: a circle, as in Microsoft To Do; the check shows under
-                                // the mouse. It keeps its place while Elimina asks.
-                                FluentButton {
-                                    id: completeButton
-
+                                // the mouse. A reminder of every time never completes: the arrows
+                                // of its alert, an icon (#84). Both keep their place while
+                                // Elimina asks.
+                                Item {
                                     Layout.alignment: Qt.AlignTop
-                                    opacity: row.confirming ? 0 : 1
-                                    enabled: !row.confirming
-                                    kind: FluentButton.Subtle
-                                    glyph: completeButton.hovered ? "" : "" // Completed, CircleRing
-                                    Accessible.name: Texts.complete
-                                    Accessible.description: row.action
-                                    focusPolicy: Qt.StrongFocus
-                                    onClicked: window.trayList.complete(row.reminderId)
+                                    implicitWidth: 32
+                                    implicitHeight: 32
+
+                                    FluentButton {
+                                        id: completeButton
+
+                                        visible: !row.perennial
+                                        opacity: row.confirming ? 0 : 1
+                                        enabled: !row.confirming
+                                        kind: FluentButton.Subtle
+                                        glyph: completeButton.hovered ? "" : "" // Completed, CircleRing
+                                        Accessible.name: Texts.complete
+                                        Accessible.description: row.action
+                                        focusPolicy: Qt.StrongFocus
+                                        onClicked: window.trayList.complete(row.reminderId)
+                                    }
+                                    Text {
+                                        anchors.centerIn: parent
+                                        visible: row.perennial && !row.confirming
+                                        text: "" // RepeatAll
+                                        color: Colors.textSecondary
+                                        font.family: Typography.iconFont
+                                        font.pixelSize: Typography.icon
+                                        Accessible.name: Texts.everyTime
+                                    }
                                 }
                                 ColumnLayout {
                                     Layout.fillWidth: true
@@ -391,9 +383,29 @@ Window {
                                     BodyText {
                                         text: row.action
                                     }
+                                    // The condition without its time: a reminder with only a time
+                                    // has none.
                                     CaptionText {
-                                        visible: !row.confirming
-                                        text: row.condition
+                                        visible: !row.confirming && row.remainder.length > 0
+                                        text: row.remainder
+                                    }
+                                    // The time understood, written for today (ADR-0020).
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        visible: !row.confirming && row.when.length > 0
+                                        spacing: 6
+
+                                        Text {
+                                            Layout.alignment: Qt.AlignTop
+                                            Layout.topMargin: 2
+                                            text: "" // Clock
+                                            color: Colors.textSecondary
+                                            font.family: Typography.iconFont
+                                            font.pixelSize: Typography.caption
+                                        }
+                                        CaptionText {
+                                            text: row.when
+                                        }
                                     }
                                     CaptionText {
                                         visible: !row.confirming && row.status.length > 0
@@ -472,13 +484,94 @@ Window {
                         wrapMode: Text.Wrap
                     }
                 }
+
+                // Where the list ends, after a thin line: the return pause (#84), and Cambia,
+                // which opens the settings.
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.topMargin: -4
+                    implicitHeight: 1
+                    color: Colors.controlStroke
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 16
+                    Layout.rightMargin: 12
+                    Layout.topMargin: -6
+                    spacing: 8
+
+                    CaptionText {
+                        Layout.alignment: Qt.AlignVCenter
+                        text: Texts.returnsAfter(window.preferences.returnPause)
+                    }
+                    FluentButton {
+                        kind: FluentButton.Subtle
+                        text: Texts.change
+                        focusPolicy: Qt.StrongFocus
+                        onClicked: window.trayList.settings()
+                    }
+                }
             }
         }
     }
 
+    // While Rimanda's menu is open, a press anywhere in the list closes it and does nothing
+    // else, as Windows' light dismiss: the menu never takes the focus, so the list hears it. It
+    // keeps the press until the button goes up, so that no drag starts; the wheel closes it too.
+    MouseArea {
+        id: dismiss
+
+        anchors.fill: parent
+        visible: window.trayList.menuFor !== 0 || dismiss.pressed
+        acceptedButtons: Qt.AllButtons
+        onPressed: window.trayList.closeMenu()
+        onWheel: window.trayList.closeMenu()
+    }
+
+    // Esc closes the menu first.
     Shortcut {
         sequences: [StandardKey.Cancel]
-        onActivated: window.trayList.close()
+        onActivated: {
+            if (window.trayList.menuFor !== 0)
+                window.trayList.closeMenu();
+            else
+                window.trayList.close();
+        }
+    }
+    // While the menu is open its Rimanda keeps the focus, and these keys go to the menu before
+    // the button, as in Windows' menus: Up and Down move over its items, and Space or Enter
+    // pick one. Before a key moves, Space and Enter are a click on Rimanda, which closes it.
+    Shortcut {
+        sequences: ["Down"]
+        enabled: window.trayList.menuFor !== 0
+        onActivated: snoozeMenu.move(1)
+    }
+    Shortcut {
+        sequences: ["Up"]
+        enabled: window.trayList.menuFor !== 0
+        onActivated: snoozeMenu.move(-1)
+    }
+    Shortcut {
+        sequences: ["Space", "Return", "Enter"]
+        enabled: window.trayList.menuFor !== 0 && snoozeMenu.current >= 0
+        onActivated: snoozeMenu.trigger()
+    }
+
+    // Under its Rimanda, on its left edge and 4 px down, as Windows' menus; over it, 4 px up,
+    // where the work area would end first.
+    AlertMenu {
+        id: snoozeMenu
+
+        readonly property real below: window.y + window.menuButton.y + window.menuButton.height + 4
+
+        nextTime: window.trayList.nextTime
+        x: window.x + Math.round(window.menuButton.x)
+        y: Math.round(below + height <= window.trayList.areaBottom ? below : window.y + window.menuButton.y - 4 - height)
+        onSnoozeNextTime: window.trayList.snoozeNextTime()
+        onSnoozeQuarterHour: window.trayList.snoozeQuarterHour()
+        onSnoozeHour: window.trayList.snoozeHour()
+        onSnoozeTomorrow: window.trayList.snoozeTomorrow()
+        onNotHere: window.trayList.notHere()
     }
 
     // A section's name: "Non visti", "Attivi".
@@ -507,7 +600,7 @@ Window {
         elide: Text.ElideRight
     }
 
-    // A condition or a status line.
+    // A condition, a time or a status line.
     component CaptionText: Text {
         Layout.fillWidth: true
         color: Colors.textSecondary

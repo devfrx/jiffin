@@ -201,3 +201,17 @@ def test_the_windows_places_are_kept_and_put_back_at_the_start(qtbot: QtBot, des
 
     with closing(Store.open(desk.folders.database)) as store:
         assert store.setting("places") == {"settings": [50, 60], "creation": [30, 40]}
+
+
+def test_the_return_pause_is_kept_and_put_back_at_the_start(desk: Desk) -> None:
+    with closing(Store.open(desk.folders.database)) as store:
+        store.set_setting("return_pause", 300)
+    desk.jiffin.start()
+    preferences = desk.jiffin.interface.preferences
+    assert preferences.return_pause == 300
+    preferences.open()
+    preferences.setPause(10)  # five minutes show as minutes: ten of them
+    desk.jiffin.close()
+
+    with closing(Store.open(desk.folders.database)) as store:
+        assert store.setting("return_pause") == 600

@@ -56,6 +56,8 @@ class Kept:
     material: str | None
     """The material's letter, if one was chosen."""
     places: dict[str, tuple[int, int]]
+    return_pause: int
+    """In seconds: the one kept, or the default."""
 
 
 class Source(Protocol):
@@ -213,20 +215,23 @@ class Worker:
             now = self._clock.now()
             self._store.cleanup(now)
             self._cleanup_at = now + CLEANUP_EVERY_MS
+            return_pause = _return_pause(self._store.setting(RETURN_PAUSE))
             self._core = Reminders(
                 self._supervisor,
                 self._clock,
                 self._on_alerts,
                 self._on_reminders,
                 self._store.load(),
-                return_pause=_return_pause(self._store.setting(RETURN_PAUSE)),
+                return_pause=return_pause,
             )
             material = self._store.setting(MATERIAL)
             places = self._store.setting(PLACES)
         except BaseException:
             self._store.close()
             raise
-        return Kept(material if isinstance(material, str) else None, _places(places))
+        return Kept(
+            material if isinstance(material, str) else None, _places(places), return_pause // 1000
+        )
 
     def _turn(self, command: Command) -> None:
         """One command, then whatever deadline has come; then what `core` changed is saved. A

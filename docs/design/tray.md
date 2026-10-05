@@ -3,9 +3,11 @@
 How Jiffin lives in the tray, in `jiffin.ui`. `ui/tray.py` draws the icon,
 `ui/tray_list.py` holds the list's state and `ui/rows.py` its rows;
 `qml/TrayIcon.qml` and `qml/TrayListWindow.qml` show them with our own
-`FluentButton`, `FluentInfoBar` and `FluentScrollBar`. The behaviour comes
-from decision ticket [#12](https://github.com/devfrx/jiffin/issues/12) and
-[#43](https://github.com/devfrx/jiffin/issues/43), the look from
+`FluentButton`, `FluentInfoBar` and `FluentScrollBar`, and the alert's
+`AlertMenu`. The behaviour comes from decision tickets
+[#12](https://github.com/devfrx/jiffin/issues/12),
+[#43](https://github.com/devfrx/jiffin/issues/43) and
+[#84](https://github.com/devfrx/jiffin/issues/84), the look from
 [ADR-0010](../adr/0010-windows-11-look-own-components.md); the
 [mockup](mockups/tray.html) shows the list in light and dark.
 
@@ -36,10 +38,11 @@ stateDiagram-v2
     Hidden --> Open : a click on the icon
     Open --> Hidden : Esc, the X, or a click on the icon or elsewhere
     Open --> Hidden : Nuovo or Modifica, which open the creation window
+    Open --> Hidden : Cambia, which opens the settings
     state Open {
         [*] --> Rows
-        Rows --> Snooze : Rimanda, on an unseen alert
-        Snooze --> Rows : Indietro
+        Rows --> Menu : Rimanda, on an unseen alert
+        Menu --> Rows : an item, Rimanda again, a press in the list, Esc, Tab
         Rows --> Question : the trash, on an active reminder
         Question --> Rows : Annulla
     }
@@ -67,20 +70,57 @@ stateDiagram-v2
     problem and Dettagli ([first run](first-run.md)); the engine (below); and
     the browsers whose address cannot be read. The owner chose the line on
     screen, over WinUI's yellow box and a neutral card;
-  - **Non visti**: the alerts that vanished unanswered, newest first, each with
-    its condition, when it appeared, Fatto and Rimanda; Rimanda opens 15 min,
-    1 ora and Domani inside the card;
+  - **Non visti**: the alerts that vanished unanswered, newest first, one per
+    reminder ([ADR-0021](../adr/0021-one-alert-per-unit.md)), each with its
+    condition without the time and when it appeared ("Quando apro Claude, ieri
+    alle 23:12"; with only a time, only when: "Ieri alle 15:00"), Fatto and
+    Rimanda, which opens the alert's menu (below);
   - **Attivi**: the active reminders, newest first, or "Nessun promemoria
-    attivo.". A circle at the left completes, as in Microsoft To Do; the pencil
-    opens the creation window on the reminder; the trash asks first,
+    attivo.". A circle at the left completes, as in Microsoft To Do; a
+    reminder of every time ("Ogni volta") has the arrows of its alert there
+    instead, RepeatAll, an icon and not a button, since it never completes. The
+    pencil opens the creation window on the reminder; the trash asks first,
     "Eliminare il promemoria per sempre?", with Annulla before Elimina. Under
-    the action, its condition and, when useful, its snooze ("torna tra 12 min")
-    and the places "Non qui" silenced it in. The owner chose the rows on screen.
+    the action, its condition without the time; then the time understood, by
+    a clock, written for today's Jiffin day ("Ogni giorno dalle 23:00 alle
+    04:00", "Oggi, giovedì 1 ottobre, alle 15:00",
+    [ADR-0020](../adr/0020-read-the-time-in-core.md)): a reminder with only a
+    time has only that line, one whose time was not understood only its
+    condition, whole. Then, when useful: "Periodo finito il 30 settembre", once
+    its period is over (`units.ended`), its snooze ("torna tra 12 min") and the
+    places "Non qui" silenced it in. The owner chose the rows on screen;
+  - after a thin line, the return pause: "Gli avvisi tornano se riprendi una
+    cosa dopo almeno 2 min.", in minutes when it is whole minutes, as the
+    settings show it, else in seconds ("90 s"), and **Cambia**, a subtle button
+    that opens the settings, where it is set. The owner chose it on screen, over
+    showing the pause only in the creation window.
 - Answers go to `core`, and the list changes when `core`'s next view comes. A
-  row that stays keeps its place, its focus and an open panel or question while
-  others come and go; opening the list closes those left open.
+  row that stays keeps its place, its focus and an open question while others
+  come and go; opening the list closes those left open.
 - While it is open, the list reads the clock again every 10 s, for the
-  snoozes' minutes.
+  snoozes' minutes and for the time's "Oggi".
+
+## Rimanda's menu
+
+- An unseen alert's Rimanda opens the alert's own menu
+  ([overlay](overlay.md)), with the same items in the same order: Alla
+  prossima volta, Tra 15 minuti, Tra un'ora, Domani, a line, Non qui. Alla
+  prossima volta shows only when the reminder has a next unit, asked of
+  `core` (`next_occasion`) when the menu opens.
+- A window of its own on the glass, which never takes the focus: under the
+  button, on its left edge and 4 px down, or over it, 4 px up, when it would
+  go past the bottom of the work area, as Windows' menus do. The list sits
+  over the tray, so the menu often opens upwards.
+- An item answers for that alert, and the menu closes. A press anywhere in the
+  list closes it and does nothing else, as WinUI's light dismiss: a second
+  click on Rimanda, or a press on another button, only closes it, and a drag
+  does not start. So do the wheel, Esc, which closes the menu before the list,
+  Tab, the alert leaving the list, and the list closing.
+- The list keeps the focus, on Rimanda, and its keys go to the menu before the
+  button: Up and Down move over the items, round from the last to the first,
+  with WinUI's focus ring; Space or Enter pick one. Opened by the keyboard, the
+  menu starts on its first item; opened under the mouse, on none, and Space or
+  Enter there are a click on Rimanda, which closes it.
 
 ## Seen
 
@@ -106,9 +146,12 @@ engine's supervisor ([#44](https://github.com/devfrx/jiffin/issues/44)):
 ## Trying it
 
 `uv run python -m jiffin.ui --unreadable chrome.exe --engine failures` puts
-the icon in the tray with its "!", and its list with both lines; Riprova
-brings the engine back, and every answer is printed. The unit tests draw the
-icon and drive the list on Qt's offscreen platform, which has no tray
-(`tests/unit/ui/test_tray.py`, `test_tray_list.py` and `test_rows.py`). No
-integration test clicks the icon, since Windows 11 puts a new one in the
-overflow.
+the icon in the tray with its "!", and its list with both lines, reminders
+with a time, a perennial one and a period over; an alert left to vanish comes
+into the list after 10 s, with its menu. Riprova brings the engine back, and
+every answer is printed. The unit tests draw the icon and drive the list on
+Qt's offscreen platform, which has no tray (`tests/unit/ui/test_tray.py`,
+`test_tray_list.py` and `test_rows.py`); there every window takes the focus as
+it shows, so the tests give it back to the list as Windows never takes it
+(`focus_stays`). No integration test clicks the icon, since Windows 11 puts a
+new one in the overflow.

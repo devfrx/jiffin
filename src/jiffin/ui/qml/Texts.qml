@@ -14,10 +14,6 @@ QtObject {
     readonly property string inHour: "Tra un'ora"
     readonly property string tomorrow: "Domani"
     readonly property string notHere: "Non qui"
-    // Rimanda in the tray list's unseen cards, until it becomes the alert's menu (#84)
-    readonly property string back: "Indietro"
-    readonly property string quarterHour: "15 min"
-    readonly property string hour: "1 ora"
 
     // The creation window
     readonly property string newReminder: "Nuovo promemoria"
@@ -34,6 +30,13 @@ QtObject {
 
     // The settings window
     readonly property string settings: "Impostazioni"
+    readonly property string returnPause: "Pausa di ritorno"
+    readonly property string returnPauseHint: "Se torni a una cosa dopo almeno questo tempo, i suoi promemoria suonano di nuovo. Da 10 secondi in su."
+    readonly property string unit: "Unità"
+    // The return pause's units, by Preferences.minutes: false, then true.
+    readonly property list<string> units: ["secondi", "minuti"]
+    readonly property string increase: "Aumenta"
+    readonly property string decrease: "Diminuisci"
     readonly property string material: "Materiale"
     readonly property string materialHint: "Per gli avvisi, l'elenco e le altre finestre di Jiffin."
     // By the material's letter (ADR-0010): its name, and what it looks like.
@@ -127,7 +130,7 @@ QtObject {
     readonly property string remove: "Elimina"
     readonly property string removeQuestion: "Eliminare il promemoria per sempre?"
     readonly property string retry: "Riprova"
-    readonly property var months: ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"]
+    readonly property string change: "Cambia"
     readonly property var browsers: ({
             "vivaldi.exe": "Vivaldi",
             "chrome.exe": "Chrome",
@@ -156,19 +159,12 @@ QtObject {
         return when + " è già passato. Per salvare, scrivi un giorno o un'ora che deve ancora venire.";
     }
 
-    // Under an unseen alert: its condition, and when it appeared.
-    function appeared(condition: string, daysAgo: int, day: int, month: int, time: string): string {
-        let when = "alle " + time;
-        if (daysAgo === 1)
-            when = "ieri " + when;
-        else if (daysAgo > 1)
-            when = ([1, 8, 11].includes(day) ? "l'" : "il ") + day + " " + months[month - 1] + " " + when;
-        return condition + ", " + when;
-    }
-
-    // Under an active reminder, when useful: its snooze, and the places "Non qui" silenced it in.
-    function status(returnsIn: int, returnsAt: string, tomorrow: bool, silences: int): string {
+    // Under an active reminder, when useful: its period over (#91), "il 20 ottobre", its snooze,
+    // and the places "Non qui" silenced it in.
+    function status(endedOn: string, returnsIn: int, returnsAt: string, tomorrow: bool, silences: int): string {
         const parts = [];
+        if (endedOn.length > 0)
+            parts.push("Periodo finito " + endedOn);
         if (returnsIn > 0)
             parts.push("Rimandato: torna tra " + returnsIn + " min");
         else if (returnsAt.length > 0)
@@ -176,6 +172,13 @@ QtObject {
         if (silences > 0)
             parts.push("Taciuto in " + silences + (silences === 1 ? " posto" : " posti"));
         return parts.join(" · ");
+    }
+
+    // At the bottom of the tray list (#84): the return pause, in minutes when it is whole
+    // minutes, as the settings show it, else in seconds.
+    function returnsAfter(seconds: int): string {
+        const pause = seconds % 60 === 0 ? seconds / 60 + " min" : seconds + " s";
+        return "Gli avvisi tornano se riprendi una cosa dopo almeno " + pause + ".";
     }
 
     // The browsers whose address cannot be read, by app: "Chrome e Brave: …".
