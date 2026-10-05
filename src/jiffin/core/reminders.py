@@ -9,6 +9,9 @@ calls `take_records`.
 A reminder rings at most once per unit (`units`): the instance of its time, or the occasion. An
 occasion starts with a true stretch, a stable context judged true while its time holds, that
 begins at least the return pause after the previous one ended.
+
+A pause from the tray is away until it ends (ADR-0024): nothing is in front for the reminders,
+whatever the capture sees, and its end is a return.
 """
 
 import itertools
@@ -16,6 +19,7 @@ from collections import Counter
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from datetime import datetime, time, timedelta
+from enum import Enum, auto
 
 from jiffin.core.alerts import Alerts, AlertsView
 from jiffin.core.clock import Clock
@@ -62,6 +66,20 @@ LONGEST_RETURN_PAUSE_MS = 2 * HOUR_MS
 TOMORROW_AT = time(8)
 
 
+def tomorrow(clock: Clock, now: int) -> int:
+    """08:00 of the next Jiffin day: Rimanda's "Domani", and the pause's."""
+    day = jiffin_day(clock.local(now)) + timedelta(days=1)
+    return clock.instant(day, TOMORROW_AT)
+
+
+class Pause(Enum):
+    """Sospendi, in the tray icon's menu (ADR-0024)."""
+
+    HOUR = auto()
+    TOMORROW = auto()
+    """Until `tomorrow`, as Rimanda's "Domani"."""
+
+
 @dataclass(frozen=True, slots=True)
 class ActiveReminder:
     """A reminder not completed yet, as the tray list shows it."""
@@ -77,6 +95,8 @@ class RemindersView:
 
     active: tuple[ActiveReminder, ...]
     """Newest first."""
+    paused_until: int | None = None
+    """When the pause from the tray ends; None while there is none."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,11 +138,13 @@ class Reminders:
         *,
         threshold: float = THRESHOLD,
         return_pause: int = RETURN_PAUSE_MS,
+        paused_until: int | None = None,
     ) -> None:
         """Start from what `store` saved, or from nothing; occasions start afresh (ADR-0021).
 
         Only the harness judges at another threshold, to choose the next one (ADR-0013). The
-        return pause is in milliseconds.
+        return pause is in milliseconds. `paused_until` is the end of a pause kept in the
+        settings, which goes on after a restart (ADR-0024).
         """
         saved = saved or Snapshot()
         self._model = model
@@ -151,9 +173,13 @@ class Reminders:
         }
         self._edges: dict[int, int] = {}
         """While a context is stable: when the time of each reminder starts or ends next."""
+        self._paused_until = paused_until
+        self._seen: Context | None = None
+        """The context in front as the capture last saw it, paused or not: the pause's end
+        brings it back."""
         self._records: list[Record] = []
         self._alerts_changed = bool(saved.unseen)
-        self._reminders_changed = bool(saved.reminders)
+        self._reminders_changed = bool(saved.reminders) or paused_until is not None
         self._reminder_ids = itertools.count(saved.last_ids.reminder + 1)
         self._revision_ids = itertools.count(saved.last_ids.revision + 1)
         self._evaluation_ids = itertools.count(saved.last_ids.evaluation + 1)
@@ -178,21 +204,20 @@ class Reminders:
 
     @property
     def deadline(self) -> int | None:
-        """When `poll` has something to do: a context becomes stable, a snooze ends, or the time
-        of a reminder starts or ends while a context is stable."""
+        """When `poll` has something to do: a context becomes stable, a snooze or the pause ends,
+        or the time of a reminder starts or ends while a context is stable."""
         deadlines = [*self._snooze_deadlines.values(), *self._edges.values()]
         if self._debounce.deadline is not None:
             deadlines.append(self._debounce.deadline)
+        if self._paused_until is not None:
+            deadlines.append(self._paused_until)
         return min(deadlines, default=None)
 
     def observe(self, observation: Observation) -> None:
         self._catch_up(observation.at)
-        stable = self._debounce.stable
-        if stable is not None and observation.context != stable.context:
-            self._leave(stable, observation.at)
-        self._debounce.observe(observation)
-        if self._debounce.stable is None:
-            self._edges = {}
+        self._seen = observation.context
+        if self._paused_until is None:
+            self._in_front(observation)
         self._publish()
 
     def poll(self) -> None:
@@ -209,6 +234,29 @@ class Reminders:
         else:
             self._evaluate(stable.context, stable.context_since, None)
             self._plan()
+        self._publish()
+
+    # The pause from the tray (ADR-0024)
+
+    def pause(self, pause: Pause) -> int:
+        """Sospendi: from now until the pause ends, the user is away. Return when it ends, for
+        the settings to keep."""
+        now = self._clock.now()
+        self._catch_up(now)
+        if self._paused_until is None:
+            self._in_front(Observation(now, None))
+        until = now + HOUR_MS if pause is Pause.HOUR else tomorrow(self._clock, now)
+        self._paused_until = until
+        self._reminders_changed = True
+        self._publish()
+        return until
+
+    def resume(self) -> None:
+        """Riprendi: back now, as after any absence (ADR-0021)."""
+        now = self._clock.now()
+        self._catch_up(now)
+        if self._paused_until is not None:
+            self._end_pause(now)
         self._publish()
 
     # Commands from the interface. The interface does not wait for them, so a command about a
@@ -369,6 +417,9 @@ class Reminders:
     def _catch_up(self, until: int) -> None:
         """Handle every deadline up to `until`, in order."""
         while (deadline := self.deadline) is not None and deadline <= until:
+            if deadline == self._paused_until:
+                self._end_pause(deadline)
+                continue
             if deadline == self._debounce.deadline:
                 request = self._debounce.poll(deadline)
                 if request is not None:
@@ -392,6 +443,21 @@ class Reminders:
             if stable is not None:
                 self._evaluate(stable.context, stable.context_since, due)
                 self._plan(due, after=max(deadline, self._clock.now()))
+
+    def _in_front(self, observation: Observation) -> None:
+        """The context in front for the reminders: the capture's, or nothing while paused."""
+        stable = self._debounce.stable
+        if stable is not None and observation.context != stable.context:
+            self._leave(stable, observation.at)
+        self._debounce.observe(observation)
+        if self._debounce.stable is None:
+            self._edges = {}
+
+    def _end_pause(self, at: int) -> None:
+        """The pause is over: what the capture sees is in front again."""
+        self._paused_until = None
+        self._reminders_changed = True
+        self._in_front(Observation(at, self._seen))
 
     def _leave(self, stable: EvaluationRequest, at: int) -> None:
         """The stable context left the foreground: its true stretches end."""
@@ -721,8 +787,7 @@ class Reminders:
             case Snooze.HOUR:
                 return now + HOUR_MS
             case Snooze.TOMORROW:
-                tomorrow = jiffin_day(self._clock.local(now)) + timedelta(days=1)
-                return self._clock.instant(tomorrow, TOMORROW_AT)
+                return tomorrow(self._clock, now)
 
     def _publish(self) -> None:
         if self._alerts_changed:
@@ -741,5 +806,6 @@ class Reminders:
                 ActiveReminder(reminder, silences[reminder.id])
                 for reminder in newest_first
                 if reminder.completed_at is None
-            )
+            ),
+            self._paused_until,
         )

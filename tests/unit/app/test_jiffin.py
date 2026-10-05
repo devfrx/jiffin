@@ -11,6 +11,7 @@ import sqlite3
 import sys
 from collections.abc import Callable, Iterator
 from contextlib import closing
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -26,6 +27,7 @@ from jiffin.core.clock import Clock, SimulatedClock
 from jiffin.core.context import Context, Observation
 from jiffin.core.debounce import DEBOUNCE_MS
 from jiffin.core.records import Answer, Outcome
+from jiffin.core.reminders import HOUR_MS
 from jiffin.store.folders import Folders
 from jiffin.store.store import Log, Store
 from jiffin.ui import win32
@@ -201,6 +203,26 @@ def test_the_windows_places_are_kept_and_put_back_at_the_start(qtbot: QtBot, des
 
     with closing(Store.open(desk.folders.database)) as store:
         assert store.setting("places") == {"settings": [50, 60], "creation": [30, 40]}
+
+
+def test_the_pause_from_the_tray_reaches_core_and_the_settings_until_riprendi(
+    qtbot: QtBot, desk: Desk
+) -> None:
+    desk.jiffin.start()
+    interface = desk.jiffin.interface
+    interface.tray.pauseHour()
+    qtbot.waitUntil(lambda: bool(interface.tray.property("paused")))
+    assert interface.tray_list.property("pausedAt") == f"{desk.clock.local(START + HOUR_MS):%H:%M}"
+    interface.tray_list.resume()
+    qtbot.waitUntil(lambda: not interface.tray.property("paused"))
+    assert interface.tray_list.property("pausedAt") == ""
+    interface.tray.pauseTomorrow()
+    qtbot.waitUntil(lambda: bool(interface.tray.property("paused")))
+    desk.jiffin.close()
+
+    with closing(Store.open(desk.folders.database)) as store:
+        tomorrow = datetime(2026, 9, 22, 8, tzinfo=UTC)
+        assert store.setting("paused_until") == int(tomorrow.timestamp() * 1000)
 
 
 def test_the_return_pause_is_kept_and_put_back_at_the_start(desk: Desk) -> None:

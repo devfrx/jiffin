@@ -1,7 +1,7 @@
-"""The tray list: what keeps Jiffin from working fully, the alerts that vanished unanswered, the
-active reminders and the return pause (#12, #43, #84, ADR-0010). The model file on its way is one
-of the first: its line shows the download or the problem, and Dettagli opens the first-run
-window.
+"""The tray list: the pause from the tray, what keeps Jiffin from working fully, the alerts that
+vanished unanswered, the active reminders and the return pause (#12, #43, #84, ADR-0010,
+ADR-0024). The model file on its way is one of the first: its line shows the download or the
+problem, and Dettagli opens the first-run window.
 
 A card on the alerts' material, at the bottom right of the screen over the tray. The tray icon
 opens it, and it takes the focus; Esc, its X or a click elsewhere closes it. It drags, and opens
@@ -106,6 +106,7 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         commands: Commands,
         writer: Writer,
         retry: Callable[[], None],
+        resume: Callable[[], None],
         first_run: FirstRun,
         preferences: Preferences,
         glass: Glass,
@@ -117,6 +118,7 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         self._commands = commands
         self._writer = writer
         self._retry = retry
+        self._resume = resume
         self._first_run = first_run
         self._preferences = preferences
         self._glass = glass
@@ -125,6 +127,8 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         self._reminders = RemindersView(())
         self._unreadable: list[str] = []
         self._engine = TrayList.Engine.WORKING
+        self._paused = ("", False)
+        """When the pause ends, "15:30", and whether that is tomorrow; "" while not paused."""
         self._fresh: set[int] = set()
         """The unseen alerts the open list shows for the first time: they keep their dot."""
         self._max_height = 0
@@ -223,6 +227,15 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
     @Property(int, notify=changed)
     def engine(self) -> int:
         return self._engine.value
+
+    @Property(str, notify=changed)
+    def pausedAt(self) -> str:
+        """When the pause from the tray ends, "15:30"; empty while there is none (ADR-0024)."""
+        return self._paused[0]
+
+    @Property(bool, notify=changed)
+    def pausedTomorrow(self) -> bool:
+        return self._paused[1]
 
     @Property(int, notify=changed)
     def maxHeight(self) -> int:
@@ -326,6 +339,11 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         self._retry()
 
     @Slot()
+    def resume(self) -> None:
+        """Riprendi, on the pause's line."""
+        self._resume()
+
+    @Slot()
     def retryModel(self) -> None:
         self._first_run.retry()
 
@@ -380,6 +398,12 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
     def _fill(self) -> None:
         now = self._clock.now()
         local = self._clock.local(now)
+        until = self._reminders.paused_until
+        end = None if until is None else self._clock.local(until)
+        paused = ("", False) if end is None else (f"{end:%H:%M}", end.date() > local.date())
+        if paused != self._paused:
+            self._paused = paused
+            self.changed.emit()
         self._unseen.replace(
             [self._unseen_row(alert, local.date()) for alert in self._alerts.unseen]
         )

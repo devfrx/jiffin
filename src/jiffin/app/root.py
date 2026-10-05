@@ -26,6 +26,7 @@ from jiffin.app.worker import QueuedCore, Source, Worker
 from jiffin.client.model_file import MODEL, PinnedFile
 from jiffin.core.clock import Clock, SystemClock
 from jiffin.core.context import Observation
+from jiffin.core.reminders import Pause
 from jiffin.platform.capture import Capture
 from jiffin.store.folders import Folders
 from jiffin.ui.first_run import ModelFile
@@ -121,6 +122,12 @@ class Jiffin:
 
     def keep_return_pause(self, seconds: int) -> None:
         self._worker.keep_return_pause(seconds)
+
+    def pause(self, pause: Pause) -> None:
+        self._worker.pause(pause)
+
+    def resume(self) -> None:
+        self._worker.resume()
 
 
 def main() -> None:

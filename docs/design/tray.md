@@ -7,7 +7,8 @@ How Jiffin lives in the tray, in `jiffin.ui`. `ui/tray.py` draws the icon,
 `AlertMenu`. The behaviour comes from decision tickets
 [#12](https://github.com/devfrx/jiffin/issues/12),
 [#43](https://github.com/devfrx/jiffin/issues/43) and
-[#84](https://github.com/devfrx/jiffin/issues/84), the look from
+[#84](https://github.com/devfrx/jiffin/issues/84), the pause from
+[ADR-0024](../adr/0024-hold-and-hide-alerts.md), the look from
 [ADR-0010](../adr/0010-windows-11-look-own-components.md); the
 [mockup](mockups/tray.html) shows the list in light and dark.
 
@@ -21,13 +22,21 @@ How Jiffin lives in the tray, in `jiffin.ui`. `ui/tray.py` draws the icon,
   waits for a place on screen or one vanished and the list has not shown it yet
   ([lifecycles](lifecycles.md)). A "!" at the bottom right, in WinUI's caution
   colours, while a browser's address cannot be read
-  ([ADR-0005](../adr/0005-browser-address-ui-automation.md)). Each badge is cut
-  out of the glyph with a clear ring and sits on whole pixels, sharp at 16 px.
+  ([ADR-0005](../adr/0005-browser-address-ui-automation.md)). While Jiffin is
+  paused, the same corner shows two bars on a disc in the glyph's ink, as
+  OneDrive shows its pause, instead of the "!": nothing is judged meanwhile,
+  and the list still names the browser. The owner chose it on the real
+  taskbar among four variants (#105): the pause badge, the glyph dimmed with
+  or without it, and "Zz" as Windows' Do Not Disturb. Each badge is cut out of
+  the glyph with a clear ring and sits on whole pixels, sharp at 16 px.
 - The picture reaches the tray through an image provider whose address names
-  all it needs: a change of look or state loads a new picture.
-- A click opens or closes the list. The right-click menu is Windows' own, with
-  Impostazioni, which opens the [settings](settings.md), and Esci; it is dark
-  when the apps' mode is (ADR-0010).
+  all it needs: a change of look or state loads a new picture. The tooltip is
+  "Jiffin", with "In pausa" under it while paused.
+- A click opens or closes the list. The right-click menu is Windows' own:
+  "Sospendi per un'ora" and "Sospendi fino a domani", or "Riprendi" while
+  paused ([lifecycles](lifecycles.md)); a separator; Impostazioni, which opens
+  the [settings](settings.md), and Esci. It is dark when the apps' mode is
+  (ADR-0010).
 - Windows 11 puts a new icon in the ^ overflow, until the user brings it out.
 
 ## The list
@@ -65,6 +74,9 @@ stateDiagram-v2
   - **Promemoria**, **Nuovo**, which opens the creation window
     ([creation](creation.md)), and the X, 12 px from the edge; Tab passes the X
     by, since Esc does the same;
+  - while Jiffin is paused, "In pausa fino alle 15:30." ("fino a domani alle
+    08:00." when it ends on a later day), with **Riprendi**, as the icon's menu
+    has it; the same quiet line as those below, with the news icon;
   - what keeps Jiffin from working fully, each as a quiet line where only the
     icon has colour: the model file on its way, with its bar, Riprova on a
     problem and Dettagli ([first run](first-run.md)); the engine (below); and
@@ -98,7 +110,7 @@ stateDiagram-v2
   row that stays keeps its place, its focus and an open question while others
   come and go; opening the list closes those left open.
 - While it is open, the list reads the clock again every 10 s, for the
-  snoozes' minutes and for the time's "Oggi".
+  snoozes' minutes, for the time's "Oggi" and for the pause's "domani".
 
 ## Rimanda's menu
 
@@ -148,8 +160,9 @@ engine's supervisor ([#44](https://github.com/devfrx/jiffin/issues/44)):
 `uv run python -m jiffin.ui --unreadable chrome.exe --engine failures` puts
 the icon in the tray with its "!", and its list with both lines, reminders
 with a time, a perennial one and a period over; an alert left to vanish comes
-into the list after 10 s, with its menu. Riprova brings the engine back, and
-every answer is printed. The unit tests draw the icon and drive the list on
+into the list after 10 s, with its menu. Riprova brings the engine back,
+Sospendi in the icon's menu shows the pause on the icon and in the list until
+Riprendi, and every answer is printed. The unit tests draw the icon and drive the list on
 Qt's offscreen platform, which has no tray (`tests/unit/ui/test_tray.py`,
 `test_tray_list.py` and `test_rows.py`); there every window takes the focus as
 it shows, so the tests give it back to the list as Windows never takes it

@@ -4,7 +4,8 @@ at the interface without the app.
 Answering an alert, or letting it vanish, prints what happened; a new alert comes 2 s later,
 and one that vanished waits in the tray list. Win+Shift+N opens the creation window, the tray
 icon the list, and Impostazioni in its menu the settings; what they change is printed and kept
-until the end. `--model` plays a first run: a download of a minute and its check, or a problem
+until the end. Sospendi in the same menu shows the pause on the icon and in the list, until
+Riprendi. `--model` plays a first run: a download of a minute and its check, or a problem
 first, which Riprova mends. No model and no data are needed. Esci in the tray icon's menu, or
 Ctrl+C in the terminal, ends it.
 """
@@ -27,7 +28,14 @@ from jiffin.core.clock import SystemClock
 from jiffin.core.context import Context
 from jiffin.core.meanings import read
 from jiffin.core.records import Alert, Reminder, Revision, Snooze
-from jiffin.core.reminders import HOUR_MS, MINUTE_MS, ActiveReminder, RemindersView
+from jiffin.core.reminders import (
+    HOUR_MS,
+    MINUTE_MS,
+    ActiveReminder,
+    Pause,
+    RemindersView,
+    tomorrow,
+)
 from jiffin.ui.first_run import FirstRun, ModelFile, ModelState
 from jiffin.ui.interface import Interface
 from jiffin.ui.look import Material
@@ -142,6 +150,7 @@ class Preview:
                 snoozed_until=now + minutes * MINUTE_MS if minutes else None,
             )
             self._reminders[reminder_id] = ActiveReminder(reminder, silences)
+        self._paused_until: int | None = None
         self.interface: Interface | None = None
 
     def start(self, interface: Interface) -> None:
@@ -232,6 +241,17 @@ class Preview:
     def keep_return_pause(self, seconds: int) -> None:
         print(f"pausa di ritorno {seconds} s", flush=True)
 
+    def pause(self, pause: Pause) -> None:
+        now = self._clock.now()
+        self._paused_until = now + HOUR_MS if pause is Pause.HOUR else tomorrow(self._clock, now)
+        print(f"in pausa fino a {self._clock.local(self._paused_until):%d/%m %H:%M}", flush=True)
+        QTimer.singleShot(0, self._show_reminders)
+
+    def resume(self) -> None:
+        print("Riprendi", flush=True)
+        self._paused_until = None
+        QTimer.singleShot(0, self._show_reminders)
+
     def _revision(
         self,
         reminder_id: int,
@@ -273,7 +293,7 @@ class Preview:
     def _show_reminders(self) -> None:
         assert self.interface is not None
         newest_first = sorted(self._reminders.values(), key=lambda a: a.reminder.id, reverse=True)
-        self.interface.show_reminders(RemindersView(tuple(newest_first)))
+        self.interface.show_reminders(RemindersView(tuple(newest_first), self._paused_until))
 
     def _alert(self) -> Alert:
         alert_id = next(self._ids)

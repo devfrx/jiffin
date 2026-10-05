@@ -21,7 +21,7 @@ from jiffin.core.clock import Clock, SimulatedClock, SystemClock
 from jiffin.core.context import Context, Observation
 from jiffin.core.debounce import DEBOUNCE_MS
 from jiffin.core.records import Evaluation, Record, Snooze
-from jiffin.core.reminders import RETURN_PAUSE_MS, Reminders, RemindersView
+from jiffin.core.reminders import HOUR_MS, RETURN_PAUSE_MS, Pause, Reminders, RemindersView
 from jiffin.store.migrate import StoreError
 from jiffin.store.store import RETENTION_MS, Json, Store
 
@@ -122,6 +122,12 @@ class Scene:
         """The return pause `core` holds now, in milliseconds."""
         seen: Future[int] = Future()
         self.worker.command(lambda core: seen.set_result(core.return_pause))
+        return seen.result(WAIT_S)
+
+    def deadline(self) -> int | None:
+        """When `core` has something to do next."""
+        seen: Future[int | None] = Future()
+        self.worker.command(lambda core: seen.set_result(core.deadline))
         return seen.result(WAIT_S)
 
 
@@ -303,6 +309,39 @@ def test_a_return_pause_out_of_the_range_or_of_another_shape_is_the_default(
         store.set_setting("return_pause", kept)
     assert scene.worker.start().return_pause == return_pause // 1000
     assert scene.return_pause() == return_pause
+
+
+def test_a_pause_is_kept_through_a_restart_until_riprendi(make_scene: MakeScene) -> None:
+    first = make_scene()
+    first.worker.start()
+    first.worker.pause(Pause.HOUR)
+    first.settle()
+    assert first.lists[-1].paused_until == START + HOUR_MS
+    first.worker.close()
+    with closing(Store.open(first.database)) as store:
+        assert store.setting("paused_until") == START + HOUR_MS
+    second = make_scene()
+    second.worker.start()
+    second.settle()
+    assert second.lists[-1].paused_until == START + HOUR_MS
+    assert second.deadline() == START + HOUR_MS
+    second.worker.resume()
+    second.settle()
+    assert second.lists[-1].paused_until is None
+    second.worker.close()
+    with closing(Store.open(second.database)) as store:
+        assert store.setting("paused_until") is None
+
+
+@pytest.mark.parametrize("kept", [START, START - 1, str(START + HOUR_MS), START + HOUR_MS + 0.5])
+def test_a_pause_over_or_of_another_shape_is_no_pause(make_scene: MakeScene, kept: Json) -> None:
+    scene = make_scene()
+    with closing(Store.open(scene.database)) as store:
+        store.set_setting("paused_until", kept)
+    scene.worker.start()
+    scene.settle()
+    assert scene.lists == []
+    assert scene.deadline() is None
 
 
 def test_a_database_from_a_later_version_is_refused(make_scene: MakeScene) -> None:

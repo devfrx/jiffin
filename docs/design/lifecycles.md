@@ -65,6 +65,14 @@ stateDiagram-v2
 - **After a restart** each reminder goes on from its last alert that counts and
   from its snooze, so the instances of a time stay exact; occasions start
   afresh.
+- **A pause from the tray**
+  ([ADR-0024](../adr/0024-hold-and-hide-alerts.md)), "Sospendi per un'ora" or
+  "Sospendi fino a domani", is away for every reminder: the context in front
+  leaves when it starts, and nothing is judged and nothing rings until it ends
+  or Riprendi. Then what is in front comes back as after any absence: occasions
+  start again, a late instance rings, due from the return, and a snooze that
+  ended meanwhile rings at the first chance. Its end is kept with the
+  settings, so it goes on after a restart. Alerts already on screen stay.
 
 ## Answers
 
@@ -79,7 +87,7 @@ stateDiagram-v2
 | 10 s without an answer | nothing | waits for its next unit; among the unseen |
 
 "Domani" ends at 08:00 of the next day, local time, or of the same day when
-snoozed before 04:00. `utile`, the answer of version 0.1 that Alla prossima
+snoozed before 04:00; so does the pause "fino a domani". `utile`, the answer of version 0.1 that Alla prossima
 volta replaced, stays in older rows.
 
 ## Alert

@@ -25,6 +25,7 @@ from jiffin.core.reminders import (
     LONGEST_RETURN_PAUSE_MS,
     RETURN_PAUSE_MS,
     SHORTEST_RETURN_PAUSE_MS,
+    Pause,
     Reminders,
     RemindersView,
 )
@@ -44,6 +45,9 @@ PLACES = "places"
 (ADR-0023)."""
 RETURN_PAUSE = "return_pause"
 """The setting that keeps the return pause, in seconds (ADR-0021)."""
+PAUSED_UNTIL = "paused_until"
+"""The setting that keeps when the pause from the tray ends, in UTC milliseconds; null once
+Riprendi ends it (ADR-0024)."""
 
 type Command = Callable[[], object]
 """What it returns is dropped."""
@@ -92,6 +96,14 @@ def _return_pause(kept: Json) -> int:
     if isinstance(kept, int) and SHORTEST_RETURN_PAUSE_MS <= kept * 1000 <= LONGEST_RETURN_PAUSE_MS:
         return kept * 1000
     return RETURN_PAUSE_MS
+
+
+def _paused_until(kept: Json, now: int) -> int | None:
+    """The end of the pause as `pause` kept it, while it is still ahead; None once it is over,
+    when there is none, or when it is not an instant."""
+    if isinstance(kept, int) and kept > now:
+        return kept
+    return None
 
 
 class Worker:
@@ -187,6 +199,20 @@ class Worker:
 
         self._queue.put(keep)
 
+    def pause(self, pause: Pause) -> None:
+        """Sospendi, from the tray: in force at once, and kept until it ends, through a restart
+        (ADR-0024)."""
+        self._queue.put(lambda: self._store.set_setting(PAUSED_UNTIL, self._core.pause(pause)))
+
+    def resume(self) -> None:
+        """Riprendi, from the tray or its list."""
+
+        def resume() -> None:
+            self._core.resume()
+            self._store.set_setting(PAUSED_UNTIL, None)
+
+        self._queue.put(resume)
+
     # On the worker thread
 
     def _run(self) -> None:
@@ -223,6 +249,7 @@ class Worker:
                 self._on_reminders,
                 self._store.load(),
                 return_pause=return_pause,
+                paused_until=_paused_until(self._store.setting(PAUSED_UNTIL), now),
             )
             material = self._store.setting(MATERIAL)
             places = self._store.setting(PLACES)
