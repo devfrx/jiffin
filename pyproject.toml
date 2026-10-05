@@ -1,6 +1,6 @@
 [project]
 name = "jiffin"
-version = "0.1.0"
+version = "0.2.0"
 description = "Contextual reminders for Windows 11, judged by a local language model"
 readme = "README.md"
 license = "Apache-2.0"

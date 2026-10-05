@@ -12,8 +12,8 @@ machine; nothing leaves it.
 The design is settled and implementation is under way.
 
 - Why things are the way they are: [architecture decision records](docs/adr/README.md).
-- What is being built for the first installable version: the
-  [v0.1.0 milestone](https://github.com/devfrx/jiffin/milestone/1).
+- What each version brought: the [changelog](CHANGELOG.md). What is being
+  accepted now: the [v0.2.0 milestone](https://github.com/devfrx/jiffin/milestone/2).
 
 ## Development
 
