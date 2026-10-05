@@ -14,7 +14,7 @@ the tickets it comes from.
 |---|---|---|
 | [0001](0001-keep-data-and-inference-local.md) | Keep all data and inference on the user's machine | Accepted |
 | [0002](0002-apache-license-english-repository.md) | License the code under Apache-2.0 and write the repository in English | Accepted |
-| [0003](0003-acceptance-thresholds.md) | Accept the first version on a real working day, against fixed thresholds | Accepted; amended by [0022](0022-acceptance-thresholds-v0-2.md) |
+| [0003](0003-acceptance-thresholds.md) | Accept the first version on a real working day, against fixed thresholds | Accepted; amended by [0022](0022-acceptance-thresholds-v0-2.md) and [0025](0025-kept-quiet-not-missed.md) |
 | [0004](0004-context-identity.md) | Define a context as app, window title and tab address | Accepted; amended by [0018](0018-keep-exe-in-the-app-name.md) |
 | [0005](0005-browser-address-ui-automation.md) | Read the browser address with UI Automation | Accepted |
 | [0006](0006-judge-rizzo-flow-q4.md) | Judge conditions with Rizzo Flow 4B in Q4_K_M | Accepted |
@@ -33,6 +33,7 @@ the tickets it comes from.
 | [0019](0019-five-second-debounce.md) | Evaluate a context after 5 s in the foreground | Accepted |
 | [0020](0020-read-the-time-in-core.md) | Read the time of a condition with our own grammar in `core` | Accepted |
 | [0021](0021-one-alert-per-unit.md) | Ring a reminder once per occasion or per instance of its time, and keep perennial reminders | Accepted |
-| [0022](0022-acceptance-thresholds-v0-2.md) | Accept version 0.2 with false alarms counted once per pair, target 10 and cap 20 | Accepted |
+| [0022](0022-acceptance-thresholds-v0-2.md) | Accept version 0.2 with false alarms counted once per pair, target 10 and cap 20 | Accepted; amended by [0025](0025-kept-quiet-not-missed.md) |
 | [0023](0023-window-frame.md) | Close every window with an X, and drag every window but the alerts | Accepted |
 | [0024](0024-hold-and-hide-alerts.md) | Hold alerts while a window is in full screen or Jiffin is paused, and hide them from screen capture | Accepted |
+| [0025](0025-kept-quiet-not-missed.md) | Leave the pairs kept quiet as already reminded out of the missed reminders | Accepted |

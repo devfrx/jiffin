@@ -113,8 +113,11 @@ def markdown(summary: days.Summary, labels: Labels | None, used: Machine | None)
             shown = f"Alerts shown: {summary.shown}, {judged}."
         lines += ["", shown]
         if summary.missed:
-            reasons = ", ".join(f"{why} {count}" for why, count in sorted(summary.missed.items()))
-            lines.append(f"Missed, by why: {reasons}.")
+            lines.append(f"Missed, by why: {_whys(summary.missed)}.")
+        if summary.reminded:
+            lines.append(
+                f"Kept quiet as already reminded, not missed, by why: {_whys(summary.reminded)}."
+            )
     if used is not None:
         lines.append(
             "The CPU the browsers spend on accessibility is not in the monitor's rows: "
@@ -176,21 +179,29 @@ def page(day: days.Day, labels: Mapping[str, bool], clock: Clock, source: str, p
         for alert in day.alerts
         if alert.shown_at is not None
     ]
-    missed = [
-        {
-            "app": pair.pair.context.app,
-            "title": pair.pair.context.title,
-            "address": pair.pair.context.address,
-            "condition": pair.pair.revision.condition,
-            "action": pair.pair.revision.action,
-            "why": _WHY[pair.why],
-            "d": f"{pair.d:.2f}",
-        }
-        for pair in days.missed(day, labels, clock)
-    ]
+    unshown = days.unshown(day, labels, clock)
     return render.page(
-        "report.html", path, day=day.day.isoformat(), source=source, alerts=alerts, missed=missed
+        "report.html",
+        path,
+        day=day.day.isoformat(),
+        source=source,
+        alerts=alerts,
+        missed=[_unshown(pair) for pair in unshown if pair.missed],
+        reminded=[_unshown(pair) for pair in unshown if not pair.missed],
     )
+
+
+def _unshown(pair: days.Unshown) -> dict[str, str | None]:
+    context, revision = pair.pair.context, pair.pair.revision
+    return {
+        "app": context.app,
+        "title": context.title,
+        "address": context.address,
+        "condition": revision.condition,
+        "action": revision.action,
+        "why": _WHY[pair.why],
+        "d": f"{pair.d:.2f}",
+    }
 
 
 def _pauses(pauses: Sequence[int]) -> str:
@@ -219,8 +230,14 @@ def _delay(summary: days.Summary) -> list[str]:
     ]
 
 
+def _whys(counts: Mapping[str, int]) -> str:
+    return ", ".join(f"{why} {count}" for why, count in sorted(counts.items()))
+
+
 def _labelled(summary: days.Summary, labels: Labels | None) -> list[list[str]]:
-    missed_label = "Missed reminders: relevant pairs never shown"
+    missed_label = (
+        "Missed reminders: relevant pairs never shown, unless kept quiet as already reminded"
+    )
     false_label = "False alarms in the day, once per pair"
     if labels is None:
         return [[missed_label, "no labels", "", ""], [false_label, "no labels", "", ""]]

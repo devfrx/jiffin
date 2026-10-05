@@ -126,6 +126,7 @@ def test_the_summary_counts_evaluations_delays_misses_and_false_alarms() -> None
         labelled=5,
         relevant=3,
         missed={"below threshold": 1},
+        reminded={},
         alerted=3,
         false_alarms=1,
         unlabelled=0,
@@ -133,12 +134,48 @@ def test_the_summary_counts_evaluations_delays_misses_and_false_alarms() -> None
     assert days.delay(summary, 50) == 20.0
 
 
-def test_a_missed_pair_says_how_close_it_came() -> None:
-    held = judged(6, T0 + 1_500_000, MAIL, (1.5, Outcome.HELD_BACK), (0.3, Outcome.BELOW_THRESHOLD))
-    log = Log((), REVISIONS, (E1, held), (A1,), (), ())
+@pytest.mark.parametrize(
+    ("outcome", "d", "why", "missed"),
+    [
+        (Outcome.BELOW_THRESHOLD, 0.5, "below threshold", True),
+        (Outcome.ALERT, 1.5, "waited", True),  # made, and never on screen
+        (Outcome.SAME_OCCASION, 1.5, "same occasion", False),
+        (Outcome.HELD_BACK, 1.5, "held back", False),  # the hour of version 0.1
+        (Outcome.SNOOZED, 1.5, "snoozed", False),
+        (Outcome.SILENCED, 1.5, "silenced", False),
+    ],
+)
+def test_a_pair_never_shown_is_missed_unless_kept_quiet_as_already_reminded(
+    outcome: Outcome, d: float, why: str, missed: bool
+) -> None:
+    """Its reminder had rung in the same unit, or the user had answered it (ADR-0025)."""
+    later = judged(6, T0 + 1_500_000, MAIL, (d, outcome), (0.3, Outcome.BELOW_THRESHOLD))
+    log = Log((), REVISIONS, (E1, later), (A1,), (), ())
     labels = {days.key(MAIL, ICONS.remainder): True}
-    (missed,) = days.missed(days.select(log, None, clock()), labels, clock())
-    assert (missed.pair.context, missed.why, missed.d) == (MAIL, "held back", 1.5)
+    day = days.select(log, None, clock())
+    (pair,) = days.unshown(day, labels, clock())
+    assert (pair.pair.context, pair.why, pair.d, pair.missed) == (MAIL, why, d, missed)
+    summary = days.summarize(day, labels, clock())
+    assert (summary.missed, summary.reminded) == (({why: 1}, {}) if missed else ({}, {why: 1}))
+    assert summary.relevant == 1  # the share keeps them all as its base
+
+
+def test_a_pair_whose_own_alert_never_reached_the_screen_is_missed() -> None:
+    """The alert waited for a place, and the occasion it used kept the pair quiet after."""
+    made = judged(6, T0 + 1_500_000, MAIL, (1.5, Outcome.ALERT), (0.3, Outcome.BELOW_THRESHOLD))
+    again = judged(
+        7,
+        T0 + 1_700_000,
+        MAIL,
+        (1.5, Outcome.SAME_OCCASION),
+        (0.3, Outcome.BELOW_THRESHOLD),
+        cached=True,
+    )
+    waiting = Alert(4, 1, ICONS, 6, MAIL, 1.5, made.at, made.context_since)
+    log = Log((), REVISIONS, (E1, made, again), (A1, waiting), (), ())
+    labels = {days.key(MAIL, ICONS.remainder): True}
+    (pair,) = days.unshown(days.select(log, None, clock()), labels, clock())
+    assert (pair.why, pair.missed) == ("waited", True)
 
 
 # Version 0.2: times, and reminders with only a time (ADR-0021, ADR-0022)
@@ -192,7 +229,7 @@ def test_a_pair_true_only_out_of_its_time_is_not_missed() -> None:
     log = Log((), {30: LATE}, (early, later), (), (), ())
     labels = {days.key(FIGMA, LATE.remainder): True, days.key(LOGO, LATE.remainder): True}
     day = days.select(log, None, clock())
-    (missed,) = days.missed(day, labels, clock())
+    (missed,) = days.unshown(day, labels, clock())
     assert (missed.pair.context, missed.why) == (LOGO, "below threshold")
     summary = days.summarize(day, labels, clock())
     assert (summary.pairs, summary.relevant, summary.missed) == (2, 1, {"below threshold": 1})

@@ -32,12 +32,11 @@
     </tbody>
   </table>
 
-  <h2>Promemoria persi ({{ missed | length }})</h2>
-  <p>Coppie pertinenti, giudicate almeno una volta nel loro orario, che non sono mai arrivate sullo schermo, con il motivo e il d più alto della giornata.</p>
+  {% macro unshown(pairs) %}
   <table>
     <thead><tr><th>Contesto</th><th>Promemoria</th><th>Perché</th><th>d più alto</th></tr></thead>
     <tbody>
-    {% for pair in missed %}
+    {% for pair in pairs %}
       <tr>
         <td>{{ pair.app }} · {{ pair.title }}{% if pair.address %}<div class="address">{{ pair.address }}</div>{% endif %}</td>
         <td>{{ pair.condition }} <span class="muted">→ {{ pair.action }}</span></td>
@@ -47,6 +46,15 @@
     {% endfor %}
     </tbody>
   </table>
+  {% endmacro %}
+
+  <h2>Promemoria persi ({{ missed | length }})</h2>
+  <p>Coppie pertinenti, giudicate almeno una volta nel loro orario, che non sono mai arrivate sullo schermo senza essere già state ricordate, con il motivo e il d più alto della giornata.</p>
+  {{ unshown(missed) }}
+
+  <h2>Taciuti perché già ricordati ({{ reminded | length }})</h2>
+  <p>Coppie pertinenti mai arrivate sullo schermo perché il promemoria era già suonato nella stessa occasione (nella stessa ora, in 0.1) o aveva già una risposta, Rimanda o «Non qui»: non contano come persi.</p>
+  {{ unshown(reminded) }}
 </main>
 </body>
 </html>

@@ -130,7 +130,8 @@ numbers.
 | Measure | From |
 |---|---|
 | Delay, p50 and p95 | each alert on screen, those of reminders with only a time too: when it appeared, minus when it became due (in 0.1, when its context came to the foreground) |
-| Missed reminders | relevant pairs never on screen that day, over all relevant pairs; a pair is relevant when labelled true and judged at least once while its reminder's time held. Each with why, from the candidate that came closest then: waited for a place, same occasion, held back by the once-an-hour rule of 0.1, snoozed, silenced, below the threshold |
+| Missed reminders | relevant pairs never on screen that day and not kept quiet as already reminded, over all relevant pairs ([ADR-0025](../adr/0025-kept-quiet-not-missed.md)); a pair is relevant when labelled true and judged at least once while its reminder's time held. Each with why, from the candidate that came closest then: waited for a place and never shown, or below the threshold |
+| Kept quiet as already reminded | relevant pairs never on screen because their reminder had rung in the same unit (same occasion, or held back by the once-an-hour rule of 0.1) or the user had answered it (snoozed, silenced): counted apart by why, not missed |
 | False alarms | pairs on screen labelled not relevant, each once however often it rang, since "Non qui" silences it ([ADR-0022](../adr/0022-acceptance-thresholds-v0-2.md)) |
 | Alerts of reminders with only a time | counted apart: they are right when the time is read right, which the statements page shows |
 | Evaluations per hour | the evaluations, over the time from the first context evaluated to the last evaluation; of them, those that asked the engine and those that failed |

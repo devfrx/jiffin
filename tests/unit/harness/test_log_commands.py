@@ -7,12 +7,12 @@ import pytest
 from jiffin.core.clock import SimulatedClock
 from jiffin.core.context import Context, Observation
 from jiffin.core.model import EngineBuild
-from jiffin.core.records import Alert
+from jiffin.core.records import Alert, Candidate, Evaluation, Outcome, Revision
 from jiffin.core.reminders import Reminders
 from jiffin.harness import __main__ as harness
 from jiffin.harness import day as days
 from jiffin.harness import labels, report, snapshot, statements
-from jiffin.store.store import Store
+from jiffin.store.store import Log, Store
 
 T0 = 1_791_194_400_000  # 2026-10-05 10:00 UTC
 BUILD = EngineBuild(1, "0.1.0", "b11081", "79de5cb8", 1, 2)
@@ -111,9 +111,9 @@ def test_a_day_goes_from_a_copy_to_its_report(
         in summary
     )
     assert (
-        "| Missed reminders: relevant pairs never shown | 33% (1 of 3) | at most 20% | no |"
-        in summary
-    )
+        "| Missed reminders: relevant pairs never shown, unless kept quiet as already reminded "
+        "| 33% (1 of 3) | at most 20% | no |"
+    ) in summary
     assert "| False alarms in the day, once per pair | 1 | target 10, cap 20 | yes |" in summary
     assert "Alerts shown: 3, on 3 pairs: 2 right, 1 wrong, 0 not labelled." in summary
     assert not any(text in summary for text in ("Figma", "Banca", "Posta", "quando"))
@@ -189,6 +189,7 @@ def test_the_summary_counts_the_alerts_with_only_a_time_apart(tmp_path: Path) ->
         labelled=20,
         relevant=5,
         missed={},
+        reminded={},
         alerted=12,
         false_alarms=11,
         unlabelled=0,
@@ -204,6 +205,31 @@ def test_the_summary_counts_the_alerts_with_only_a_time_apart(tmp_path: Path) ->
         "2 of reminders with only a time, right when their time is read right "
         "(the statements page shows it)."
     ) in text
+
+
+def test_the_report_tells_the_pairs_kept_quiet_as_already_reminded_apart(tmp_path: Path) -> None:
+    clock = SimulatedClock(T0, UTC)
+    icons = Revision(10, 1, 1, ICONS, "esportare le icone", ICONS, "Figma.", BUILD)
+    rent = Revision(20, 2, 1, RENT, "pagare l'affitto", RENT, "The bank.", BUILD)
+    candidates = (
+        Candidate(10, 2.5, False, Outcome.SAME_OCCASION),  # it rang in another window already
+        Candidate(20, 0.1, False, Outcome.BELOW_THRESHOLD),
+    )
+    evaluation = Evaluation(1, T0 + 20_000, FIGMA, T0, 0.97, BUILD, candidates)
+    day = days.select(Log((), {10: icons, 20: rent}, (evaluation,), (), (), ()), None, clock)
+    relevant = {days.key(FIGMA, ICONS): True, days.key(FIGMA, RENT): True}
+    labelled = labels.Labels(tmp_path / "labels.json", day.day, [])
+    text = report.markdown(days.summarize(day, relevant, clock), labelled, None)
+    assert (
+        "| Missed reminders: relevant pairs never shown, unless kept quiet as already reminded "
+        "| 50% (1 of 2) | at most 20% | no |"
+    ) in text
+    assert "Missed, by why: below threshold 1." in text
+    assert "Kept quiet as already reminded, not missed, by why: same occasion 1." in text
+    page = report.page(day, relevant, clock, "Copia", tmp_path / "report.html")
+    missed, kept = page.read_text(encoding="utf-8").split("<h2>Taciuti")
+    assert RENT in missed and ICONS not in missed
+    assert ICONS in kept and "stessa occasione" in kept
 
 
 def test_the_report_reads_the_monitors_rows(

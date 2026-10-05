@@ -33,6 +33,9 @@ _CLOSEST = (
     (Outcome.OUTSIDE_TIME, "out of time"),
     (Outcome.BELOW_THRESHOLD, "below threshold"),
 )
+# Of them, those that kept the pair quiet as already reminded: its reminder had rung in the same
+# unit, or the user had answered it. Such a pair is not missed (ADR-0025).
+_REMINDED = frozenset({"same occasion", "held back", "snoozed", "silenced"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,7 +86,9 @@ class Summary:
     relevant: int
     """Pairs labelled true and judged at least once while their reminder's time held."""
     missed: dict[str, int]
-    """Relevant pairs never shown, by why: see `_CLOSEST`."""
+    """Relevant pairs never shown nor kept quiet as already reminded, by why (ADR-0025)."""
+    reminded: dict[str, int]
+    """Relevant pairs never shown, kept quiet as already reminded, by why: not missed."""
     alerted: int
     """Pairs that reached the screen, each once however often it rang."""
     false_alarms: int
@@ -129,16 +134,22 @@ def pairs(day: Day) -> dict[str, Pair]:
 
 
 @dataclass(frozen=True, slots=True)
-class Missed:
+class Unshown:
     """A relevant pair never shown."""
 
     pair: Pair
     why: str
+    """From the candidate that came closest to an alert: see `_CLOSEST`."""
     d: float
     """The highest d the pair got in the day."""
 
+    @property
+    def missed(self) -> bool:
+        """A missed reminder, unless kept quiet as already reminded (ADR-0025)."""
+        return self.why not in _REMINDED
 
-def missed(day: Day, labels: Mapping[str, bool], clock: Clock) -> list[Missed]:
+
+def unshown(day: Day, labels: Mapping[str, bool], clock: Clock) -> list[Unshown]:
     """The relevant pairs never shown: labelled true, and judged at least once while their
     reminder's time held, since a pair true only out of its time must stay silent."""
     shown = {Pair(alert.context, alert.revision).key for alert in _judged_shown(day)}
@@ -150,7 +161,7 @@ def missed(day: Day, labels: Mapping[str, bool], clock: Clock) -> list[Missed]:
         outcomes.setdefault(pair.key, set()).add(candidate.outcome)
         highest[pair.key] = max(highest.get(pair.key, candidate.d), candidate.d)
     return [
-        Missed(
+        Unshown(
             pair,
             next(why for outcome, why in _CLOSEST if outcome in outcomes[pair_key]),
             highest[pair_key],
@@ -166,8 +177,10 @@ def summarize(day: Day, labels: Mapping[str, bool], clock: Clock) -> Summary:
         (alert.shown_at - alert.due_at) / 1000 for alert in shown if alert.shown_at is not None
     )
     found = pairs(day)
-    reasons: dict[str, int] = {}
-    for pair in missed(day, labels, clock):
+    missed: dict[str, int] = {}
+    reminded: dict[str, int] = {}
+    for pair in unshown(day, labels, clock):
+        reasons = missed if pair.missed else reminded
         reasons[pair.why] = reasons.get(pair.why, 0) + 1
     alerted = {Pair(alert.context, alert.revision).key for alert in _judged_shown(day)}
     in_time = {pair.key for _, pair in _in_time(day, clock)}
@@ -188,7 +201,8 @@ def summarize(day: Day, labels: Mapping[str, bool], clock: Clock) -> Summary:
         pairs=len(found),
         labelled=sum(pair_key in labels for pair_key in found),
         relevant=sum(labels.get(pair_key) is True for pair_key in in_time),
-        missed=reasons,
+        missed=missed,
+        reminded=reminded,
         alerted=len(alerted),
         false_alarms=sum(labels.get(pair_key) is False for pair_key in alerted),
         unlabelled=sum(pair_key not in labels for pair_key in alerted),
