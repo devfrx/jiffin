@@ -121,5 +121,6 @@ that shows, and its error code goes to the log.
   Rimanda's menu, Qt Quick windows with their glass, are missing from the
   Snipping Tool's full-screen captures, also after hiding and showing again,
   and keep their glass on the monitor; Windows refused no call. Sharing in
-  Meet was not tried yet: it is left to the acceptance day
-  ([#106](https://github.com/devfrx/jiffin/issues/106)).
+  Meet was not tried yet: it was left to the acceptance day
+  ([#106](https://github.com/devfrx/jiffin/issues/106)), and, as the owner
+  could not try it then, to [#136](https://github.com/devfrx/jiffin/issues/136).

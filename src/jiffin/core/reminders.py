@@ -48,8 +48,9 @@ from jiffin.core.schedule import jiffin_day
 from jiffin.core.units import Times, by_instance
 
 THRESHOLD = 0.97
-"""d from which a reminder alerts: the starting value of ADR-0007. It belongs to the engine's
-model and prompts, and the acceptance day fixes it."""
+"""d from which a reminder alerts: the starting value of ADR-0007, kept on the acceptance day of
+0.2 (#106). It belongs to the engine's model and prompts, and is measured again when they
+change (ADR-0017)."""
 
 MINUTE_MS = 60_000
 HOUR_MS = 60 * MINUTE_MS

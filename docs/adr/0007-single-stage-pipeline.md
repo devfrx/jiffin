@@ -88,3 +88,10 @@ feedback.
   (`replay --reminders 20,40,80`,
   [ADR-0017](0017-evaluation-harness-subpackage.md)).
 - Completed reminders disappear, which keeps the active set small.
+- **The threshold stays at 0.97**, the owner's choice on the acceptance day of
+  0.2 ([#106](https://github.com/devfrx/jiffin/issues/106)). The day replayed
+  with 20 reminders gives 11 false alarms, over the target of 10 and under the
+  cap of 20 of [ADR-0022](0022-acceptance-thresholds-v0-2.md), and 6% missed;
+  3 of those false alarms come from browser contexts with the address of a
+  page shown before ([#135](https://github.com/devfrx/jiffin/issues/135)),
+  without which they are 8. At 1.25 they would be 6, with 17% missed.

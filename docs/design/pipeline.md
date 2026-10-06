@@ -48,7 +48,8 @@ context, also out of its time, so that its score is in the cache when its time
 comes. The first outcome that applies is recorded with the evaluation:
 
 1. **below threshold**: d < `THRESHOLD` (0.97, a constant tied to the engine's
-   model and prompts; only the harness replays a day at another);
+   model and prompts, kept on the acceptance day of 0.2; only the harness
+   replays a day at another);
 2. **outside time**: true, but its time does not hold now;
 3. **silenced**: "Non qui" was answered in this exact context;
 4. **snoozed**: its snooze with a time has not ended;
