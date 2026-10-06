@@ -199,6 +199,14 @@ def test_a_time_not_understood_names_its_words_wherever_they_are() -> None:
         ("ogni 0 settimane il lunedì", ["ogni 0 settimane il lunedì"]),
         ("ogni 0 giorni", ["ogni 0 giorni"]),
         ("per 0 giorni", ["per 0 giorni"]),
+        # A count is named whole, not from its last digit.
+        ("quando gioco da 20 minuti", ["da 20 minuti"]),
+        ("da 45 minuti", ["da 45 minuti"]),
+        ("dopo 12 ore", ["dopo 12 ore"]),
+        ("dopo 10h", ["dopo 10h"]),
+        ("da 1,5 ore", ["da 1,5 ore"]),
+        ("da 5 minuti", ["da 5 minuti"]),
+        ("dopo 2 ore", ["dopo 2 ore"]),
     ],
 )
 def test_words_that_do_not_make_a_decided_time_are_not_understood(
