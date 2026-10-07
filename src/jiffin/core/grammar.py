@@ -718,8 +718,8 @@ LEFTOVER = re.compile(
     # An hour, or a day of the month without its month: "alle 25", "ogni mese il 15".
     r"|(?<![\w'])(?:alle|dalle|delle|le|l'|ore|h|il|dal|dall'|al|all')\s*\d+(?:[:.,]\d+)?"
     r"(?![\d%°])"
-    # A count of hours or minutes, whole: "da 20 minuti", "dopo 1,5 ore".
-    r"|\d+(?:[:.,]\d+)?\s*(?:ore|minuti|h)(?!\w)"
+    # A count of hours or minutes, whole: "da 20 minuti", "dopo 1,5 ore", "da 1 ora".
+    r"|\d+(?:[:.,]\d+)?\s*(?:or[ae]|minut[oi]|h)(?!\w)"
     rf"|(?<![\w'])s{ACCENT}\s+e\s+(?:un[oa]?\s+)?no(?!\w)"
     r"|(?<![\w'])ogni\s+tanto(?!\w)"
     rf"|(?<![\w'])(?:tra|fra|per|ogni|entro)\s+(?:{PAIR}|(?:[\w']+\s+){{0,2}})"
