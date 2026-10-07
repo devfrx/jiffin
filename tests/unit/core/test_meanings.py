@@ -207,6 +207,10 @@ def test_a_time_not_understood_names_its_words_wherever_they_are() -> None:
         ("da 1,5 ore", ["da 1,5 ore"]),
         ("da 5 minuti", ["da 5 minuti"]),
         ("dopo 2 ore", ["dopo 2 ore"]),
+        # One hour or one minute is a count like the others.
+        ("da 1 ora", ["da 1 ora"]),
+        ("dopo 1 minuto", ["dopo 1 minuto"]),
+        ("quando gioco da 1 ora", ["da 1 ora"]),
     ],
 )
 def test_words_that_do_not_make_a_decided_time_are_not_understood(
