@@ -7,7 +7,9 @@ from pathlib import Path
 import pytest
 
 from jiffin.client.supervisor import (
+    IDLE_MS,
     TIMEOUTS,
+    WAKE_RETRY_MS,
     State,
     Status,
     StopReason,
@@ -17,7 +19,8 @@ from jiffin.client.supervisor import (
 )
 from jiffin.core.clock import SimulatedClock
 from jiffin.core.context import Context
-from jiffin.core.model import EngineBuild, ModelError
+from jiffin.core.model import EngineBuild, ModelError, Need
+from jiffin.core.records import EngineSleep, SleepReason, Waker
 
 FAKE_ENGINE = [sys.executable, str(Path(__file__).with_name("fake_engine.py"))]
 START = 1_790_000_000_000  # 2026-09-21, in UTC milliseconds
@@ -50,7 +53,7 @@ class Scene:
 
     @property
     def wait(self) -> int | None:
-        """How long until the engine starts again."""
+        """How long until the engine starts again, falls asleep, or tries a wake again."""
         deadline = self.supervisor.deadline
         return None if deadline is None else deadline - self.clock.now()
 
@@ -260,6 +263,187 @@ def test_close_cancels_a_restart(scene: Scene) -> None:
     scene.supervisor.close()
     assert scene.status == Status(State.OFF)
     assert scene.wait is None
+
+
+# The light sleep (ADR-0027)
+
+
+def test_nothing_in_front_puts_the_engine_to_sleep(scene: Scene) -> None:
+    scene.clock.advance(1_000)
+    scene.supervisor.need(Need.NOTHING_IN_FRONT)
+    assert scene.statuses == [Status(State.STARTING), Status(State.READY), Status(State.ASLEEP)]
+    assert scene.supervisor.take_records() == [
+        EngineSleep(START + 1_000, SleepReason.NOTHING_IN_FRONT)
+    ]
+    assert not scene.exited.is_set()
+    assert scene.wait is None
+
+
+def test_soon_wakes_the_same_engine_and_ends_its_sleep(scene: Scene) -> None:
+    scene.supervisor.need(Need.NOTHING_IN_FRONT)
+    scene.clock.advance(60_000)
+    scene.supervisor.need(Need.SOON)
+    assert scene.statuses[-2:] == [Status(State.ASLEEP), Status(State.READY)]  # no new start
+    slept = EngineSleep(START, SleepReason.NOTHING_IN_FRONT)
+    woken = replace(slept, woken_at=START + 60_000, woken_by=Waker.CONTEXT, ready_at=START + 60_000)
+    assert scene.supervisor.take_records() == [slept, woken]
+    assert scene.supervisor.judge(FIGMA, {1: ICONS}) == {1: 14.0}  # with its model again
+
+
+def test_the_engine_sleeps_5_minutes_after_core_last_asked_it(scene: Scene) -> None:
+    assert scene.wait == IDLE_MS  # since it was first ready
+    scene.clock.advance(60_000)
+    scene.supervisor.judge(FIGMA, {1: ICONS})
+    assert scene.wait == IDLE_MS
+    scene.clock.advance(60_000)
+    scene.supervisor.rewrite("quando apro Figma")
+    assert scene.wait == IDLE_MS
+    scene.clock.advance(IDLE_MS - 1)
+    scene.supervisor.poll()
+    assert scene.status == Status(State.READY)
+    scene.clock.advance(1)
+    scene.supervisor.poll()
+    assert scene.status == Status(State.ASLEEP)
+    assert scene.supervisor.take_records() == [
+        EngineSleep(START + 120_000 + IDLE_MS, SleepReason.IDLE)
+    ]
+
+
+def test_a_restart_keeps_the_5_minutes_of_the_last_request(scene: Scene) -> None:
+    scene.clock.advance(60_000)
+    scene.fail()
+    scene.restart()
+    assert scene.status == Status(State.READY)
+    assert scene.wait == IDLE_MS - 1_000
+
+
+def test_the_engine_does_not_sleep_while_core_needs_it_soon(scene: Scene) -> None:
+    scene.supervisor.need(Need.SOON)
+    assert scene.wait is None
+    scene.clock.advance(IDLE_MS)
+    scene.supervisor.poll()
+    assert scene.status == Status(State.READY)
+    scene.supervisor.need(Need.NOT_NOW)
+    assert scene.status == Status(State.ASLEEP)
+
+
+@pytest.mark.parametrize(
+    ("ask", "answer", "waker"),
+    [
+        (lambda supervisor: supervisor.judge(FIGMA, {1: ICONS}), {1: 14.0}, Waker.JUDGEMENT),
+        (
+            lambda supervisor: supervisor.rewrite("quando apro Figma"),
+            "The user: quando apro Figma.",
+            Waker.STATEMENT,
+        ),
+    ],
+)
+def test_a_call_while_the_engine_sleeps_wakes_it_and_is_answered(
+    scene: Scene, ask: Callable[[Supervisor], object], answer: object, waker: Waker
+) -> None:
+    scene.supervisor.need(Need.NOTHING_IN_FRONT)
+    scene.supervisor.take_records()
+    scene.clock.advance(1_000)
+    assert ask(scene.supervisor) == answer
+    assert scene.status == Status(State.READY)
+    [woken] = scene.supervisor.take_records()
+    assert (woken.woken_at, woken.woken_by) == (START + 1_000, waker)
+
+
+def test_a_wake_refused_for_the_gpu_memory_is_tried_again_a_minute_later(
+    make_scene: MakeScene,
+) -> None:
+    scene = make_scene("no memory at the first wake")
+    scene.supervisor.start()
+    scene.supervisor.need(Need.NOTHING_IN_FRONT)
+    scene.supervisor.need(Need.SOON)
+    refused = Status(State.ASLEEP, StopReason.GPU_MEMORY)
+    assert scene.status == refused
+    assert scene.wait == WAKE_RETRY_MS
+    scene.supervisor.need(Need.NOT_NOW)
+    assert scene.wait is None  # tried again only for core
+    scene.clock.advance(WAKE_RETRY_MS - 1)
+    scene.supervisor.need(Need.SOON)  # not tried: it would succeed
+    assert scene.status == refused
+    with pytest.raises(ModelError):
+        scene.supervisor.judge(FIGMA, {1: ICONS})
+    assert scene.status == refused
+    scene.clock.advance(1)
+    scene.supervisor.poll()
+    assert scene.status == Status(State.READY)
+    slept = EngineSleep(START, SleepReason.NOTHING_IN_FRONT)
+    woken_at = START + WAKE_RETRY_MS
+    assert scene.supervisor.take_records() == [
+        slept,
+        replace(slept, woken_at=woken_at, woken_by=Waker.CONTEXT, ready_at=woken_at),
+    ]
+
+
+def test_retry_wakes_the_engine_at_once_after_a_wake_refused(make_scene: MakeScene) -> None:
+    scene = make_scene("no memory at the first wake")
+    scene.supervisor.start()
+    scene.supervisor.need(Need.NOTHING_IN_FRONT)
+    scene.supervisor.need(Need.SOON)
+    scene.clock.advance(1_000)
+    scene.supervisor.start()
+    assert scene.status == Status(State.READY)
+    [_, woken] = scene.supervisor.take_records()
+    assert (woken.woken_at, woken.woken_by) == (START + 1_000, Waker.RETRY)
+    scene.supervisor.need(Need.NOTHING_IN_FRONT)
+    scene.supervisor.need(Need.SOON)
+    assert scene.status == Status(State.READY)  # no minute to wait any more
+
+
+@pytest.mark.parametrize(
+    ("model", "status"),
+    [
+        ("exit at wakes", Status(State.RESTARTING)),
+        ("no model at wakes", Status(State.STOPPED, StopReason.MODEL)),
+    ],
+)
+def test_a_wake_that_fails_ends_the_sleep_without_a_model(
+    make_scene: MakeScene, model: str, status: Status
+) -> None:
+    scene = make_scene(model)
+    scene.supervisor.start()
+    scene.supervisor.need(Need.NOTHING_IN_FRONT)
+    scene.clock.advance(1_000)
+    scene.supervisor.need(Need.SOON)
+    assert scene.status == status
+    slept = EngineSleep(START, SleepReason.NOTHING_IN_FRONT)
+    assert scene.supervisor.take_records() == [
+        slept,
+        replace(slept, woken_at=START + 1_000, woken_by=Waker.CONTEXT),
+    ]
+
+
+def test_an_engine_that_ends_while_asleep_starts_again(make_scene: MakeScene) -> None:
+    scene = make_scene("exit asleep")
+    scene.supervisor.start()
+    scene.supervisor.need(Need.NOTHING_IN_FRONT)
+    assert scene.exited.wait(timeout=10)
+    scene.clock.advance(1_000)
+    scene.supervisor.poll()
+    assert scene.status == Status(State.RESTARTING)
+    slept = EngineSleep(START, SleepReason.NOTHING_IN_FRONT)
+    assert scene.supervisor.take_records() == [slept, replace(slept, woken_at=START + 1_000)]
+
+
+def test_an_engine_that_does_not_answer_shutdown_is_ended(make_scene: MakeScene) -> None:
+    scene = make_scene(timeouts=replace(TIMEOUTS, shutdown=0.5))
+    scene.supervisor.start()
+    scene.supervisor.rewrite("deaf")
+    scene.supervisor.need(Need.NOTHING_IN_FRONT)
+    assert scene.status == Status(State.RESTARTING)
+    assert scene.supervisor.take_records() == []
+
+
+def test_close_shuts_an_engine_asleep_down(scene: Scene) -> None:
+    scene.supervisor.need(Need.NOTHING_IN_FRONT)
+    scene.supervisor.close()
+    assert scene.status == Status(State.OFF)
+    assert scene.exited.wait(timeout=10)
+    assert scene.supervisor.take_records() == [EngineSleep(START, SleepReason.NOTHING_IN_FRONT)]
 
 
 def test_the_real_engine_without_its_model_stays_down_and_says_why(tmp_path: Path) -> None:

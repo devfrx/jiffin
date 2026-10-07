@@ -1,34 +1,41 @@
-"""The engine as `core` sees it: the model port, with the engine's start and restarts (ADR-0011).
+"""The engine as `core` sees it: the model port, with the engine's start, restarts and light
+sleep (ADR-0011, ADR-0027).
 
 The worker thread owns the supervisor and calls all its methods (ADR-0012). A call blocks
 until the engine answers, fails, or runs out of time. A failed engine starts again 1 s, 10 s
-and 60 s later, and the fourth failure within an hour stops it: the supervisor exposes when as
-`deadline`, on the same clock as the deadlines of `core`, and whoever drives the worker calls
-`poll` once the clock reaches it.
+and 60 s later, and the fourth failure within an hour stops it. The engine sleeps when nothing
+is in front, or 5 minutes after `core` last asked it, and wakes when `core` will need it soon,
+or when it is asked while asleep. The supervisor exposes when its next restart, sleep or wake
+falls as `deadline`, on the same clock as the deadlines of `core`, and whoever drives the
+worker calls `poll` once the clock reaches it.
 """
 
 import logging
 import sys
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum, auto
 from pathlib import Path
 
 from jiffin.client.process import EngineProcess, Failure, Refusal
 from jiffin.core.clock import Clock
 from jiffin.core.context import Context
-from jiffin.core.model import EngineBuild, ModelError
+from jiffin.core.model import EngineBuild, ModelError, Need
+from jiffin.core.records import EngineSleep, SleepReason, Waker
 from jiffin.protocol.errors import ErrorCode
 from jiffin.protocol.messages import (
     INITIALIZE,
     JUDGE,
     PROTOCOL_VERSION,
     REWRITE,
+    SHUTDOWN,
     EngineSettings,
     InitializeParams,
+    InitializeResult,
     JudgeParams,
     Method,
     RewriteParams,
+    ShutdownParams,
     Statement,
     Strict,
 )
@@ -44,6 +51,12 @@ SETTINGS = EngineSettings(
 RESTART_DELAYS_MS = (1_000, 10_000, 60_000)
 """The wait after the first, second and third failure within an hour; the fourth stops."""
 FAILURE_WINDOW_MS = 3_600_000
+IDLE_MS = 5 * 60_000
+"""The engine sleeps 5 minutes after `core` last asked it for a judgement or a statement, as
+Ollama frees a model by default (ADR-0027)."""
+WAKE_RETRY_MS = 60_000
+"""After a wake refused for the GPU's memory, the next one waits at least this long, but for
+Retry (ADR-0027)."""
 
 
 class State(Enum):
@@ -51,6 +64,8 @@ class State(Enum):
     """Not started yet, or closed."""
     STARTING = auto()
     READY = auto()
+    ASLEEP = auto()
+    """A live process without a model, so that the GPU is free: `initialize` wakes it."""
     RESTARTING = auto()
     """Down after a failure: it starts again at `deadline`."""
     STOPPED = auto()
@@ -83,7 +98,8 @@ class Status:
 
     state: State
     stop_reason: StopReason | None = None
-    """Why the engine stopped, in STOPPED."""
+    """Why the engine stopped, in STOPPED; GPU_MEMORY in ASLEEP once a wake was refused for the
+    GPU's memory, until one succeeds."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,12 +125,14 @@ def engine_command() -> list[str]:
 
 
 class Supervisor:
-    """The adapter of the model port: it starts the engine, talks to it, and restarts it.
+    """The adapter of the model port: it starts the engine, talks to it, restarts it, and lets
+    it sleep by what `core` says after each event (`need`).
 
     `model` is the model file, already checked against `model_sha256`, which every build
     records. `on_status` is called on the worker thread, from inside the supervisor, whenever
     the status changes: it must not call the supervisor back. `on_exit` is called from another
-    thread when the output of an engine ends, so that the worker calls `poll`.
+    thread when the output of an engine ends, so that the worker calls `poll`. Each sleep is
+    recorded when it starts and again when it ends, for `take_records`.
     """
 
     def __init__(
@@ -141,6 +159,16 @@ class Supervisor:
         self._failures: list[int] = []
         """When the engine failed, within the last hour."""
         self._restart_at: int | None = None
+        self._need = Need.NOT_NOW
+        """What `core` said last."""
+        self._asked_at: int | None = None
+        """When `core` last asked for a judgement or a statement; until then, when the first
+        engine was ready. The 5 minutes run from it."""
+        self._sleep: EngineSleep | None = None
+        """The sleep under way, while ASLEEP."""
+        self._refused_at: int | None = None
+        """When the GPU's memory refused the last wake, until one succeeds."""
+        self._records: list[EngineSleep] = []
 
     @property
     def status(self) -> Status:
@@ -148,28 +176,71 @@ class Supervisor:
 
     @property
     def deadline(self) -> int | None:
-        """When `poll` starts the engine again."""
-        return self._restart_at
+        """When `poll` starts the engine again, puts it to sleep 5 minutes after `core` last
+        asked it, or tries a wake again for `core` a minute after the GPU's memory refused one.
+        Nothing sleeps while `core` needs the model soon."""
+        match self._status.state:
+            case State.RESTARTING:
+                return self._restart_at
+            case State.READY if self._need is not Need.SOON and self._asked_at is not None:
+                return self._asked_at + IDLE_MS
+            case State.ASLEEP if self._need is Need.SOON and self._refused_at is not None:
+                return self._refused_at + WAKE_RETRY_MS
+        return None
+
+    def take_records(self) -> list[EngineSleep]:
+        """The sleeps started or ended since the last call, in order."""
+        records, self._records = self._records, []
+        return records
 
     # Lifecycle
 
     def start(self) -> None:
-        """Start the engine now, with no failures counted: when the app starts, and Retry."""
-        if self._status.state not in (State.STARTING, State.READY):
+        """Start the engine now, with no failures counted: when the app starts, and Retry. An
+        engine asleep wakes now, also within a minute of a wake refused."""
+        if self._status.state is State.ASLEEP:
+            self._wake(Waker.RETRY)
+        elif self._status.state not in (State.STARTING, State.READY):
             self._failures.clear()
             self._launch()
 
+    def need(self, need: Need) -> None:
+        """What `core` says of the model after each event (ADR-0027): SOON wakes the engine,
+        NOTHING_IN_FRONT puts it to sleep, and NOT_NOW lets it sleep once 5 minutes have passed
+        since `core` last asked it."""
+        self._need = need
+        state = self._status.state
+        if need is Need.SOON and state is State.ASLEEP and self._may_wake():
+            self._wake(Waker.CONTEXT)
+        elif need is Need.NOTHING_IN_FRONT and state is State.READY:
+            self._fall_asleep(SleepReason.NOTHING_IN_FRONT)
+        self.poll()
+
     def poll(self) -> None:
-        """Notice an engine whose output ended while idle, and start one when it is time."""
+        """Notice an engine whose output ended while idle or asleep, and do what has come due:
+        a restart, a sleep, or a wake tried again."""
         process = self._process
-        if process is not None and process.ended and self._status.state is State.READY:
+        if (
+            process is not None
+            and process.ended
+            and self._status.state in (State.READY, State.ASLEEP)
+        ):
             self._fail("its output ended")
-        if self._restart_at is not None and self._clock.now() >= self._restart_at:
-            self._launch()
+        deadline = self.deadline
+        if deadline is None or self._clock.now() < deadline:
+            return
+        match self._status.state:
+            case State.RESTARTING:
+                self._launch()
+            case State.READY:
+                self._fall_asleep(SleepReason.IDLE)
+            case State.ASLEEP:
+                self._wake(Waker.CONTEXT)
 
     def close(self) -> None:
-        """Shut the engine down, when the app quits."""
+        """Shut the engine down, when the app quits: asleep too, its sleep is never ended."""
         self._restart_at = None
+        self._sleep = None
         process, self._process = self._process, None
         if process is not None:
             log.info("engine closed, exit code %s", process.stop(self._timeouts.shutdown))
@@ -206,7 +277,13 @@ class Supervisor:
     def _call[P: Strict, R: Strict | None](
         self, method: Method[P, R], params: Callable[[], P], timeout: float
     ) -> R:
-        """Ask the engine; any answer but a result is a ModelError."""
+        """Ask the engine, woken first if it sleeps; any answer but a result is a ModelError.
+        Each call starts the 5 minutes again."""
+        self._asked_at = self._clock.now()
+        if self._status.state is State.ASLEEP:
+            if not self._may_wake():
+                raise ModelError(f"{method.name}: the engine sleeps, refused by the GPU's memory")
+            self._wake(Waker.STATEMENT if method is REWRITE else Waker.JUDGEMENT)
         process = self._process
         if process is None or self._status.state is not State.READY:
             raise ModelError(f"{method.name}: the engine is not running")
@@ -229,21 +306,81 @@ class Supervisor:
             self._fail(f"it cannot be started: {error}")
             return
         self._process = process
-        params = InitializeParams(
-            protocol=PROTOCOL_VERSION, model_path=str(self._model), settings=SETTINGS
-        )
         try:
-            result = process.call(INITIALIZE, params, self._timeouts.initialize)
+            result = self._initialize(process)
         except Refusal as refusal:
-            reason = _STOPPING.get(refusal.error.code)
-            if reason is None:
-                self._fail(f"initialize: {refusal}")
-            else:
-                self._stop(reason, f"initialize: {refusal}")
+            self._refused(refusal)
             return
         except Failure as failure:
             self._fail(f"initialize: {failure}")
             return
+        if self._asked_at is None:
+            self._asked_at = self._clock.now()
+        self._ready(result)
+
+    def _fall_asleep(self, reason: SleepReason) -> None:
+        """`shutdown`, keeping the process and its input: the model and its context go, and the
+        GPU is free (ADR-0027)."""
+        assert self._process is not None
+        try:
+            self._process.call(SHUTDOWN, ShutdownParams(), self._timeouts.shutdown)
+        except (Refusal, Failure) as error:
+            self._fail(f"shutdown: {error}")
+            return
+        self._sleep = EngineSleep(self._clock.now(), reason)
+        self._records.append(self._sleep)
+        self._set(Status(State.ASLEEP))
+
+    def _wake(self, waker: Waker) -> None:
+        """`initialize` again, which ends with the engine's warm-up judgement. A wake refused for
+        the GPU's memory leaves the engine asleep, to try again not before a minute."""
+        assert self._process is not None
+        woken_at = self._clock.now()
+        try:
+            result = self._initialize(self._process)
+        except Refusal as refusal:
+            if refusal.error.code is ErrorCode.GPU_OUT_OF_MEMORY:
+                self._refused_at = self._clock.now()
+                log.warning("engine wake refused: %s; the next not before 60 s", refusal)
+                self._set(Status(State.ASLEEP, StopReason.GPU_MEMORY))
+                return
+            self._end_sleep(woken_at, waker, None)
+            self._refused(refusal)
+            return
+        except Failure as failure:
+            self._end_sleep(woken_at, waker, None)
+            self._fail(f"initialize: {failure}")
+            return
+        self._end_sleep(woken_at, waker, self._clock.now())
+        self._ready(result)
+
+    def _may_wake(self) -> bool:
+        """Not within a minute of a wake refused for the GPU's memory."""
+        refused_at = self._refused_at
+        return refused_at is None or self._clock.now() - refused_at >= WAKE_RETRY_MS
+
+    def _end_sleep(self, woken_at: int, woken_by: Waker | None, ready_at: int | None) -> None:
+        sleep, self._sleep = self._sleep, None
+        if sleep is not None:
+            self._records.append(
+                replace(sleep, woken_at=woken_at, woken_by=woken_by, ready_at=ready_at)
+            )
+
+    def _initialize(self, process: EngineProcess) -> InitializeResult:
+        params = InitializeParams(
+            protocol=PROTOCOL_VERSION, model_path=str(self._model), settings=SETTINGS
+        )
+        return process.call(INITIALIZE, params, self._timeouts.initialize)
+
+    def _refused(self, refusal: Refusal) -> None:
+        """`initialize` answered with an error: stop when starting again cannot mend it."""
+        reason = _STOPPING.get(refusal.error.code)
+        if reason is None:
+            self._fail(f"initialize: {refusal}")
+        else:
+            self._stop(reason, f"initialize: {refusal}")
+
+    def _ready(self, result: InitializeResult) -> None:
         self._build = EngineBuild(
             protocol=result.protocol,
             engine_version=result.engine_version,
@@ -260,10 +397,13 @@ class Supervisor:
             result.free_vram_bytes >> 20,
             result.model_type,
         )
+        self._refused_at = None
         self._set(Status(State.READY))
 
     def _fail(self, detail: str) -> None:
-        """End the failed engine; start it again later, or stop at the fourth failure."""
+        """End the failed engine, and its sleep if it slept; start it again later, or stop at
+        the fourth failure."""
+        self._end_sleep(self._clock.now(), None, None)
         process, self._process = self._process, None
         if process is None:
             log.warning("engine failed: %s", detail)

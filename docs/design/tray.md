@@ -148,11 +148,11 @@ engine's supervisor ([#44](https://github.com/devfrx/jiffin/issues/44)):
 
 | State | The list says | Retry |
 |---|---|---|
-| `WORKING` | nothing: ready, starting, or not started yet | |
+| `WORKING` | nothing: ready, asleep, starting, or not started yet | |
 | `RESTARTING` | a warning: the model stopped and is starting again | no: it needs no hand |
 | `FAILURES` | it stopped four times within an hour | yes |
 | `MODEL` | the model cannot be loaded | yes |
-| `GPU_MEMORY` | the GPU is out of memory: close an app that uses it | yes |
+| `GPU_MEMORY` | the GPU is out of memory: close an app that uses it; also while the engine sleeps after a wake refused for it ([ADR-0027](../adr/0027-light-sleep-of-the-engine.md)) | yes |
 | `MISMATCH` | the engine is from another Jiffin version: reinstall | no: it cannot mend that |
 
 ## Trying it

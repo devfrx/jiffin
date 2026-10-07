@@ -1,4 +1,5 @@
-"""What `core` knows, as plain data: the records that `store` keeps (ADR-0013, ADR-0014, ADR-0021)."""
+"""What `core` knows, as plain data: the records that `store` keeps (ADR-0013, ADR-0014, ADR-0021);
+and the engine's sleeps, which the client records and `core` never sees (ADR-0027)."""
 
 from dataclasses import dataclass
 from enum import StrEnum
@@ -182,6 +183,44 @@ class Alert:
 Record = (
     Reminder | ReminderDeleted | Silence | SilencesCleared | CacheEntry | Evaluation | Left | Alert
 )
+
+
+class SleepReason(StrEnum):
+    """Why the engine fell asleep (ADR-0027)."""
+
+    IDLE = "idle"
+    """5 minutes after `core` last asked it for a judgement or a statement."""
+    NOTHING_IN_FRONT = "nothing_in_front"
+    """Nothing is in front for the reminders: no context, or the pause from the tray."""
+
+
+class Waker(StrEnum):
+    """What woke the engine (ADR-0027, ADR-0031)."""
+
+    CONTEXT = "context"
+    """A context waits for its 5 s with judgements not in the cache: the wake `core` announced."""
+    STATEMENT = "statement"
+    """A statement to write, asked while it slept."""
+    JUDGEMENT = "judgement"
+    """A judgement asked while it slept, which no waiting context had announced."""
+    RETRY = "retry"
+    """Retry, on the GPU's memory."""
+
+
+@dataclass(frozen=True, slots=True)
+class EngineSleep:
+    """A light sleep of the engine (ADR-0027). It is recorded when the engine falls asleep, then
+    again, with the same `slept_at`, when the sleep ends."""
+
+    slept_at: int
+    reason: SleepReason
+    woken_at: int | None = None
+    """When the wake started, or when the engine was found failed; None while it sleeps."""
+    woken_by: Waker | None = None
+    """None while it sleeps, and when the engine failed asleep."""
+    ready_at: int | None = None
+    """When the model was ready again, its warm-up done; None while it sleeps, and when the sleep
+    ended without a model: the wake failed, or the engine failed asleep."""
 
 
 @dataclass(frozen=True, slots=True)

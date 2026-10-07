@@ -5,13 +5,15 @@ judges a context, and how it rewrites a condition
 ([ADR-0006](../adr/0006-judge-rizzo-flow-q4.md),
 [ADR-0008](../adr/0008-rewrite-conditions-english-statements.md),
 [ADR-0011](../adr/0011-engine-child-process-json-rpc.md),
-[ADR-0015](../adr/0015-package-pyinstaller-velopack.md)). The code is
+[ADR-0015](../adr/0015-package-pyinstaller-velopack.md),
+[ADR-0027](../adr/0027-light-sleep-of-the-engine.md)). The code is
 `engine/`: `server.py` speaks the protocol, `prompts.py` writes the prompts,
 `backend_llama.py` scores and generates, and `llama_cpp.py` binds llama.cpp.
 The last three derive from Rizzo Flow at commit `b9ba007e`
 ([NOTICE](../../NOTICE)). The app's side is `client/`: `model_file.py` gets the
-model file and checks it, `supervisor.py` is the model port and the restarts,
-`process.py` one engine process with its pipes, and `job.py` its Job Object.
+model file and checks it, `supervisor.py` is the model port, the restarts and
+the light sleep, `process.py` one engine process with its pipes, and `job.py`
+its Job Object.
 
 ## The model file
 
@@ -67,6 +69,7 @@ sequenceDiagram
     Note over E: keeps the real stdout for the protocol and points descriptor 1 at stderr
     A->>E: initialize(protocol, model path, settings)
     E->>L: load the model with direct I/O, create one context
+    E->>L: the warm-up: judge a fixed context with a full micro-batch
     E-->>A: engine version, llama.cpp build, GPU, free VRAM, model type, prompt versions
     loop every stable context
         A->>E: judge(context, statements)
@@ -76,6 +79,13 @@ sequenceDiagram
     A->>E: rewrite(condition), when a reminder is created or edited
     E->>L: the prompt, then one token at a time
     E-->>A: the statement, the prompt version and the time taken
+    opt the light sleep, while Jiffin does not need the model
+        A->>E: shutdown
+        E->>L: free the context and the model
+        E-->>A: null
+        Note over E: lives on without a model, about 0.1 GiB of VRAM
+        A->>E: initialize again, to wake it: the same load and warm-up
+    end
     A->>E: shutdown
     E->>L: free the context and the model
     E-->>A: null
@@ -85,7 +95,15 @@ sequenceDiagram
 
 One request at a time, in order: judging and rewriting share one model and one
 context. `initialize` again replaces the model; after `shutdown` the engine
-has none, as before `initialize`.
+has none, as before `initialize`, and goes on reading its input: the light
+sleep is a `shutdown` that keeps stdin open.
+
+**The warm-up** ends every `initialize`: a judgement of a fixed context with a
+full micro-batch of statements, the shape the return was measured with
+([#121](https://github.com/devfrx/jiffin/issues/121)), so that the first true
+judgement costs no more than the next; without it, it costs 0.1–0.25 s more.
+The log has its time beside the load's. A warm-up that fails fails
+`initialize`, and the engine keeps no model.
 
 What each failure answers, besides the protocol's own errors:
 
@@ -100,8 +118,8 @@ What each failure answers, besides the protocol's own errors:
 
 ## Supervision
 
-What the app does when the engine fails. The worker thread owns the
-supervisor, and the tray shows its state.
+What the app does when the engine fails, and when Jiffin does not need it. The
+worker thread owns the supervisor, and the tray shows its state.
 
 ```mermaid
 stateDiagram-v2
@@ -111,6 +129,11 @@ stateDiagram-v2
     Starting --> Ready : initialize answers
     Starting --> Stopped : initialize refuses the model, the GPU memory or the protocol
     Starting --> failed : it fails
+    Ready --> Asleep : nothing in front, or 5 minutes since core last asked it
+    Asleep --> Ready : core needs it soon, a call, or Retry, and initialize answers
+    Asleep --> Asleep : initialize refuses the GPU memory: no new try before 60 s
+    Asleep --> Stopped : initialize refuses the model or the protocol
+    Asleep --> failed : it fails
     Ready --> failed : it fails
     failed --> Restarting : first, second or third failure within an hour
     failed --> Stopped : fourth failure within an hour
@@ -128,17 +151,41 @@ stateDiagram-v2
   as a failure.
 - **While it is down**, calls fail at once, and `build` still gives the last
   engine's build, so cached scores keep working.
-- **Time:** the restart waits on the app's clock. The worker calls `poll` at
-  the supervisor's deadline, and when the stdout thread reports that the
-  output ended while the engine was idle.
+- **The light sleep** ([ADR-0027](../adr/0027-light-sleep-of-the-engine.md)).
+  After every event the worker passes on what `core` says of the model
+  (`need`): nothing in front puts a ready engine to sleep at once; "not now"
+  lets it sleep 5 minutes after `core` last asked it for a judgement or a
+  statement (before any, after its first start; a restart keeps them);
+  "soon" wakes it, and holds its sleep off. Asleep, its process lives without
+  a model, and the GPU is free. A judgement or a rewrite asked while it sleeps
+  wakes it and waits.
+- **A wake is not a restart:** `initialize` on the same process, without
+  Starting, and `core` does not judge the stable context again.
+- **The GPU's memory full at a wake** leaves the engine asleep, and the tray
+  shows the GPU's message. The next try waits 60 s, but for Retry, and a call
+  within them fails at once; while `core` needs the model, the supervisor
+  tries again at the minute. Once a wake succeeds, `core` catches up as after
+  a restart.
+- **Every sleep is recorded** when it starts and again when it ends: when and
+  why it slept (5 minutes idle, or nothing in front), when it was woken and by
+  what (a context, a statement, a judgement, or Retry), and when the model was
+  ready after its warm-up. A sleep ended by a failure has no waker; one ended
+  without a model has no ready time; one still under way when the app closes
+  is never ended. Until migration 0003 gives them their table
+  ([#150](https://github.com/devfrx/jiffin/issues/150)), the worker writes
+  them to the app log.
+- **Time:** the restart, the sleep 5 minutes after the last request, and a
+  wake tried again wait on the app's clock. The worker calls `poll` at the
+  supervisor's deadline, and when the stdout thread reports that the output
+  ended while the engine was idle or asleep.
 - **The Job Object** kills the engine when the app closes it, or when the app
   dies. A process joins a job only if its parent was in the job when it was
   created, and in a checkout uv's `python.exe` is a launcher that starts the
   real interpreter as its child: so the engine is created suspended, put in
   its job, and only then resumed.
-- **Closing**, from any state, leads back to Off: it sends `shutdown`, then
-  closes stdin, and an engine that does not answer, or does not exit, within
-  10 s is killed.
+- **Closing**, from any state, asleep too, leads back to Off: it sends
+  `shutdown`, then closes stdin, and an engine that does not answer, or does
+  not exit, within 10 s is killed.
 - **Stderr** is UTF-8, whatever the code page. It holds no titles, addresses or
   reminder texts: the engine's messages name files, sizes and ids.
 

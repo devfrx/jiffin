@@ -1,6 +1,7 @@
 """The worker thread with the client's fake engine, on a database in a temporary folder; the
 contexts are played by the test (ADR-0012)."""
 
+import logging
 import sqlite3
 import sys
 import threading
@@ -14,8 +15,9 @@ from typing import cast
 
 import pytest
 
+from jiffin.app import worker
 from jiffin.app.worker import QueuedCore, Worker
-from jiffin.client.supervisor import State, Status
+from jiffin.client.supervisor import IDLE_MS, State, Status, StopReason
 from jiffin.core.alerts import AlertsView
 from jiffin.core.clock import Clock, SimulatedClock, SystemClock
 from jiffin.core.context import Context, Observation
@@ -32,7 +34,7 @@ SHA256 = "79de5cb8dbfd1a1f5cb3037252251594352841fe5e3dc1ae8cead053010fcd54"
 FIGMA = Context("figma.exe", "Icone - Figma", None)
 WAIT_S = 10.0
 """The longest a test waits for the worker."""
-STARTING, READY = Status(State.STARTING), Status(State.READY)
+STARTING, READY, ASLEEP = Status(State.STARTING), Status(State.READY), Status(State.ASLEEP)
 
 
 class Contexts:
@@ -181,6 +183,7 @@ def test_the_capture_starts_with_the_worker_and_the_engine_once_the_model_file_i
 ) -> None:
     scene.settle()
     assert (scene.statuses, scene.contexts.started) == ([], True)
+    scene.enter(FIGMA)  # something in front, or the engine falls asleep at once
     scene.worker.model_ready()
     scene.settle()
     assert scene.statuses == [STARTING, READY]
@@ -370,6 +373,86 @@ def test_the_worker_wakes_on_its_own_when_the_engine_starts_again(make_scene: Ma
     scene.worker.model_ready()
     wait_until(lambda: scene.statuses.count(READY) == 2)
     assert scene.statuses[:5] == [STARTING, READY, Status(State.RESTARTING), STARTING, READY]
+
+
+# The engine's light sleep (ADR-0027)
+
+
+def test_the_engine_sleeps_while_nothing_is_in_front(
+    scene: Scene, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.INFO, logger=worker.__name__)
+    scene.enter(FIGMA)
+    scene.worker.model_ready()
+    scene.settle()
+    scene.enter(None)
+    scene.settle()
+    assert scene.statuses == [STARTING, READY, ASLEEP]
+    assert f"engine asleep from {START} (nothing_in_front)" in caplog.text
+
+
+def test_a_context_wakes_the_engine_before_its_5_s_and_is_judged_once(scene: Scene) -> None:
+    scene.worker.model_ready()
+    scene.core.create("quando apro Figma", "esportare le icone", False)
+    scene.settle()
+    assert scene.statuses[-1] == ASLEEP
+    scene.enter(FIGMA)
+    scene.settle()
+    assert scene.statuses[-1] == READY
+    scene.advance(DEBOUNCE_MS)
+    scene.settle()
+    with closing(sqlite3.connect(scene.database)) as db:
+        cached = [row[0] for row in db.execute("SELECT from_cache FROM candidate")]
+    assert cached == [0]
+    [alert] = scene.alerts[-1].visible
+    assert alert.context == FIGMA
+
+
+def test_a_wake_does_not_judge_the_stable_context_again(scene: Scene) -> None:
+    scene.worker.model_ready()
+    scene.core.create("quando apro Figma", "esportare le icone", False)
+    scene.enter(FIGMA)
+    scene.settle()
+    scene.advance(DEBOUNCE_MS)
+    scene.settle()
+    scene.advance(IDLE_MS)
+    scene.settle()
+    assert scene.statuses[-1] == ASLEEP
+    scene.core.create("quando apro Teams", "rispondere a Mario", False)  # its statement wakes it
+    scene.settle()
+    assert scene.statuses[-1] == READY
+    assert scene.count("evaluation") == 1
+
+
+def test_the_engine_sleeps_5_minutes_after_the_last_judgement(scene: Scene) -> None:
+    scene.worker.model_ready()
+    scene.core.create("quando apro Figma", "esportare le icone", False)
+    scene.enter(FIGMA)
+    scene.settle()
+    scene.advance(DEBOUNCE_MS)
+    scene.settle()
+    scene.advance(IDLE_MS - 1)
+    scene.settle()
+    assert scene.statuses[-1] == READY
+    scene.advance(1)
+    scene.settle()
+    assert scene.statuses[-1] == ASLEEP
+
+
+def test_core_catches_up_once_the_engine_wakes_after_a_wake_refused(
+    make_scene: MakeScene,
+) -> None:
+    scene = make_scene(model="no memory at the first wake")
+    scene.worker.start()
+    scene.worker.model_ready()
+    scene.settle()
+    scene.core.create("quando apro Figma", "esportare le icone", False)
+    scene.settle()
+    assert scene.statuses[-1] == Status(State.ASLEEP, StopReason.GPU_MEMORY)
+    assert scene.statement() is None
+    scene.worker.restart_engine()
+    scene.settle()
+    assert scene.statement() == "The user: quando apro Figma."
 
 
 def test_closing_tells_when_the_context_in_front_left(scene: Scene) -> None:

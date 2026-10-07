@@ -20,12 +20,15 @@ _STOPPED = {
 
 
 def engine_line(status: Status) -> TrayList.Engine:
-    """What the tray list says of the engine: working, unless it is down (#43)."""
+    """What the tray list says of the engine: working, unless it is down (#43), or asleep after
+    a wake the GPU's memory refused (ADR-0027). Asleep, it is ready to the user."""
     match status:
         case Status(State.RESTARTING):
             return TrayList.Engine.RESTARTING
         case Status(State.STOPPED, reason) if reason is not None:
             return _STOPPED[reason]
+        case Status(State.ASLEEP, StopReason.GPU_MEMORY):
+            return TrayList.Engine.GPU_MEMORY
         case _:
             return TrayList.Engine.WORKING
 

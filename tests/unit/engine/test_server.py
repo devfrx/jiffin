@@ -1,4 +1,5 @@
 import io
+import logging
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -6,8 +7,10 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import IO, Any
 
+import pytest
+
 from jiffin.engine.errors import ModelNotLoadable
-from jiffin.engine.server import Engine, serve
+from jiffin.engine.server import WARM_UP, Engine, serve, warm_up_statements
 from jiffin.protocol.errors import ErrorCode
 from jiffin.protocol.framing import MAX_LINE_BYTES, read_line, write_message
 from jiffin.protocol.jsonrpc import ErrorResponse, Request, SuccessResponse, parse_response
@@ -48,11 +51,13 @@ class FakeBackend:
     def __init__(self, model_type: str = "spark2_5 ?B Q4_K - Medium") -> None:
         self.model_type = model_type
         self.closed = False
+        self.judged: list[tuple[Context, list[Statement]]] = []
 
     def free_vram_bytes(self) -> int:
         return 4_154_458_112
 
     def judge(self, context: Context, statements: Sequence[Statement]) -> dict[int, float]:
+        self.judged.append((context, list(statements)))
         return {statement.id: statement.id / 2 for statement in statements}
 
     def rewrite(self, condition: str) -> str:
@@ -112,6 +117,30 @@ def test_initialize_loads_the_model_and_reports_the_engine() -> None:
     )
 
 
+def test_initialize_ends_with_a_warm_up_judgement_of_a_full_micro_batch(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="jiffin.engine")
+    backend = FakeBackend()
+    ask(Engine(Loader(backend)), INITIALIZE, initialize())
+    assert backend.judged == [(WARM_UP, warm_up_statements(SETTINGS.micro_batch))]
+    assert len({statement.text for statement in backend.judged[0][1]}) == 16
+    assert "warmed up in" in caplog.text
+
+
+def test_a_warm_up_that_fails_fails_initialize_and_keeps_no_model() -> None:
+    class Failing(FakeBackend):
+        def judge(self, context: Context, statements: Sequence[Statement]) -> dict[int, float]:
+            raise RuntimeError("llama_decode returned -3")
+
+    backend = Failing()
+    engine = Engine(Loader(backend))
+    assert error_of(ask(engine, INITIALIZE, initialize())) == ErrorCode.INTERNAL_ERROR
+    assert backend.closed
+    response = ask(engine, JUDGE, JudgeParams(context=CONTEXT, statements=STATEMENTS), 2)
+    assert error_of(response) == ErrorCode.NOT_INITIALIZED
+
+
 def test_initialize_refuses_another_protocol_before_loading() -> None:
     loader = Loader()
     response = ask(Engine(loader), INITIALIZE, initialize(PROTOCOL_VERSION + 1))
@@ -156,6 +185,8 @@ def test_judge_returns_d_for_every_statement_in_order() -> None:
 def test_a_failure_inside_judge_is_an_internal_error_and_the_engine_goes_on() -> None:
     class Failing(FakeBackend):
         def judge(self, context: Context, statements: Sequence[Statement]) -> dict[int, float]:
+            if context == WARM_UP:
+                return super().judge(context, statements)
             raise RuntimeError("llama_decode returned -3")
 
     engine = Engine(Loader(Failing()))

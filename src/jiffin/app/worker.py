@@ -3,8 +3,9 @@ a time from its queue: the contexts, the interface's commands, the model file, a
 (ADR-0012). `core` has no locks, and the database has one connection, on this thread.
 
 The other threads put commands on the queue: functions the worker runs. After each one it
-handles whatever deadline has come, the engine's restart, the debounce, a snooze or the daily
-cleanup, and saves what `core` changed.
+handles whatever deadline has come, the engine's restart or sleep, the debounce, a snooze or
+the daily cleanup, tells the engine what `core` needs of it now (ADR-0027), and saves what
+`core` changed.
 """
 
 import logging
@@ -141,6 +142,8 @@ class Worker:
         self._on_engine = on_engine
         self._queue: queue.SimpleQueue[Command | None] = queue.SimpleQueue()
         """None closes the worker."""
+        self._engine = Status(State.OFF)
+        """The supervisor's last status."""
         self._supervisor = Supervisor(
             model, model_sha256, clock, self._status, self._exited, command=engine
         )
@@ -261,11 +264,13 @@ class Worker:
         )
 
     def _turn(self, command: Command) -> None:
-        """One command, then whatever deadline has come; then what `core` changed is saved. A
-        failure is logged, and the worker goes on with the next command."""
+        """One command, then whatever deadline has come, and what `core` needs of the engine
+        now; then what `core` changed is saved. A failure is logged, and the worker goes on with
+        the next command."""
         try:
             command()
             self._due()
+            self._supervisor.need(self._core.need)
         except Exception:
             log.exception("the worker failed")
         self._save()
@@ -277,6 +282,17 @@ class Worker:
                 self._store.save(records)
             except Exception:
                 log.exception("%d records could not be saved", len(records))
+        # The engine's sleeps go to the log until migration 0003 gives them their table,
+        # `engine_sleep` (#150).
+        for sleep in self._supervisor.take_records():
+            log.info(
+                "engine asleep from %d (%s): woken at %s by %s, ready at %s",
+                sleep.slept_at,
+                sleep.reason,
+                sleep.woken_at,
+                sleep.woken_by,
+                sleep.ready_at,
+            )
 
     def _due(self) -> None:
         self._supervisor.poll()
@@ -296,9 +312,13 @@ class Worker:
 
     def _status(self, status: Status) -> None:
         """Called inside the supervisor, which it must not call back: `core` catches up on the
-        engine's return in a command of its own (ADR-0011)."""
+        engine's return in a command of its own (ADR-0011). A wake is no return, since nothing
+        failed while the engine slept; but a wake after one the GPU's memory refused is
+        (ADR-0027)."""
         self._on_engine(status)
-        if status.state is State.READY:
+        woken = self._engine == Status(State.ASLEEP)
+        self._engine = status
+        if status.state is State.READY and not woken:
             self.command(Reminders.model_ready)
 
     def _exited(self) -> None:

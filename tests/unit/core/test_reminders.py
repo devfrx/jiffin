@@ -8,7 +8,7 @@ from jiffin.core.alerts import AlertsView
 from jiffin.core.clock import SimulatedClock
 from jiffin.core.context import Context, Observation
 from jiffin.core.debounce import DEBOUNCE_MS
-from jiffin.core.model import EngineBuild, ModelError
+from jiffin.core.model import EngineBuild, ModelError, Need
 from jiffin.core.records import (
     Alert,
     Answer,
@@ -147,6 +147,11 @@ class Scene:
     def listed(self) -> tuple[ActiveReminder, ...]:
         """The active reminders in the tray list."""
         return self.lists[-1].active if self.lists else ()
+
+    def need(self) -> Need:
+        """`core`'s need of the model now: a call, which mypy does not narrow from one assert to
+        the next as it would the property."""
+        return self.reminders.need
 
     def saved[T](self, kind: type[T]) -> list[T]:
         self.records += self.reminders.take_records()
@@ -478,6 +483,58 @@ def test_a_stable_context_that_leaves_is_recorded_with_when_it_came_and_went() -
     scene.stay(BANK, 1_000)  # a quick switch: never stable
     scene.stay(ROSSI)
     assert scene.saved(Left) == [Left(FIGMA, START, START + MINUTE_MS)]
+
+
+# When the model is needed, for the engine's sleep (ADR-0027)
+
+
+def test_nothing_is_in_front_before_a_context_without_one_and_during_a_pause() -> None:
+    scene = Scene()
+    assert scene.need() is Need.NOTHING_IN_FRONT
+    scene.stay(FIGMA)
+    assert scene.need() is Need.NOT_NOW
+    scene.stay(None)
+    assert scene.need() is Need.NOTHING_IN_FRONT
+    scene.stay(FIGMA)
+    scene.reminders.pause(Pause.HOUR)
+    assert scene.need() is Need.NOTHING_IN_FRONT
+
+
+def test_the_model_is_needed_soon_while_a_context_waits_with_a_judgement_not_cached() -> None:
+    scene = figma()
+    scene.reminders.observe(Observation(scene.clock.now(), FIGMA))
+    assert scene.need() is Need.SOON
+    scene.wait(DEBOUNCE_MS)
+    assert scene.need() is Need.NOT_NOW  # judged, and stable
+    scene.stay(BANK)
+    scene.reminders.observe(Observation(scene.clock.now(), FIGMA))
+    assert scene.need() is Need.NOT_NOW  # its judgement is in the cache
+
+
+def test_a_statement_to_write_needs_the_model_soon() -> None:
+    scene = Scene()
+    scene.model.down = True
+    scene.create("quando apro Figma")
+    scene.model.down = False
+    scene.reminders.observe(Observation(scene.clock.now(), FIGMA))
+    assert scene.need() is Need.SOON
+
+
+def test_reminders_with_only_a_time_or_completed_need_no_model() -> None:
+    scene = Scene()
+    scene.create("alle 15", "chiamare Mario")
+    completed = scene.create("quando apro Figma")
+    scene.reminders.complete(completed.id)
+    scene.reminders.observe(Observation(scene.clock.now(), FIGMA))
+    assert scene.need() is Need.NOT_NOW
+
+
+def test_the_context_that_comes_back_when_the_pause_ends_needs_the_model_soon() -> None:
+    scene = figma()
+    scene.reminders.observe(Observation(scene.clock.now(), FIGMA))
+    scene.reminders.pause(Pause.HOUR)
+    scene.reminders.resume()
+    assert scene.need() is Need.SOON
 
 
 # Occasions
