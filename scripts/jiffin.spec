@@ -37,16 +37,16 @@ LLAMA = [
     for path in sorted(RUNTIME.glob(pattern))
 ]
 
-# The evaluation harness never ships (ADR-0017); nor does mypy, which pydantic's mypy plugin
-# would bring from the development environment.
-EXCLUDES = ["jiffin.harness", "mypy", "pydantic.mypy", "pydantic.v1.mypy"]
+# The evaluation harness never ships (ADR-0017), and neither do its texts (ADR-0026); nor does
+# mypy, which pydantic's mypy plugin would bring from the development environment.
+EXCLUDES = ["jiffin.harness", "jiffin.lang.harness", "mypy", "pydantic.mypy", "pydantic.v1.mypy"]
 
 app = Analysis(
     [str(ROOT / "src" / "jiffin" / "__main__.py")],
     datas=[
         # Every file of the package that is not Python: the QML, the migrations and the language
-        # files (ADR-0026).
-        *collect_data_files("jiffin", excludes=["harness/**"]),
+        # files (ADR-0026), but the harness's.
+        *collect_data_files("jiffin", excludes=["harness/**", "lang/it/harness.toml"]),
         (str(SOURCE), "jiffin/app"),
     ],
     excludes=EXCLUDES,

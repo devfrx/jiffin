@@ -154,7 +154,7 @@ class Supervisor:
     # Lifecycle
 
     def start(self) -> None:
-        """Start the engine now, with no failures counted: when the app starts, and Riprova."""
+        """Start the engine now, with no failures counted: when the app starts, and Retry."""
         if self._status.state not in (State.STARTING, State.READY):
             self._failures.clear()
             self._launch()

@@ -42,7 +42,7 @@ ANSWERS: tuple[tuple[tuple[str, ...], tuple[object, ...]], ...] = (
     ((TEXTS.alert.snooze, TEXTS.snooze.next_time), ("snooze", Snooze.NEXT_TIME)),
     ((TEXTS.command.close,), ("close",)),
 )
-"""How the rounds answer, in turn: the buttons clicked, on the alert or on Rimanda's menu, and
+"""How the rounds answer, in turn: the buttons clicked, on the alert or on Snooze's menu, and
 the answer they give."""
 ON_THE_TEXT = QPointF(100, 20)
 """A point of an alert over its text, away from the buttons."""
@@ -412,7 +412,7 @@ def button(window: QQuickWindow, name: str) -> QPointF:
 
 
 def holder(window: QQuickWindow) -> QQuickWindow:
-    """Where the next button is: Rimanda's menu while it is open, else the alert."""
+    """Where the next button is: Snooze's menu while it is open, else the alert."""
     menu = window.property("menu")
     assert isinstance(menu, QQuickWindow)
     return menu if menu.isVisible() else window
@@ -518,7 +518,7 @@ def test_rimandas_menu_is_over_the_alert_below(qtbot: QtBot, screen: Screen, des
     under = _user32.WindowFromPoint(inside) or 0
     assert under == int(menu.winId()), f"{class_name(under)!r} is over the menu"
     desk.check("menu open over the alert below")
-    click(int(upper.winId()), x, y)  # Rimanda again: the menu closes
+    click(int(upper.winId()), x, y)  # Snooze again: the menu closes
     qtbot.waitUntil(lambda: not menu.isVisible())
     screen.show()  # `core` takes both alerts away
     qtbot.waitUntil(screen.none_shown)

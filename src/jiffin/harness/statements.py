@@ -18,16 +18,18 @@ from jiffin.core.model import EngineBuild
 from jiffin.core.records import Revision
 from jiffin.core.schedule import jiffin_day
 from jiffin.harness import render
+from jiffin.lang.harness import HARNESS
 from jiffin.store.store import Log
 from jiffin.ui.words import when
 
 
 def page(log: Log, copy: Path, folder: Path, clock: Clock) -> Path:
     today = jiffin_day(clock.local(clock.now()))
+    texts = HARNESS.statements
     rows = [
         {
             "number": reminder.id,
-            "state": "attivo" if reminder.completed_at is None else "completato",
+            "state": texts.active if reminder.completed_at is None else texts.completed,
             "condition": reminder.revision.condition,
             "time": _time(reminder.revision, today),
             "unclear": _unclear(reminder.revision, clock),
@@ -61,4 +63,6 @@ def _unclear(revision: Revision, clock: Clock) -> str:
 def _build(build: EngineBuild | None) -> str:
     if build is None:
         return ""
-    return f"motore {build.engine_version}, prompt {build.rewrite_prompt}"
+    return HARNESS.statements.written_by.format(
+        engine=build.engine_version, prompt=build.rewrite_prompt
+    )

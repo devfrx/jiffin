@@ -1,9 +1,9 @@
 """The model file's own thread: its check at every start, its download when it is missing, and
-Riprova (#39, docs/design/first-run.md).
+Retry (#39, docs/design/first-run.md).
 
 What it says of the file reaches the first-run window as a `ModelState`. A network problem is
-tried again on its own, so a connection that comes back resumes the download without Riprova;
-the other problems wait for Riprova, since only the user can mend them.
+tried again on its own, so a connection that comes back resumes the download without Retry;
+the other problems wait for Retry, since only the user can mend them.
 """
 
 import logging
@@ -18,7 +18,7 @@ from jiffin.ui.first_run import FirstRun, ModelState
 log = logging.getLogger(__name__)
 
 RETRY_SECONDS = 30.0
-"""How long a network problem waits before it is tried again; Riprova tries at once."""
+"""How long a network problem waits before it is tried again; Retry tries at once."""
 
 _STAGES = {Phase.DOWNLOADING: FirstRun.Stage.DOWNLOADING, Phase.CHECKING: FirstRun.Stage.CHECKING}
 _PROBLEMS = {
@@ -55,7 +55,7 @@ class ModelFetch:
         """Set by a call asked for: a network problem waiting to be tried again stops waiting."""
 
     def fetch(self) -> None:
-        """At the start, and Riprova; from any thread."""
+        """At the start, and Retry; from any thread."""
         with self._lock:
             self._wanted = True
             self._now.set()

@@ -1,5 +1,5 @@
-// Rimanda's menu, under its button, as Windows 11's menus are (#83, WinUI's MenuFlyout): 4 px
-// around the items and 2 px between them, a line before Non qui, as wide as the longest item and
+// Snooze's menu, under its button, as Windows 11's menus are (#83, WinUI's MenuFlyout): 4 px
+// around the items and 2 px between them, a line before Not here, as wide as the longest item and
 // 32 px, 120 px at least. A window of its own that never takes the focus: the window that holds
 // it, an alert or the tray list's cards (#84), places it and shows it with the glass. Where that
 // window keeps the focus, as the tray list does, its keys move over the items: `current`, with
@@ -10,7 +10,7 @@ import Jiffin
 Window {
     id: menu
 
-    // Whether it has Alla prossima volta: the reminder has a next unit (ADR-0021).
+    // Whether it has Next time: the reminder has a next unit (ADR-0021).
     property bool nextTime: true
     // The item the keyboard is on, among those shown, from the top; -1 for none, as when the
     // menu opens under the mouse.
@@ -56,7 +56,7 @@ Window {
     Column {
         id: column
 
-        // The longest item shown: Alla prossima volta shows only with a next unit (ADR-0021).
+        // The longest item shown: Next time shows only with a next unit (ADR-0021).
         readonly property real widest: Math.max(nextTimeItem.visible ? nextTimeItem.implicitWidth : 0, quarterHourItem.implicitWidth, hourItem.implicitWidth, tomorrowItem.implicitWidth, notHereItem.implicitWidth)
         // The items shown, from the top, which the keyboard moves over.
         readonly property list<FluentMenuItem> shown: [nextTimeItem, quarterHourItem, hourItem, tomorrowItem, notHereItem].filter(item => item.visible)

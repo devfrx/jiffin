@@ -100,7 +100,7 @@ class Screen:
         """The unit's list, a window of its own."""
 
     def open(self) -> None:
-        """What Impostazioni in the tray icon's menu does; ready once it has the focus."""
+        """What Settings in the tray icon's menu does; ready once it has the focus."""
         self.preferences.open()
         self._qtbot.waitUntil(self.window.isActive)
 
@@ -286,7 +286,7 @@ def test_tab_moves_on_and_space_chooses(screen: Screen) -> None:
 @pytest.mark.parametrize("close", [TEXTS.command.close, "Esc"])
 def test_the_x_and_esc_close_the_window(screen: Screen, close: str) -> None:
     screen.open()
-    # The X is the only Chiudi: no button at the bottom, as in Windows' Settings.
+    # The X is the only Close: no button at the bottom, as in Windows' Settings.
     assert len(screen._items(lambda item: accessible(item, "name") == TEXTS.command.close)) == 1
     if close == "Esc":
         screen.press(Qt.Key.Key_Escape)
@@ -487,7 +487,7 @@ def test_the_units_list_opens_on_the_glass_with_the_chosen_unit_over_the_box(
     assert ("nudge", hwnd) in dwm
     names = shown(units, lambda item: item.inherits("QQuickAbstractButton"))
     assert [accessible(item, "name") for item in names] == ["secondi", "minuti"]
-    # As wide as the box, with minuti, the second item, over it.
+    # As wide as the box, with minutes, the second item, over it.
     box = screen.unit()
     corner = box.mapToGlobal(QPointF(0, 0))
     assert (units.x(), units.width()) == (round(corner.x()), round(box.width()))

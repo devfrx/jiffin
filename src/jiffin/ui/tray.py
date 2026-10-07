@@ -1,6 +1,6 @@
 """The tray icon: Jiffin's glyph, with a dot for an alert not seen yet, and "!" while a browser's
 address cannot be read or a pause badge while Jiffin is paused (#12, ADR-0010, ADR-0024). A
-click opens the tray list; the right-click menu has the pause, Impostazioni and Esci (#43).
+click opens the tray list; the right-click menu has the pause, Settings and Quit (#43).
 
 The icon follows the taskbar's theme, which can differ from the apps' one: a dark glyph on a
 light taskbar, a white one on a dark taskbar. It is drawn here at the exact size Windows shows
@@ -194,7 +194,7 @@ class Tray(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has no _
 
     @Slot(object)
     def show_reminders(self, view: RemindersView) -> None:
-        """Whether Jiffin is paused: the menu offers Riprendi instead, and the icon shows it."""
+        """Whether Jiffin is paused: the menu offers Resume instead, and the icon shows it."""
         if (view.paused_until is not None) != self._paused:
             self._paused = view.paused_until is not None
             self.changed.emit()

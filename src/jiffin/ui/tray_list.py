@@ -1,12 +1,12 @@
 """The tray list: the pause from the tray, what keeps Jiffin from working fully, the alerts that
 vanished unanswered, the active reminders and the return pause (#12, #43, #84, ADR-0010,
 ADR-0024). The model file on its way is one of the first: its line shows the download or the
-problem, and Dettagli opens the first-run window.
+problem, and Details opens the first-run window.
 
 A card on the alerts' material, at the bottom right of the screen over the tray. The tray icon
 opens it, and it takes the focus; Esc, its X or a click elsewhere closes it. It drags, and opens
 over the tray again (ADR-0023). While it is open, the unseen alerts it shows are seen, and those
-new to it keep a dot until it closes. An unseen alert's Rimanda opens the alert's menu, a window
+new to it keep a dot until it closes. An unseen alert's Snooze opens the alert's menu, a window
 of its own that never takes the focus: the list keeps it, and its keys move over the menu.
 """
 
@@ -69,7 +69,7 @@ class Commands(Protocol):
 
 
 class Writer(Protocol):
-    """The creation window, which Nuovo and Modifica open."""
+    """The creation window, which New and Edit open."""
 
     def new(self) -> None: ...
     def edit(self, revision: Revision) -> None: ...
@@ -96,7 +96,7 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         GPU_MEMORY = 4
         """Stopped: the GPU is out of memory."""
         MISMATCH = 5
-        """Stopped: the engine speaks another protocol version, which Riprova cannot mend."""
+        """Stopped: the engine speaks another protocol version, which Retry cannot mend."""
 
     changed = Signal()
     opened = Signal()
@@ -137,7 +137,7 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         self._put_at: QPoint | None = None
         """Where the list was last put: an open list anywhere else, the user moved."""
         self._menu_for = 0
-        """The unseen alert whose Rimanda has its menu open; 0 for none."""
+        """The unseen alert whose Snooze has its menu open; 0 for none."""
         self._next_time = True
         self._unseen = Rows("alertId", ("action", "line", "fresh"), self)
         self._active = Rows(
@@ -250,12 +250,12 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
 
     @Property(int, notify=changed)
     def menuFor(self) -> int:
-        """The unseen alert whose Rimanda has its menu open; 0 for none."""
+        """The unseen alert whose Snooze has its menu open; 0 for none."""
         return self._menu_for
 
     @Property(bool, notify=changed)
     def nextTime(self) -> bool:
-        """Whether the open menu has Alla prossima volta: the reminder has a next unit, asked of
+        """Whether the open menu has Next time: the reminder has a next unit, asked of
         `core` when the menu opens (ADR-0021)."""
         return self._next_time
 
@@ -286,7 +286,7 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
 
     @Slot(int)
     def toggleMenu(self, alert_id: int) -> None:
-        """Rimanda on an unseen alert: its menu opens, or closes on a second click."""
+        """Snooze on an unseen alert: its menu opens, or closes on a second click."""
         if alert_id == self._menu_for:
             self.closeMenu()
             return
@@ -302,7 +302,7 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
 
     @Slot()
     def closeMenu(self) -> None:
-        """An answer, a second click on Rimanda, a press anywhere in the list, Esc, the focus
+        """An answer, a second click on Snooze, a press anywhere in the list, Esc, the focus
         moving on, or the list closing."""
         if self._menu_for:
             self._menu_for = 0
@@ -331,7 +331,7 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
 
     @Slot()
     def settings(self) -> None:
-        """Cambia, by the return pause: the settings, where it is set."""
+        """Change, by the return pause: the settings, where it is set."""
         self.close()
         self._preferences.open()
 
@@ -341,7 +341,7 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
 
     @Slot()
     def resume(self) -> None:
-        """Riprendi, on the pause's line."""
+        """Resume, on the pause's line."""
         self._resume()
 
     @Slot()

@@ -39,8 +39,8 @@ stateDiagram-v2
     Empty --> Shown : present
     state Shown {
         [*] --> Closed
-        Closed --> Open : Rimanda
-        Open --> Closed : Rimanda again, a press outside, another menu opening
+        Closed --> Open : Snooze
+        Open --> Closed : Snooze again, a press outside, another menu opening
     }
     Shown --> Leaving : an answer, the X, or the 10 s are up
     Shown --> Leaving : core no longer shows it
@@ -53,12 +53,12 @@ stateDiagram-v2
   it. With only a time, the day of the instance it rings for and its hours:
   "Oggi alle 15:00", or "Ieri alle 15:00" when it rings late
   (`units.instance_day`, from the window that holds the moment it rang).
-- **The icon**: Document, or RepeatAll for a perennial reminder, whose Fatto
+- **The icon**: Document, or RepeatAll for a perennial reminder, whose Done
   means "done this time".
-- **The commands**: Fatto, Rimanda and the X. The X closes without an answer,
+- **The commands**: Done, Snooze and the X. The X closes without an answer,
   and `core` records `chiuso` ([ADR-0021](../adr/0021-one-alert-per-unit.md)).
-- **Rimanda's menu**: Alla prossima volta, Tra 15 minuti, Tra un'ora, Domani, a
-  line, Non qui. Alla prossima volta shows only when the reminder has a next
+- **Snooze's menu**: Next time, Quarter hour, Hour, Tomorrow, a
+  line, Not here. Next time shows only when the reminder has a next
   unit: `core`'s `next_occasion`, asked when the menu opens. The menu is a
   window of its own under the button, on its left edge and 4 px down, as wide
   as its longest item and 32 px, 120 px at least: WinUI's MenuFlyout, with 4 px
@@ -67,7 +67,7 @@ stateDiagram-v2
   open at a time. `AlertMenu.qml` knows only its items: it says which one was
   chosen, and the window that holds it places it and answers; the tray list's
   unseen alerts open the same menu ([tray](tray.md)).
-- The menu closes on a second click on Rimanda, on a press outside it and its
+- The menu closes on a second click on Snooze, on a press outside it and its
   alert, or when the alert leaves. Its windows never take the focus, so they
   hear of no click elsewhere: while a menu is open, and only then, the overlay
   reads the mouse buttons every 20 ms (`GetAsyncKeyState`, left or right, so

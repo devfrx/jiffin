@@ -31,7 +31,7 @@ class Revision:
     """When the condition was written: its time counts from then, and a new revision that keeps
     the condition keeps it (ADR-0020). None in version 0.1, whose reminders have no time."""
     perennial: bool = False
-    """ "Ogni volta": Fatto means "done this time", and the reminder waits for its next unit."""
+    """ "Ogni volta": Done means "done this time", and the reminder waits for its next unit."""
     created_at: int | None = None
     """When the revision was made; unknown for the later revisions of version 0.1."""
 
@@ -45,7 +45,7 @@ class Reminder:
     revision: Revision
     completed_at: int | None = None
     snoozed_until: int | None = None
-    """Set by a Rimanda with a time. Once past, the reminder may ring again within its unit, until
+    """Set by a Snooze with a time. Once past, the reminder may ring again within its unit, until
     it rings (ADR-0021)."""
 
 
@@ -58,7 +58,7 @@ class ReminderDeleted:
 
 @dataclass(frozen=True, slots=True)
 class Silence:
-    """ "Non qui": the reminder keeps quiet in this context until its text changes."""
+    """Not here: the reminder keeps quiet in this context until its text changes."""
 
     reminder_id: int
     context: Context
@@ -136,7 +136,7 @@ class Left:
 class Answer(StrEnum):
     DONE = "fatto"
     USEFUL = "utile"
-    """Version 0.1 only: "Alla prossima volta" took its place."""
+    """Version 0.1 only: Next time took its place."""
     SNOOZE = "rimanda"
     NOT_HERE = "non_qui"
     CLOSED = "chiuso"
@@ -144,10 +144,10 @@ class Answer(StrEnum):
 
 
 class Snooze(StrEnum):
-    """Which Rimanda (ADR-0021)."""
+    """Which Snooze (ADR-0021)."""
 
     NEXT_TIME = "next_time"
-    """Alla prossima volta: the reminder waits for its next unit."""
+    """Next time: the reminder waits for its next unit."""
     QUARTER_HOUR = "quarter_hour"
     HOUR = "hour"
     TOMORROW = "tomorrow"
@@ -176,7 +176,7 @@ class Alert:
     answer: Answer | None = None
     answered_at: int | None = None
     snooze: Snooze | None = None
-    """Which Rimanda, with the answer `rimanda`; unknown in version 0.1."""
+    """Which Snooze, with the answer `rimanda`; unknown in version 0.1."""
 
 
 Record = (
@@ -204,7 +204,7 @@ class Snapshot:
     """The entries of the current revisions."""
     last_alerts: tuple[tuple[int, int, int], ...] = ()
     """For each reminder that has rung, its id, then the id and the time of its last alert not
-    answered "Non qui": the one that counts in its unit (ADR-0021)."""
+    answered Not here: the one that counts in its unit (ADR-0021)."""
     unseen: tuple[Alert, ...] = ()
     """Alerts shown and never answered, the last of their reminder, newest first."""
     last_ids: LastIds = LastIds()

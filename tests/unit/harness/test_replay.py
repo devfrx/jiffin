@@ -66,7 +66,7 @@ class FakeEngine:
 
 def a_day(path: Path) -> Log:
     """The invented morning through the app's own core, with an owner who answers some alerts:
-    Alla prossima volta and then Fatto for Verdi, Non qui for the bank, Rimanda a quarter of an
+    Next time and then Done for Verdi, Not here for the bank, Snooze a quarter of an
     hour for the mail; the engine down for a while; the mail's reminder created, the bank's
     edited."""
     fake = FakeEngine()
@@ -246,7 +246,7 @@ def test_recorded_scores_fail_where_the_log_did(recorded: tuple[Log, days.Day]) 
 def test_a_rimanda_of_0_1_without_its_kind_is_found_from_the_judgements(
     recorded: tuple[Log, days.Day],
 ) -> None:
-    """Version 0.1 did not record which Rimanda: the one whose end falls between the reminder's
+    """Version 0.1 did not record which Snooze: the one whose end falls between the reminder's
     last judgement as snoozed and its first as free."""
     log, day = recorded
     unknown = tuple(
@@ -257,7 +257,7 @@ def test_a_rimanda_of_0_1_without_its_kind_is_found_from_the_judgements(
     assert signature(replay.Replay(log, replace(day, alerts=unknown)).run()) == signature(day)
 
 
-# Version 0.2: the return pause, the times, and a Rimanda from the day before (ADR-0021)
+# Version 0.2: the return pause, the times, and a Snooze from the day before (ADR-0021)
 
 YESTERDAY = T0 - 15 * HOUR_MS  # 2026-10-04 18:00 UTC
 MINUTE = 60_000
@@ -275,7 +275,7 @@ REPORT = ("alle 10:30", "mandare il resoconto")
 
 def a_day_of_times(path: Path) -> Log:
     """Version 0.2 through the app's own core, in UTC: a return pause of 30 s, then of 5 minutes;
-    reminders with only a time: one that rang yesterday and was put off to today with Domani,
+    reminders with only a time: one that rang yesterday and was put off to today with Tomorrow,
     one edited after it rang, one that rings after the day's last evaluation."""
     clock = SimulatedClock(YESTERDAY, UTC)
     core = Reminders(FakeEngine(), clock, lambda view: None, lambda view: None, return_pause=30_000)

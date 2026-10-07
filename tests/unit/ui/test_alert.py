@@ -176,7 +176,7 @@ def test_the_10_seconds_pause_while_the_menu_is_open(scene: Scene) -> None:
     scene.present()
     scene.slot.toggleMenu()
     assert (scene.slot.menu_open, scene.qml("menuOpen"), scene.qml("paused")) == (True, True, True)
-    scene.slot.toggleMenu()  # a second click on Rimanda
+    scene.slot.toggleMenu()  # a second click on Snooze
     assert (scene.qml("menuOpen"), scene.qml("paused")) == (False, False)
     scene.slot.toggleMenu()
     scene.slot.close_menu()  # a click outside

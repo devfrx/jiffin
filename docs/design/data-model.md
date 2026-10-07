@@ -9,7 +9,7 @@ the latest migration.
 ```mermaid
 erDiagram
     reminder ||--|{ revision : "versions of its text"
-    reminder ||--o{ silence : "Non qui"
+    reminder ||--o{ silence : "Not here"
     context ||--o{ silence : "silenced in"
     engine_build |o--o{ revision : "wrote the statement"
     revision ||--o{ candidate : "judged as"
@@ -117,10 +117,10 @@ alerts without a judgement; no table refers to them, so foreign keys stay on.
 A revision of 0.1 has no time, and its remainder is its condition; an alert of
 0.1 was due when its context came. `schedule` is `store/schedules.py`'s JSON,
 the shape of the time cases. `written_at` is not in ADR-0021's table: it keeps
-when a condition was written across a Modifica that does not change it, as
+when a condition was written across a Edit that does not change it, as
 [ADR-0020](../adr/0020-read-the-time-in-core.md) wants.
 
-- **What loads**: the last alert of each reminder not answered "Non qui", the
+- **What loads**: the last alert of each reminder not answered Not here, the
   one that counts in its unit; the unseen alerts are the shown, unanswered
   alerts that are the last of their active reminder.
 - **The harness's log** keeps the alerts of reminders with only a time, which

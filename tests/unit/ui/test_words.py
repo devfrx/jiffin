@@ -30,7 +30,7 @@ def at(day: int, hour: int, minute: int = 0) -> datetime:
 
 
 FRIDAY = date(2026, 10, 2)
-"""Venerdì 2 ottobre 2026, the day the map's examples were written."""
+"""Friday 2 October 2026, the day the map's examples were written."""
 WRITTEN = at(2, 10)
 
 

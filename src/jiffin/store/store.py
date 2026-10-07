@@ -148,8 +148,8 @@ class Store:
                     ORDER BY revision, context.id, engine_build"""
                 )
             )
-            # The alert that counts in each reminder's unit: "Non qui" takes it back (ADR-0021).
-            counted = _LAST_ALERT.format(which="a.answer IS NOT 'non_qui'")
+            # The alert that counts in each reminder's unit: Not here takes it back (ADR-0021).
+            counted = _LAST_ALERT.format(which=f"a.answer IS NOT '{Answer.NOT_HERE.value}'")
             last_alerts = tuple(
                 (row[0], row[1], row[2])
                 for row in self._db.execute(

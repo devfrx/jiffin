@@ -105,7 +105,7 @@ class Times:
 
 
 def next_occasion(revision: Revision, clock: Clock, now: int) -> bool:
-    """Whether "Alla prossima volta" has a unit to wait for, the reminder having rung in this one
+    """Whether Next time has a unit to wait for, the reminder having rung in this one
     (ADR-0021): with the occasion as its unit, when its time still holds after now or it has
     none; with the instance, when an instance comes after this one."""
     schedule, written_at = revision.schedule, revision.written_at

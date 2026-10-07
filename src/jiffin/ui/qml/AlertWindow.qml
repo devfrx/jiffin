@@ -1,6 +1,6 @@
 // One alert: a strip at the top of the screen that never takes the focus (#12, ADR-0010). The
-// user's "Quando…" and the time understood over what to do, then Fatto, Rimanda and the X (#83,
-// ADR-0023), and a bar for the 10 s. Rimanda opens its menu under the button: a window of its
+// user's "Quando…" and the time understood over what to do, then Done, Snooze and the X (#83,
+// ADR-0023), and a bar for the 10 s. Snooze opens its menu under the button: a window of its
 // own, which the alert places and the overlay shows.
 import QtQuick
 import QtQuick.Layouts
@@ -13,10 +13,10 @@ Window {
     // How long the alert waits for an answer (#12).
     property int duration: 10000
     property real progress: 1
-    // Rimanda's menu, for the overlay to show and hide: a QtObject, since PySide has no
+    // Snooze's menu, for the overlay to show and hide: a QtObject, since PySide has no
     // converter for the Window type of QML.
     readonly property QtObject menu: snoozeMenu
-    // Where the menu opens in the window: under Rimanda, on its left edge and 4 px down, as
+    // Where the menu opens in the window: under Snooze, on its left edge and 4 px down, as
     // Windows' menus do. Taken at each click, in the strip, without the slide of its entrance.
     property point menuAt
 
@@ -124,7 +124,7 @@ Window {
                 }
             }
 
-            // The X closes without an answer (ADR-0023), 8 px after Rimanda.
+            // The X closes without an answer (ADR-0023), 8 px after Snooze.
             FluentButton {
                 Layout.leftMargin: -4
                 kind: FluentButton.Subtle

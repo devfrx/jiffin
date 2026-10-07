@@ -1,9 +1,9 @@
 // The tray list (#12, #43, #84): what keeps Jiffin from working fully, the model file on its way
-// first, the alerts that vanished unanswered, with Fatto and Rimanda, the active reminders, with
-// Nuovo, Modifica, Completa and Elimina, and the return pause, with Cambia. A card on the alerts'
-// material, over the tray, with an X after Nuovo (ADR-0010, ADR-0023). It takes the focus; Tab
+// first, the alerts that vanished unanswered, with Done and Snooze, the active reminders, with
+// New, Edit, Complete and Delete, and the return pause, with Change. A card on the alerts'
+// material, over the tray, with an X after New (ADR-0010, ADR-0023). It takes the focus; Tab
 // moves from button to button, and Esc, the X or a click elsewhere closes it. It drags from any
-// point no control takes. Rimanda opens the alert's menu, a window of its own.
+// point no control takes. Snooze opens the alert's menu, a window of its own.
 // Bound: the rows take their data as required properties, and reach the list by its id.
 pragma ComponentBehavior: Bound
 
@@ -18,10 +18,10 @@ Window {
     required property TrayList trayList
     required property FirstRun firstRun
     required property Preferences preferences
-    // Rimanda's menu, for the list to show and hide: a QtObject, since PySide has no converter
+    // Snooze's menu, for the list to show and hide: a QtObject, since PySide has no converter
     // for the Window type of QML.
     readonly property QtObject menu: snoozeMenu
-    // The Rimanda the menu opens from, in the window: taken at each click, as the list scrolls.
+    // The Snooze the menu opens from, in the window: taken at each click, as the list scrolls.
     property rect menuButton
 
     // Scrolls the list to the item Tab has reached.
@@ -34,7 +34,7 @@ Window {
             scroller.contentY = Math.min(scroller.contentHeight - scroller.height, bottom - scroller.height);
     }
 
-    // Rimanda on an unseen alert: the menu opens under the button, on its first item when the
+    // Snooze on an unseen alert: the menu opens under the button, on its first item when the
     // keyboard reached the button, or closes.
     function toggleMenu(alertId: int, button: T.AbstractButton): void {
         const corner = button.mapToItem(null, 0, 0);
@@ -145,7 +145,7 @@ Window {
                     }
                 }
 
-                // The pause from the tray (ADR-0024), until it ends or Riprendi.
+                // The pause from the tray (ADR-0024), until it ends or Resume.
                 FluentInfoBar {
                     Layout.fillWidth: true
                     Layout.leftMargin: 8
@@ -195,7 +195,7 @@ Window {
                     visible: window.trayList.engine !== TrayList.WORKING
                     severity: window.trayList.engine === TrayList.RESTARTING ? FluentInfoBar.Warning : FluentInfoBar.Error
                     message: Texts.engineTrouble[window.trayList.engine]
-                    // Restarting needs no hand, and Riprova cannot mend another version.
+                    // Restarting needs no hand, and Retry cannot mend another version.
                     action: [TrayList.RESTARTING, TrayList.MISMATCH].includes(window.trayList.engine) ? "" : Texts.retry
                     onTriggered: window.trayList.retry()
                 }
@@ -329,7 +329,7 @@ Window {
                             required property bool returnsTomorrow
                             required property int silences
                             readonly property string status: Texts.status(endedOn, returnsIn, returnsAt, returnsTomorrow, silences)
-                            // Elimina asks first: the reminder goes for good, with all it knows.
+                            // Delete asks first: the reminder goes for good, with all it knows.
                             property bool confirming: false
 
                             // The row turns into the question and back; the focus goes along
@@ -353,10 +353,10 @@ Window {
                                 width: row.width - 8 - 12
                                 spacing: 4
 
-                                // Completa: a circle, as in Microsoft To Do; the check shows under
+                                // Complete: a circle, as in Microsoft To Do; the check shows under
                                 // the mouse. A reminder of every time never completes: the arrows
                                 // of its alert, an icon (#84). Both keep their place while
-                                // Elimina asks.
+                                // Delete asks.
                                 Item {
                                     Layout.alignment: Qt.AlignTop
                                     implicitWidth: 32
@@ -496,7 +496,7 @@ Window {
                     }
                 }
 
-                // Where the list ends, after a thin line: the return pause (#84), and Cambia,
+                // Where the list ends, after a thin line: the return pause (#84), and Change,
                 // which opens the settings.
                 Rectangle {
                     Layout.fillWidth: true
@@ -526,7 +526,7 @@ Window {
         }
     }
 
-    // While Rimanda's menu is open, a press anywhere in the list closes it and does nothing
+    // While Snooze's menu is open, a press anywhere in the list closes it and does nothing
     // else, as Windows' light dismiss: the menu never takes the focus, so the list hears it. It
     // keeps the press until the button goes up, so that no drag starts; the wheel closes it too.
     MouseArea {
@@ -549,9 +549,9 @@ Window {
                 window.trayList.close();
         }
     }
-    // While the menu is open its Rimanda keeps the focus, and these keys go to the menu before
+    // While the menu is open its Snooze keeps the focus, and these keys go to the menu before
     // the button, as in Windows' menus: Up and Down move over its items, and Space or Enter
-    // pick one. Before a key moves, Space and Enter are a click on Rimanda, which closes it.
+    // pick one. Before a key moves, Space and Enter are a click on Snooze, which closes it.
     Shortcut {
         sequences: ["Down"]
         enabled: window.trayList.menuFor !== 0
@@ -568,7 +568,7 @@ Window {
         onActivated: snoozeMenu.trigger()
     }
 
-    // Under its Rimanda, on its left edge and 4 px down, as Windows' menus; over it, 4 px up,
+    // Under its Snooze, on its left edge and 4 px down, as Windows' menus; over it, 4 px up,
     // where the work area would end first.
     AlertMenu {
         id: snoozeMenu

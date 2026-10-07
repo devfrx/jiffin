@@ -21,6 +21,7 @@ from jiffin.core.reminders import THRESHOLD
 from jiffin.harness import metrics
 from jiffin.harness.errors import HarnessError
 from jiffin.harness.metrics import Operating, Table
+from jiffin.lang.harness import HARNESS
 
 CLASSES = {
     1: "name",
@@ -41,8 +42,16 @@ BUDGETS = (0.1, 0.13, 0.2)
 
 # The prototype's reminders are one sentence, "quando … ricordami di …": the condition is the
 # part before "ricordami", the "Quando" box of the app.
-_CONDITION = re.compile(r"^\s*((?:quando|se)\b.*?)[\s,]+ricordami\b", re.IGNORECASE | re.DOTALL)
-_ACTION = re.compile(r"\bricordami\s+(?:di\s+)?(.*)$", re.IGNORECASE | re.DOTALL)
+_WORDS = HARNESS.sample
+_CONDITION = re.compile(
+    rf"^\s*((?:{'|'.join(map(re.escape, _WORDS.condition_starts))})\b.*?)[\s,]+"
+    rf"{re.escape(_WORDS.remind_me)}\b",
+    re.IGNORECASE | re.DOTALL,
+)
+_ACTION = re.compile(
+    rf"\b{re.escape(_WORDS.remind_me)}\s+(?:{re.escape(_WORDS.of)}\s+)?(.*)$",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,7 +142,7 @@ def reminders(path: Path) -> list[tuple[str, str]]:
     for reminder in sorted(data["reminders"], key=lambda reminder: reminder["n"]):
         action = _ACTION.search(reminder["text"])
         if action is None:
-            raise HarnessError("a reminder of the sample has nothing after 'ricordami'")
+            raise HarnessError(f"a reminder of the sample has nothing after {_WORDS.remind_me!r}")
         found.append((_condition(reminder["text"]), action.group(1).strip()))
     return found
 
@@ -363,7 +372,7 @@ def _context(row: dict[str, Any]) -> Context:
 def _condition(text: str) -> str:
     match = _CONDITION.match(text)
     if match is None:
-        raise HarnessError("a reminder of the sample has no condition before 'ricordami'")
+        raise HarnessError(f"a reminder of the sample has no condition before {_WORDS.remind_me!r}")
     return match.group(1).strip()
 
 

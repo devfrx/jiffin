@@ -26,7 +26,7 @@ OWNER_SHARE = 30
 """Pairs the owner labels by default: as many alerts as the owner judged on 2026-09-28."""
 
 INSTRUCTIONS = (
-    "For every pair, decide whether the reminder's remainder (the Quando box without its time: "
+    "For every pair, decide whether the reminder's remainder (its condition without its time: "
     "the code checks the time) is true in that context: not whether the reminder would have been "
     'useful. Put true or false under "claude", by key, and list under "uncertain" the keys you '
     "are unsure about."

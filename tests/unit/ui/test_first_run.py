@@ -62,7 +62,7 @@ def in_button(item: QQuickItem) -> bool:
 
 
 class Screen:
-    """The first-run window on the offscreen screen, with the Riprova it was asked and the
+    """The first-run window on the offscreen screen, with the Retry it was asked and the
     places it kept."""
 
     def __init__(self, qtbot: QtBot, folder: Path) -> None:
@@ -109,7 +109,7 @@ class Screen:
         )
 
     def x(self) -> QQuickItem:
-        """The X: Chiudi too, as the button at the bottom while the model is on its way."""
+        """The X: Close too, as the button at the bottom while the model is on its way."""
         return next(
             item
             for item in self._shown()

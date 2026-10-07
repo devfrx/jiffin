@@ -1,8 +1,8 @@
 // The creation window (#12, #43, #101): "Quando" and "Ricordami di", "Ogni volta", the sentence
-// they make, Annulla and Salva. A card like the alerts, on their material, with its title as its
+// they make, Cancel and Save. A card like the alerts, on their material, with its title as its
 // first line and an X on it (ADR-0010, ADR-0023). Under "Quando", in place of its hint, the time
 // Jiffin understood beside a clock, or the words it did not understand; a time already over turns
-// Salva off and says why under the sentence (#84, #90). It takes the focus: Enter saves, or goes to
+// Save off and says why under the sentence (#84, #90). It takes the focus: Enter saves, or goes to
 // the box to write or mend; Esc cancels, as the X does; Tab moves on. It drags from any point no
 // control takes.
 import QtQuick

@@ -3,10 +3,10 @@ at the interface without the app.
 
 Answering an alert, or letting it vanish, prints what happened; a new alert comes 2 s later,
 and one that vanished waits in the tray list. Win+Shift+N opens the creation window, the tray
-icon the list, and Impostazioni in its menu the settings; what they change is printed and kept
-until the end. Sospendi in the same menu shows the pause on the icon and in the list, until
-Riprendi. `--model` plays a first run: a download of a minute and its check, or a problem
-first, which Riprova mends. No model and no data are needed. Esci in the tray icon's menu, or
+icon the list, and Settings in its menu the settings; what they change is printed and kept
+until the end. Pause in the same menu shows the pause on the icon and in the list, until
+Resume. `--model` plays a first run: a download of a minute and its check, or a problem
+first, which Retry mends. No model and no data are needed. Quit in the tray icon's menu, or
 Ctrl+C in the terminal, ends it.
 """
 
@@ -70,7 +70,7 @@ MODEL = ModelFile(
     folder=Path(tempfile.gettempdir()) / "jiffin-preview" / "models",
 )
 """The real pin's look, since the interface does not import `client` (ADR-0012), in a folder of
-its own: Apri la cartella never makes the app's."""
+its own: Open folder never makes the app's."""
 TICK_MS = 200
 DOWNLOAD_TICKS = 300
 """A minute of download."""
@@ -85,7 +85,7 @@ PROBLEMS = {
 
 class Download:
     """Plays the model file's part: a download of a minute, then its check, then ready; or a
-    problem first, which Riprova mends."""
+    problem first, which Retry mends."""
 
     def __init__(self, start: str) -> None:
         self._start = start

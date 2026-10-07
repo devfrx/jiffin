@@ -37,7 +37,7 @@ def test_the_pairs_are_written_with_their_texts(tmp_path: Path) -> None:
         "action": "esportare le icone",
     }
     assert (record["claude"], record["uncertain"], record["owner"]) == ({}, [], {})
-    assert "Quando" in record["instructions"]
+    assert "condition without its time" in record["instructions"]
 
 
 def test_preparing_again_keeps_every_label(tmp_path: Path) -> None:

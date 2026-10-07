@@ -1,13 +1,13 @@
 """The settings window: the return pause, then the material of Jiffin's windows (#43, #84,
 ADR-0010, ADR-0021).
 
-A card like the creation window. The return pause is a number and its unit, secondi or minuti,
+A card like the creation window. The return pause is a number and its unit, seconds or minutes,
 as WinUI's NumberBox and ComboBox; the combo box's list is a window of its own on the glass,
-which never takes the focus, as Rimanda's menu. The four materials are radio buttons. The tray
-icon's menu opens the window, and Cambia in the tray list, at the centre of the screen or where
+which never takes the focus, as Snooze's menu. The four materials are radio buttons. The tray
+icon's menu opens the window, and Change in the tray list, at the centre of the screen or where
 the user left it (ADR-0023), and it takes the focus, on the pause. Each change applies at once,
 as in Windows' own Settings, and goes to be kept; the X or Esc hides the window, as there, with
-no Chiudi.
+no Close.
 """
 
 from collections.abc import Callable
@@ -120,7 +120,7 @@ class Preferences(QObject):  # type: ignore[operator]  # QmlUncreatable's stub h
 
     @Property(bool, notify=changed)
     def minutes(self) -> bool:
-        """The unit the pause shows in: minuti, or secondi."""
+        """The unit the pause shows in: minutes, or seconds."""
         return self._minutes
 
     @Property(int, notify=changed)

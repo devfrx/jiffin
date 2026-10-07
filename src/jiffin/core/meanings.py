@@ -89,7 +89,7 @@ class Reading:
     unclear: tuple[tuple[int, int], ...] = ()
     """Where the words not understood are, as [start, end) offsets, to name them."""
     past: bool = False
-    """The time is over already, when written: Salva turns off (#84)."""
+    """The time is over already, when written: Save turns off (#84)."""
     recurring: bool = False
     """Words that tick "Ogni volta" by themselves: "ogni…", or a recurrence of the month or of
     the year (#92)."""

@@ -34,8 +34,8 @@ How Jiffin lives in the tray, in `jiffin.ui`. `ui/tray.py` draws the icon,
   "Jiffin", with "In pausa" under it while paused.
 - A click opens or closes the list. The right-click menu is Windows' own:
   "Sospendi per un'ora" and "Sospendi fino a domani", or "Riprendi" while
-  paused ([lifecycles](lifecycles.md)); a separator; Impostazioni, which opens
-  the [settings](settings.md), and Esci. It is dark when the apps' mode is
+  paused ([lifecycles](lifecycles.md)); a separator; Settings, which opens
+  the [settings](settings.md), and Quit. It is dark when the apps' mode is
   (ADR-0010).
 - Windows 11 puts a new icon in the ^ overflow, until the user brings it out.
 
@@ -46,14 +46,14 @@ stateDiagram-v2
     [*] --> Hidden
     Hidden --> Open : a click on the icon
     Open --> Hidden : Esc, the X, or a click on the icon or elsewhere
-    Open --> Hidden : Nuovo or Modifica, which open the creation window
-    Open --> Hidden : Cambia, which opens the settings
+    Open --> Hidden : New or Edit, which open the creation window
+    Open --> Hidden : Change, which opens the settings
     state Open {
         [*] --> Rows
-        Rows --> Menu : Rimanda, on an unseen alert
-        Menu --> Rows : an item, Rimanda again, a press in the list, Esc, Tab
+        Rows --> Menu : Snooze, on an unseen alert
+        Menu --> Rows : an item, Snooze again, a press in the list, Esc, Tab
         Rows --> Question : the trash, on an active reminder
-        Question --> Rows : Annulla
+        Question --> Rows : Cancel
     }
 ```
 
@@ -71,28 +71,28 @@ stateDiagram-v2
   a click on the icon, which first takes the focus away from the list: a click
   within 500 ms of that close (`REOPEN_MS`) does not open it again.
 - From the top:
-  - **Promemoria**, **Nuovo**, which opens the creation window
+  - the title, "Promemoria", **New**, which opens the creation window
     ([creation](creation.md)), and the X, 12 px from the edge; Tab passes the X
     by, since Esc does the same;
   - while Jiffin is paused, "In pausa fino alle 15:30." ("fino a domani alle
-    08:00." when it ends on a later day), with **Riprendi**, as the icon's menu
+    08:00." when it ends on a later day), with **Resume**, as the icon's menu
     has it; the same quiet line as those below, with the news icon;
   - what keeps Jiffin from working fully, each as a quiet line where only the
-    icon has colour: the model file on its way, with its bar, Riprova on a
-    problem and Dettagli ([first run](first-run.md)); the engine (below); and
+    icon has colour: the model file on its way, with its bar, Retry on a
+    problem and Details ([first run](first-run.md)); the engine (below); and
     the browsers whose address cannot be read. The owner chose the line on
     screen, over WinUI's yellow box and a neutral card;
-  - **Non visti**: the alerts that vanished unanswered, newest first, one per
+  - **Unseen**: the alerts that vanished unanswered, newest first, one per
     reminder ([ADR-0021](../adr/0021-one-alert-per-unit.md)), each with its
     condition without the time and when it appeared ("Quando apro Claude, ieri
-    alle 23:12"; with only a time, only when: "Ieri alle 15:00"), Fatto and
-    Rimanda, which opens the alert's menu (below);
-  - **Attivi**: the active reminders, newest first, or "Nessun promemoria
+    alle 23:12"; with only a time, only when: "Ieri alle 15:00"), Done and
+    Snooze, which opens the alert's menu (below);
+  - **Active**: the active reminders, newest first, or "Nessun promemoria
     attivo.". A circle at the left completes, as in Microsoft To Do; a
     reminder of every time ("Ogni volta") has the arrows of its alert there
     instead, RepeatAll, an icon and not a button, since it never completes. The
     pencil opens the creation window on the reminder; the trash asks first,
-    "Eliminare il promemoria per sempre?", with Annulla before Elimina. Under
+    "Eliminare il promemoria per sempre?", with Cancel before Delete. Under
     the action, its condition without the time; then the time understood, by
     a clock, written for today's Jiffin day ("Ogni giorno dalle 23:00 alle
     04:00", "Oggi, giovedì 1 ottobre, alle 15:00",
@@ -100,10 +100,10 @@ stateDiagram-v2
     time has only that line, one whose time was not understood only its
     condition, whole. Then, when useful: "Periodo finito il 30 settembre", once
     its period is over (`units.ended`), its snooze ("torna tra 12 min") and the
-    places "Non qui" silenced it in. The owner chose the rows on screen;
+    places Not here silenced it in. The owner chose the rows on screen;
   - after a thin line, the return pause: "Gli avvisi tornano se riprendi una
     cosa dopo almeno 2 min.", in minutes when it is whole minutes, as the
-    settings show it, else in seconds ("90 s"), and **Cambia**, a subtle button
+    settings show it, else in seconds ("90 s"), and **Change**, a subtle button
     that opens the settings, where it is set. The owner chose it on screen, over
     showing the pause only in the creation window.
 - Answers go to `core`, and the list changes when `core`'s next view comes. A
@@ -112,27 +112,27 @@ stateDiagram-v2
 - While it is open, the list reads the clock again every 10 s, for the
   snoozes' minutes, for the time's "Oggi" and for the pause's "domani".
 
-## Rimanda's menu
+## Snooze's menu
 
-- An unseen alert's Rimanda opens the alert's own menu
-  ([overlay](overlay.md)), with the same items in the same order: Alla
-  prossima volta, Tra 15 minuti, Tra un'ora, Domani, a line, Non qui. Alla
-  prossima volta shows only when the reminder has a next unit, asked of
-  `core` (`next_occasion`) when the menu opens.
+- An unseen alert's Snooze opens the alert's own menu
+  ([overlay](overlay.md)), with the same items in the same order: Next time,
+  Quarter hour, Hour, Tomorrow, a line, Not here. Next time shows only when
+  the reminder has a next unit, asked of `core` (`next_occasion`) when the
+  menu opens.
 - A window of its own on the glass, which never takes the focus: under the
   button, on its left edge and 4 px down, or over it, 4 px up, when it would
   go past the bottom of the work area, as Windows' menus do. The list sits
   over the tray, so the menu often opens upwards.
 - An item answers for that alert, and the menu closes. A press anywhere in the
   list closes it and does nothing else, as WinUI's light dismiss: a second
-  click on Rimanda, or a press on another button, only closes it, and a drag
+  click on Snooze, or a press on another button, only closes it, and a drag
   does not start. So do the wheel, Esc, which closes the menu before the list,
   Tab, the alert leaving the list, and the list closing.
-- The list keeps the focus, on Rimanda, and its keys go to the menu before the
+- The list keeps the focus, on Snooze, and its keys go to the menu before the
   button: Up and Down move over the items, round from the last to the first,
   with WinUI's focus ring; Space or Enter pick one. Opened by the keyboard, the
   menu starts on its first item; opened under the mouse, on none, and Space or
-  Enter there are a click on Rimanda, which closes it.
+  Enter there are a click on Snooze, which closes it.
 
 ## Seen
 
@@ -146,7 +146,7 @@ goes.
 `show_engine` takes one of six states, which the app will map from the
 engine's supervisor ([#44](https://github.com/devfrx/jiffin/issues/44)):
 
-| State | The list says | Riprova |
+| State | The list says | Retry |
 |---|---|---|
 | `WORKING` | nothing: ready, starting, or not started yet | |
 | `RESTARTING` | a warning: the model stopped and is starting again | no: it needs no hand |
@@ -160,9 +160,9 @@ engine's supervisor ([#44](https://github.com/devfrx/jiffin/issues/44)):
 `uv run python -m jiffin.ui --unreadable chrome.exe --engine failures` puts
 the icon in the tray with its "!", and its list with both lines, reminders
 with a time, a perennial one and a period over; an alert left to vanish comes
-into the list after 10 s, with its menu. Riprova brings the engine back,
-Sospendi in the icon's menu shows the pause on the icon and in the list until
-Riprendi, and every answer is printed. The unit tests draw the icon and drive the list on
+into the list after 10 s, with its menu. Retry brings the engine back,
+Pause in the icon's menu shows the pause on the icon and in the list until
+Resume, and every answer is printed. The unit tests draw the icon and drive the list on
 Qt's offscreen platform, which has no tray (`tests/unit/ui/test_tray.py`,
 `test_tray_list.py` and `test_rows.py`); there every window takes the focus as
 it shows, so the tests give it back to the list as Windows never takes it

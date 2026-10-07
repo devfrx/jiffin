@@ -1,15 +1,15 @@
 """The creation window: a new reminder, or one being edited (#12, #43, #101).
 
 A card like the alerts, with two boxes, "Quando" and "Ricordami di", the "Ogni volta" box, the
-sentence they make, and Salva and Annulla. The shortcut and the tray list open it; it shows at the
+sentence they make, and Save and Cancel. The shortcut and the tray list open it; it shows at the
 centre of the screen, or where the user left it (ADR-0023), and takes the focus, and saving or
 cancelling hides it, as its X does. The texts go to `core` as written, with their spaces tidied:
 the judge gets exactly the "Quando" box (#12).
 
 The time of the condition is read at every key (ADR-0020): the line under "Quando" shows what
-Jiffin understood, or names the words it did not, and a time already over turns Salva off (#84,
+Jiffin understood, or names the words it did not, and a time already over turns Save off (#84,
 #90). Words of a recurrence tick "Ogni volta" by themselves while the user has not touched it
-(#92). Modifica keeps the saved time while the condition is unchanged, as `core` does.
+(#92). Edit keeps the saved time while the condition is unchanged, as `core` does.
 """
 
 from datetime import datetime
@@ -139,7 +139,7 @@ class Creation(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
 
     @Property(bool, notify=changed)
     def past(self) -> bool:
-        """The time is over already: Salva stays off."""
+        """The time is over already: Save stays off."""
         return self._past
 
     @Property(str, notify=changed)
@@ -231,7 +231,7 @@ class Creation(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         self._condition, self._action = condition, action
         self._perennial = saved is not None and saved.perennial
         self._ticked = self._touched = False
-        # The words there when the window opens never move the box: Modifica shows it as it was.
+        # The words there when the window opens never move the box: Edit shows it as it was.
         self._read(follow=False)
         self.changed.emit()
         self.opened.emit(condition, action)

@@ -1,5 +1,5 @@
 // The tray icon (#12, ADR-0010): a click opens the tray list, a right click its menu, with the
-// pause (ADR-0024), Impostazioni and Esci. On Windows, Qt draws the menu with Windows' own, since
+// pause (ADR-0024), Settings and Quit. On Windows, Qt draws the menu with Windows' own, since
 // the app is a QGuiApplication.
 import QtQuick
 import Qt.labs.platform as Platform

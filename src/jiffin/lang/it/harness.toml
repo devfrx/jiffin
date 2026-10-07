@@ -1,0 +1,97 @@
+# The texts of the harness's pages, in Italian (ADR-0026): the report of a day, the statements of
+# the reminders and the labelling page, which the owner reads; and the words with which the
+# harness reads the prototype's sample. The harness never ships, and neither does this file
+# (ADR-0017). jiffin.lang.harness reads it once, when the harness starts, and a key missing or
+# one too many stops it and the tests. A name in braces is a placeholder the code fills, "{day}".
+
+# The report of a day: the alerts shown, and the relevant pairs never shown.
+[report]
+title = "Giornata Jiffin {day}"
+heading = "Giornata del {day}"
+# Where the day comes from, which starts the first line: a copy of the log, or a replay of it.
+from_copy = "Dalla copia {copy}"
+replayed = "Rigiocata: {name}"
+intro = "{source}. I numeri sono nel riassunto; qui ci sono i testi, per capirli."
+alerts = "Avvisi mostrati ({count})"
+time = "Ora"
+context = "Contesto"
+reminder = "Promemoria"
+label = "Etichetta"
+answer = "Risposta"
+delay = "Ritardo"
+# The label of an alert: of a reminder with only a time, then right or wrong.
+time_only = "solo orario"
+right = "giusto"
+false_alarm = "falso allarme"
+why = "Perché"
+highest_d = "d più alto"
+missed = "Promemoria persi ({count})"
+missed_intro = "Coppie pertinenti, giudicate almeno una volta nel loro orario, che non sono mai arrivate sullo schermo senza essere già state ricordate, con il motivo e il d più alto della giornata."
+reminded = "Taciuti perché già ricordati ({count})"
+reminded_intro = "Coppie pertinenti mai arrivate sullo schermo perché il promemoria era già suonato nella stessa occasione (nella stessa ora, in 0.1) o aveva già una risposta, Rimanda o «Non qui»: non contano come persi."
+
+# Why a relevant pair never reached the screen, by the reason `harness.day` names.
+[report.reasons]
+"below threshold" = "sotto la soglia"
+"same occasion" = "stessa occasione"
+"held back" = "trattenuto (una volta all'ora)"
+"out of time" = "fuori orario"
+snoozed = "rimandato"
+silenced = "«Non qui»"
+waited = "in attesa di un posto, poi chiuso"
+
+# Every reminder's condition, beside its time understood and its statement (ADR-0008).
+[statements]
+title = "Affermazioni Jiffin"
+heading = "Le affermazioni dei promemoria"
+intro = "Dalla copia {copy}. Per ogni promemoria, la condizione come l'hai scritta, l'orario che Jiffin ha capito, la condizione senza l'orario e l'affermazione in inglese che il modello giudica. Controlla che l'orario sia quello che volevi e che l'affermazione dica la stessa cosa della condizione senza orario."
+state = "Stato"
+condition = "Quando"
+time = "Orario capito"
+remainder = "Senza orario"
+action = "Ricordami di"
+statement = "Affermazione"
+build = "Scritta da"
+active = "attivo"
+completed = "completato"
+unclear = "non capito: «{words}»"
+no_time = "nessuno"
+time_only = "solo orario"
+no_statement = "nessuna: non va al modello"
+not_written = "non ancora scritta"
+written_by = "motore {engine}, prompt {prompt}"
+
+# The owner's labelling page, a pair at a time: the texts of the page, then those its script
+# writes.
+[label]
+title = "Etichette Jiffin"
+loading = "Carico…"
+question = "Qui la condizione «quando…» del promemoria era vera?"
+yes = "Sì, era vera"
+no = "No, non era vera"
+back = "← Indietro"
+next = "Avanti →"
+hint = "Tasti: 1 = sì, 2 = no, Backspace torna indietro. Giudica solo se la condizione era vera in quel contesto, non se il promemoria ti sarebbe servito. L'orario non c'è: lo controlla Jiffin. Ogni risposta si salva subito e passa alla coppia dopo."
+done = "fatte {done} di {total}"
+finished = "Finito"
+all_labelled = "Tutte le coppie hanno la tua etichetta."
+may_close = "Puoi chiudere questa scheda e la finestra del terminale."
+some_left = "Ne manca ancora qualcuna: eccola."
+position = "Coppia {number} di {total}"
+was_on = "Eri su {app}"
+untitled = "(finestra senza titolo)"
+the_reminder = "Il promemoria:"
+remind_me = "ricordami di {action}"
+labelled = "✓ già fatta: puoi cambiare risposta"
+saved = "Salvato."
+not_saved = "Non ho salvato ({error}). La finestra del terminale è ancora aperta?"
+nothing = "Niente da etichettare"
+not_loaded = "Non riesco a caricare i dati ({error})."
+
+# The prototype's reminders are one sentence, "quando … ricordami di …": the condition is what
+# starts with one of these words and comes before "ricordami"; the action is what follows it, and
+# its "di".
+[sample]
+condition_starts = ["quando", "se"]
+remind_me = "ricordami"
+of = "di"

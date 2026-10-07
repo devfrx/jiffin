@@ -92,7 +92,7 @@ class Summary:
     alerted: int
     """Pairs that reached the screen, each once however often it rang."""
     false_alarms: int
-    """Of them, labelled not relevant: a wrong pair counts once, as "Non qui" silences it
+    """Of them, labelled not relevant: a wrong pair counts once, as Not here silences it
     (ADR-0022)."""
     unlabelled: int
     """Of them, not labelled yet."""

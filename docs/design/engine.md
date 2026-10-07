@@ -115,7 +115,7 @@ stateDiagram-v2
     failed --> Restarting : first, second or third failure within an hour
     failed --> Stopped : fourth failure within an hour
     Restarting --> Starting : 1 s, 10 s or 60 s later
-    Stopped --> Starting : start, from Riprova
+    Stopped --> Starting : start, from Retry
 ```
 
 - **It fails** when its process exits, its output ends or cannot be read, a

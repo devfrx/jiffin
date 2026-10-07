@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Etichette Jiffin</title>
+<title>{{ t.label.title }}</title>
 <link rel="icon" href="data:,">
 <style>
   :root {
@@ -50,22 +50,24 @@
 </head>
 <body>
 <main>
-  <header><span id="position">Carico…</span><span id="count"></span></header>
+  <header><span id="position">{{ t.label.loading }}</span><span id="count"></span></header>
   <div class="bar"><div id="bar"></div></div>
   <section id="pair" class="card"></section>
   <section id="question">
-    <h2>Qui la condizione «quando…» del promemoria era vera?</h2>
+    <h2>{{ t.label.question }}</h2>
     <div class="choices">
-      <button id="yes" class="choice yes" type="button"><span class="key">1</span>Sì, era vera</button>
-      <button id="no" class="choice no" type="button"><span class="key">2</span>No, non era vera</button>
+      <button id="yes" class="choice yes" type="button"><span class="key">1</span>{{ t.label.yes }}</button>
+      <button id="no" class="choice no" type="button"><span class="key">2</span>{{ t.label.no }}</button>
     </div>
   </section>
-  <nav><button id="back" type="button">← Indietro</button><button id="skip" type="button">Avanti →</button></nav>
-  <p class="hint">Tasti: 1 = sì, 2 = no, Backspace torna indietro. Giudica solo se la condizione era vera in quel contesto, non se il promemoria ti sarebbe servito. L'orario non c'è: lo controlla Jiffin. Ogni risposta si salva subito e passa alla coppia dopo.</p>
+  <nav><button id="back" type="button">{{ t.label.back }}</button><button id="skip" type="button">{{ t.label.next }}</button></nav>
+  <p class="hint">{{ t.label.hint }}</p>
   <p id="status" class="status" role="status"></p>
 </main>
 <script>
 "use strict";
+// The texts the script writes, from harness.toml.
+const T = {{ texts | tojson }};
 const token = new URLSearchParams(location.search).get("t") || "";
 const $ = (id) => document.getElementById(id);
 let data = null;
@@ -73,6 +75,11 @@ let index = 0;
 
 function api(path) {
   return `${path}?t=${encodeURIComponent(token)}`;
+}
+
+// A text with its {names} filled from `values`.
+function fill(text, values) {
+  return text.replace(/\{(\w+)\}/g, (_, name) => String(values[name]));
 }
 
 // Titles, addresses and reminders are arbitrary text: they only ever go through textContent.
@@ -98,15 +105,15 @@ function setStatus(text, isError = false) {
 function renderProgress() {
   const total = data.pairs.length;
   const done = data.pairs.filter(isDone).length;
-  $("count").textContent = `fatte ${done} di ${total}`;
+  $("count").textContent = fill(T.done, { done, total });
   $("bar").style.width = `${(100 * done) / total}%`;
 }
 
 function showFinished() {
-  $("position").textContent = "Finito";
+  $("position").textContent = T.finished;
   $("pair").append(
-    element("div", "title", "Tutte le coppie hanno la tua etichetta."),
-    element("div", "label", "Puoi chiudere questa scheda e la finestra del terminale."));
+    element("div", "title", T.all_labelled),
+    element("div", "label", T.may_close));
   $("question").hidden = true;
   $("skip").disabled = true;
 }
@@ -121,7 +128,7 @@ function show(i) {
     const missing = nextToDo(0);
     if (missing < total) {
       show(missing);
-      setStatus("Ne manca ancora qualcuna: eccola.");
+      setStatus(T.some_left);
       return;
     }
     showFinished();
@@ -130,14 +137,14 @@ function show(i) {
   $("question").hidden = false;
   $("skip").disabled = false;
   const pair = data.pairs[index];
-  $("position").textContent = `Coppia ${index + 1} di ${total}`;
+  $("position").textContent = fill(T.position, { number: index + 1, total });
   const card = $("pair");
-  card.append(element("div", "label", `Eri su ${pair.app}`),
-    element("div", "title", pair.title || "(finestra senza titolo)"));
+  card.append(element("div", "label", fill(T.was_on, { app: pair.app })),
+    element("div", "title", pair.title || T.untitled));
   if (pair.address) card.append(element("div", "address", pair.address));
-  card.append(element("div", "label", "Il promemoria:"), element("div", "condition", pair.remainder),
-    element("div", "action", `ricordami di ${pair.action}`));
-  if (isDone(pair)) card.append(element("div", "done", "✓ già fatta: puoi cambiare risposta"));
+  card.append(element("div", "label", T.the_reminder), element("div", "condition", pair.remainder),
+    element("div", "action", fill(T.remind_me, { action: pair.action })));
+  if (isDone(pair)) card.append(element("div", "done", T.labelled));
   $("yes").setAttribute("aria-pressed", String(data.answers[pair.key] === true));
   $("no").setAttribute("aria-pressed", String(data.answers[pair.key] === false));
 }
@@ -154,9 +161,9 @@ async function label(relevant) {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     data.answers[pair.key] = relevant;
     show(nextToDo(index + 1));
-    setStatus("Salvato.");
+    setStatus(T.saved);
   } catch (error) {
-    setStatus(`Non ho salvato (${error.message}). La finestra del terminale è ancora aperta?`, true);
+    setStatus(fill(T.not_saved, { error: error.message }), true);
   }
 }
 
@@ -185,7 +192,7 @@ fetch(api("/data"))
   .then((loaded) => {
     data = loaded;
     if (!data.pairs.length) {
-      $("position").textContent = "Niente da etichettare";
+      $("position").textContent = T.nothing;
       $("question").hidden = true;
       $("skip").disabled = true;
       $("back").disabled = true;
@@ -193,7 +200,7 @@ fetch(api("/data"))
     }
     show(nextToDo(0));
   })
-  .catch((error) => setStatus(`Non riesco a caricare i dati (${error.message}).`, true));
+  .catch((error) => setStatus(fill(T.not_loaded, { error: error.message }), true));
 </script>
 </body>
 </html>

@@ -3,7 +3,7 @@ threads and Qt. `python -m jiffin` in a checkout, `Jiffin.exe` once packaged (AD
 
 The start goes in this order: in the packaged app, Velopack's hooks and a newer release, applied
 before anything opens; the database, migrated and cleaned up; the context capture; the model
-file, checked or downloaded; then the engine. Esci shuts down in order: the capture, the engine
+file, checked or downloaded; then the engine. Quit shuts down in order: the capture, the engine
 with `shutdown` and its input closed, then the database with a last checkpoint.
 """
 

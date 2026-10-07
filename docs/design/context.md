@@ -97,7 +97,7 @@ registered for it.
 | What the owner did | Windows' notices | The capture of 0.1 |
 |---|---|---|
 | Win+L | locked, at once; unlocked, at the unlock | "no context" 2.1 s late, then the lock screen (`LockApp.exe`) and `explorer.exe` as contexts |
-| Start, Sospendi | about to sleep 0.1 s after the display went off, and locked | nothing: the Start menu stayed in front for the 37 s of sleep |
+| Start, Sleep | about to sleep 0.1 s after the display went off, and locked | nothing: the Start menu stayed in front for the 37 s of sleep |
 | closing the lid | about to sleep and locked, within 0.1 s | nothing |
 | waking it | awake at once; unlocked at the unlock | the lock screen as a context until then |
 

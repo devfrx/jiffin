@@ -1,6 +1,6 @@
 // The settings window (#43, #84): the return pause, a number and its unit, then the material of
 // Jiffin's windows, as four radio buttons. A card like the creation window, on the material it
-// sets, with an X on its title's line and no Chiudi, as Windows' own Settings (ADR-0010,
+// sets, with an X on its title's line and no Close, as Windows' own Settings (ADR-0010,
 // ADR-0023). A change applies at once, as there. It takes the focus, on the pause; Tab moves on,
 // Space chooses, and Esc or the X closes it. It drags from any point no control takes.
 pragma ComponentBehavior: Bound

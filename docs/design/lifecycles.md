@@ -15,17 +15,17 @@ stateDiagram-v2
         [*] --> Ready
         Ready --> Rang : rings in its unit
         Rang --> Ready : a new unit starts
-        Rang --> Ready : Non qui, and the alert does not count
-        Rang --> Snoozed : Tra 15 minuti, Tra un'ora, Domani
+        Rang --> Ready : Not here, and the alert does not count
+        Rang --> Snoozed : Quarter hour, Hour, Tomorrow
         Snoozed --> Returning : the time is up
         Returning --> Rang : rings, even within the same unit
         Ready --> Ended : its time has no more instances
         Rang --> Ended : its time has no more instances
-        Ended --> Ready : Modifica
+        Ended --> Ready : Edit
     }
-    Active --> Completed : Fatto or Completa, one-off
-    Active --> [*] : Elimina
-    Completed --> [*] : Elimina
+    Active --> Completed : Done or Complete, one-off
+    Active --> [*] : Delete
+    Completed --> [*] : Delete
 ```
 
 - **The unit.** A reminder rings at most once per unit (`units.by_instance`):
@@ -47,21 +47,21 @@ stateDiagram-v2
   | within a period of dates | never after the period | the same |
 
   A moment already past when the condition was written has no window: the
-  time counts from when it was written, and Modifica keeps that while the
+  time counts from when it was written, and Edit keeps that while the
   condition stays the same.
 - **Rang**: the reminder waits for its next unit. Each alert counts but those
-  answered "Non qui".
+  answered Not here.
 - **Snoozed**: it is judged, and keeps quiet. **Returning**: once the snooze is
   over it rings at the first chance, even within the same unit; the reminder
   keeps the end of its snooze, and is returning until it rings again.
 - **Ended**: an ended period (`units.ended`) is computed, not stored. A
   reminder with a past date that cannot ring again stays, silent.
 - **Editing** the text, in any state, makes a new revision: the silences of
-  "Non qui" go, a new condition is read again, a new remainder waits for a new
+  Not here go, a new condition is read again, a new remainder waits for a new
   statement, and the new text is not true anywhere until it is judged.
   "Ogni volta" alone makes a new revision that keeps the silences.
 - **Completed** reminders are no longer judged, and their open alerts go.
-  **Elimina** removes the reminder and everything about it.
+  **Delete** removes the reminder and everything about it.
 - **After a restart** each reminder goes on from its last alert that counts and
   from its snooze, so the instances of a time stay exact; occasions start
   afresh.
@@ -69,7 +69,7 @@ stateDiagram-v2
   ([ADR-0024](../adr/0024-hold-and-hide-alerts.md)), "Sospendi per un'ora" or
   "Sospendi fino a domani", is away for every reminder: the context in front
   leaves when it starts, and nothing is judged and nothing rings until it ends
-  or Riprendi. Then what is in front comes back as after any absence: occasions
+  or Resume. Then what is in front comes back as after any absence: occasions
   start again, a late instance rings, due from the return, and a snooze that
   ended meanwhile rings at the first chance. Its end is kept with the
   settings, so it goes on after a restart. Alerts already on screen stay.
@@ -78,17 +78,17 @@ stateDiagram-v2
 
 | Answer | Recorded | Then |
 |---|---|---|
-| Fatto, one-off | `fatto` | completed |
-| Fatto, perennial | `fatto` | waits for its next unit |
-| Alla prossima volta | `rimanda`, `next_time` | waits for its next unit; a snooze with a time is lifted |
-| Tra 15 minuti, Tra un'ora, Domani | `rimanda`, with its kind | snoozed, then returning |
-| Non qui | `non_qui` | silent in that context until the text changes; the alert does not count |
+| Done, one-off | `fatto` | completed |
+| Done, perennial | `fatto` | waits for its next unit |
+| Next time | `rimanda`, `next_time` | waits for its next unit; a snooze with a time is lifted |
+| Quarter hour, Hour, Tomorrow | `rimanda`, with its kind | snoozed, then returning |
+| Not here | `non_qui` | silent in that context until the text changes; the alert does not count |
 | the X | `chiuso` | waits for its next unit; not among the unseen |
 | 10 s without an answer | nothing | waits for its next unit; among the unseen |
 
-"Domani" ends at 08:00 of the next day, local time, or of the same day when
-snoozed before 04:00; so does the pause "fino a domani". `utile`, the answer of version 0.1 that Alla prossima
-volta replaced, stays in older rows.
+Tomorrow ends at 08:00 of the next day, local time, or of the same day when
+snoozed before 04:00; so does the pause until tomorrow. `utile`, the answer
+of version 0.1 that Next time replaced, stays in older rows.
 
 ## Alert
 
@@ -99,7 +99,7 @@ stateDiagram-v2
     Visible --> Unseen : 10 s without an answer
     Unseen --> Unseen : seen in the tray list
     Unseen --> [*] : its reminder rings again
-    Visible --> Answered : Fatto, Rimanda, Non qui, the X
+    Visible --> Answered : Done, Snooze, Not here, the X
     Unseen --> Answered : an answer from the tray list
     Answered --> [*]
     Waiting --> [*] : its reminder is completed or deleted
@@ -115,4 +115,4 @@ stateDiagram-v2
   not come back after a restart.
 - An alert of a reminder with only a time has no evaluation and no d.
 - The record keeps when the alert was due and made, appeared, vanished, was
-  seen and answered, the answer and the kind of its Rimanda.
+  seen and answered, the answer and the kind of its Snooze.

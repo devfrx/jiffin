@@ -37,7 +37,7 @@ CLOCK = ""
 SECONDARY, CAUTION = QColor("#C5FFFFFF"), QColor("#FFFCE100")
 """The clock's colours in dark: at rest, and for a time over or not understood."""
 FRIDAY = datetime(2026, 10, 2, 10, tzinfo=UTC)
-"""Venerdì 2 ottobre 2026 alle 10:00, on a clock in UTC."""
+"""Friday 2 October 2026 at 10:00, on a clock in UTC."""
 
 
 def instant(moment: datetime) -> int:
