@@ -28,6 +28,7 @@ from jiffin.core.context import Context, Observation
 from jiffin.core.debounce import DEBOUNCE_MS
 from jiffin.core.records import Answer, Outcome
 from jiffin.core.reminders import HOUR_MS
+from jiffin.lang.texts import TEXTS
 from jiffin.store.folders import Folders
 from jiffin.store.store import Log, Store
 from jiffin.ui import win32
@@ -193,10 +194,10 @@ def test_the_windows_places_are_kept_and_put_back_at_the_start(qtbot: QtBot, des
     desk.jiffin.start()
     interface = desk.jiffin.interface
     interface.preferences.open()
-    assert desk.window("Impostazioni").framePosition() == QPoint(50, 60)
+    assert desk.window(TEXTS.settings.title).framePosition() == QPoint(50, 60)
     interface.creation.new()
     # Where the user drags it: the offscreen platform has no system move.
-    desk.window("Nuovo promemoria").setFramePosition(QPoint(30, 40))
+    desk.window(TEXTS.creation.new).setFramePosition(QPoint(30, 40))
     interface.creation.cancel()
     interface.creation.new()
     desk.jiffin.close()

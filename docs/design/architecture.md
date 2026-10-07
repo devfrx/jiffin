@@ -124,6 +124,10 @@ sequenceDiagram
   downgrade, after a failed migration or a damaged file
   ([ADR-0013](../adr/0013-sqlite-storage.md)): the app does not start, and
   Windows' own message box says so and names the log.
+- **Language files that cannot be read** stop the start before anything
+  else, as the parts that use them are imported ([the language](#the-language)):
+  `jiffin.app.main` imports the composition root inside a guard, and Windows'
+  own message box says so in English, the one message the files cannot hold.
 - **The capture starts with the worker**, before the engine: a reminder with
   only a time rings while the model downloads or the engine is down. Until the
   engine is ready, a context to judge gives a failed evaluation, as when the
@@ -138,3 +142,29 @@ sequenceDiagram
 - **The log** is `logs\jiffin.log` in the data folder: ids and numbers only, a
   new file at 1 MiB, four old ones kept. Uncaught exceptions and Qt's own
   messages go there too, since the packaged app has no console.
+
+## The language
+
+The Italian the app shows lives in the files of `src/jiffin/lang/it/`, not in
+the code ([ADR-0026](../adr/0026-italian-in-language-files.md)): `texts.toml`
+holds the texts of the interface, one key per text, named after the code's
+names. `lang` is a part of its own, without Qt, that imports nothing else from
+the package; every other part may import it.
+
+- **Read once, at import.** Each language file has a module that reads it into
+  frozen dataclasses: `jiffin.lang.texts` reads `texts.toml` into `TEXTS`, and
+  a file that cannot be read, a key missing or one too many raise
+  `CatalogError`, which stops the tests and the start. The same module writes
+  numbers, sizes and lists as the language writes them: "2.600.224.416",
+  "2,4 GB", "Chrome e Brave".
+- **Python** reads a text by its key, `TEXTS.alert.done`, and fills its
+  placeholders, `TEXTS.app.cannot_start.format(log=…)`.
+- **QML** reads every text through `Texts.qml`, a typed facade over the
+  `Catalog` singleton of `ui/catalog.py`: each of its properties takes its key,
+  and each sentence with a number, a size, a list or another placeholder comes
+  written from Python. The modules of the windows import `ui/catalog.py`,
+  which registers the singleton, before they load their QML.
+- **Sentences are whole** in the files, with named placeholders; a text with a
+  form for each count has `one` and `other`, chosen by the Italian rule; and a
+  sentence that changes with its case, such as "In pausa fino alle 15:30." and
+  "In pausa fino a domani alle 15:30.", is two keys the code chooses between.

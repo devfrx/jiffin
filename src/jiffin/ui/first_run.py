@@ -24,6 +24,7 @@ from PySide6.QtQml import QmlElement, QmlUncreatable, QQmlComponent, QQmlEngine
 from PySide6.QtQuick import QQuickWindow
 
 from jiffin.core.clock import Clock
+from jiffin.ui import catalog  # noqa: F401  # Catalog, which Texts.qml reads
 from jiffin.ui.glass import Glass
 from jiffin.ui.places import Places
 

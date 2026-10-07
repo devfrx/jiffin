@@ -3,198 +3,170 @@ pragma Singleton
 import QtQml
 import Jiffin
 
-// Every string of the interface, in Italian, in one place (#12).
+// Every text of the interface, by its key in src/jiffin/lang/it/texts.toml (ADR-0026): a typed
+// facade over the Catalog singleton, so that qmllint checks every use. It holds no text itself.
 QtObject {
-    // The alert, and Rimanda's menu (#83)
-    readonly property string reminder: "Promemoria"
-    readonly property string done: "Fatto"
-    readonly property string snooze: "Rimanda"
-    readonly property string nextTime: "Alla prossima volta"
-    readonly property string inQuarterHour: "Tra 15 minuti"
-    readonly property string inHour: "Tra un'ora"
-    readonly property string tomorrow: "Domani"
-    readonly property string notHere: "Non qui"
+    // The alert, and Snooze's menu (#83)
+    readonly property string reminder: Catalog.text("alert.title")
+    readonly property string done: Catalog.text("alert.done")
+    readonly property string snooze: Catalog.text("alert.snooze")
+    readonly property string nextTime: Catalog.text("snooze.next_time")
+    readonly property string inQuarterHour: Catalog.text("snooze.quarter_hour")
+    readonly property string inHour: Catalog.text("snooze.hour")
+    readonly property string tomorrow: Catalog.text("snooze.tomorrow")
+    readonly property string notHere: Catalog.text("alert.not_here")
 
     // The creation window
-    readonly property string newReminder: "Nuovo promemoria"
-    readonly property string editReminder: "Modifica promemoria"
-    readonly property string when: "Quando"
-    readonly property string whenHint: "Descrivi dove sei o quando: un'app, un sito, un orario."
-    readonly property string whenExample: "quando lavoro al progetto Rossi"
-    readonly property string remindMe: "Ricordami di"
-    readonly property string remindMeExample: "aggiornare il changelog"
-    readonly property string everyTime: "Ogni volta"
-    readonly property string everyTimeHint: "Suona ogni volta che succede, e non si completa mai."
-    readonly property string save: "Salva"
-    readonly property string cancel: "Annulla"
+    readonly property string newReminder: Catalog.text("creation.new")
+    readonly property string editReminder: Catalog.text("creation.edit")
+    readonly property string when: Catalog.text("creation.condition")
+    readonly property string whenHint: Catalog.text("creation.condition_hint")
+    readonly property string whenExample: Catalog.text("creation.condition_example")
+    readonly property string remindMe: Catalog.text("creation.action")
+    readonly property string remindMeExample: Catalog.text("creation.action_example")
+    readonly property string everyTime: Catalog.text("creation.perennial")
+    readonly property string everyTimeHint: Catalog.text("creation.perennial_hint")
+    readonly property string save: Catalog.text("creation.save")
+    readonly property string cancel: Catalog.text("command.cancel")
 
     // The settings window
-    readonly property string settings: "Impostazioni"
-    readonly property string returnPause: "Pausa di ritorno"
-    readonly property string returnPauseHint: "Se torni a una cosa dopo almeno questo tempo, i suoi promemoria suonano di nuovo. Da 10 secondi in su."
-    readonly property string unit: "Unità"
+    readonly property string settings: Catalog.text("settings.title")
+    readonly property string returnPause: Catalog.text("settings.return_pause")
+    readonly property string returnPauseHint: Catalog.text("settings.return_pause_hint")
+    readonly property string unit: Catalog.text("settings.unit")
     // The return pause's units, by Preferences.minutes: false, then true.
-    readonly property list<string> units: ["secondi", "minuti"]
-    readonly property string increase: "Aumenta"
-    readonly property string decrease: "Diminuisci"
-    readonly property string material: "Materiale"
-    readonly property string materialHint: "Per gli avvisi, l'elenco e le altre finestre di Jiffin."
+    readonly property list<string> units: [Catalog.text("settings.seconds"), Catalog.text("settings.minutes")]
+    readonly property string increase: Catalog.text("number_box.increase")
+    readonly property string decrease: Catalog.text("number_box.decrease")
+    readonly property string material: Catalog.text("settings.material")
+    readonly property string materialHint: Catalog.text("settings.material_hint")
     // By the material's letter (ADR-0010): its name, and what it looks like.
     readonly property var materials: ({
-            "a": ["Acrilico", "Vetro chiaro: dietro si vede sfocato."],
-            "b": ["Acrilico dei menu", "Quasi pieno, come i menu di Windows. Predefinito."],
-            "c": ["Mica", "Come le Impostazioni di Windows: prende il colore dello sfondo."],
-            "d": ["Mica Alt", "Più scuro, con più colore dello sfondo."]
+            "a": [Catalog.text("material.acrylic.name"), Catalog.text("material.acrylic.description")],
+            "b": [Catalog.text("material.menu_acrylic.name"), Catalog.text("material.menu_acrylic.description")],
+            "c": [Catalog.text("material.mica.name"), Catalog.text("material.mica.description")],
+            "d": [Catalog.text("material.mica_alt.name"), Catalog.text("material.mica_alt.description")]
         })
-    readonly property string solidSurfaces: "Gli effetti di trasparenza di Windows sono spenti: le finestre sono piene."
-    readonly property string close: "Chiudi"
+    readonly property string solidSurfaces: Catalog.text("settings.solid")
+    readonly property string close: Catalog.text("command.close")
 
     // The first run (ADR-0015)
-    readonly property string welcome: "Benvenuto in Jiffin"
-    readonly property string isReady: "Jiffin è pronto"
-    readonly property string onlyHere: "Jiffin lavora solo su questo PC: niente esce da qui."
-    readonly property string stepDownload: "Scarico il modello"
-    readonly property string stepCheck: "Controllo il file"
-    readonly property string stepReady: "Pronto"
-    readonly property string meanwhile: "Intanto puoi già scrivere i promemoria: premi Win+Maiusc+N."
-    readonly property string meanwhileTray: "Intanto puoi già scrivere i promemoria: Nuovo, nell'elenco dell'icona di Jiffin."
-    readonly property string readyShortcut: "Premi Win+Maiusc+N, da qualsiasi app, per un nuovo promemoria."
-    readonly property string shortcutTaken: "Win+Maiusc+N è già di un'altra app: un nuovo promemoria si scrive da Nuovo, nell'elenco."
-    readonly property string readyTray: "L'icona di Jiffin nella barra apre l'elenco. Windows la mette sotto ^: trascinala sulla barra per vederla sempre."
-    readonly property string start: "Inizia"
-    readonly property string retrying: "Riprovo…"
-    readonly property string details: "Dettagli"
-    readonly property string byHand: "Mettilo a mano"
-    readonly property string byHandOffline: "Senza rete? Mettilo a mano"
-    readonly property string byHandFetch: "1. Scarica il file da questo indirizzo, anche da un altro PC:"
-    readonly property string copyAddress: "Copia l'indirizzo"
-    readonly property string openFolder: "Apri la cartella"
-
-    // The model's size, as Windows' Explorer shows it: gigabytes of 1,024³ bytes, one decimal.
-    function gigabytes(bytes: real): string {
-        return (bytes / 1073741824).toFixed(1).replace(".", ",") + " GB";
-    }
+    readonly property string welcome: Catalog.text("first_run.welcome")
+    readonly property string isReady: Catalog.text("first_run.is_ready")
+    readonly property string onlyHere: Catalog.text("first_run.only_here")
+    readonly property string stepDownload: Catalog.text("first_run.step_download")
+    readonly property string stepCheck: Catalog.text("first_run.step_check")
+    readonly property string stepReady: Catalog.text("first_run.step_ready")
+    readonly property string meanwhile: Catalog.text("first_run.meanwhile")
+    readonly property string meanwhileTray: Catalog.text("first_run.meanwhile_tray")
+    readonly property string readyShortcut: Catalog.text("first_run.ready_shortcut")
+    readonly property string shortcutTaken: Catalog.text("first_run.shortcut_taken")
+    readonly property string readyTray: Catalog.text("first_run.ready_tray")
+    readonly property string start: Catalog.text("first_run.start")
+    readonly property string retrying: Catalog.text("command.retrying")
+    readonly property string details: Catalog.text("first_run.details")
+    readonly property string byHand: Catalog.text("first_run.by_hand")
+    readonly property string byHandOffline: Catalog.text("first_run.by_hand_offline")
+    readonly property string byHandFetch: Catalog.text("first_run.by_hand_fetch")
+    readonly property string copyAddress: Catalog.text("first_run.copy_address")
+    readonly property string openFolder: Catalog.text("first_run.open_folder")
 
     // Under the download's bar: "0,8 GB di 2,4 GB · circa 4 min".
     function downloaded(done: real, total: real, minutes: int): string {
-        const left = minutes > 0 ? " · circa " + minutes + " min" : minutes === 0 ? " · meno di un minuto" : "";
-        return gigabytes(done) + " di " + gigabytes(total) + left;
+        return Catalog.downloaded(done, total, minutes);
     }
 
     function stopped(done: real, total: real): string {
-        return gigabytes(done) + " di " + gigabytes(total) + " · fermo";
+        return Catalog.stopped(done, total);
     }
 
     // The tray list's line while the model downloads.
     function downloading(done: real, total: real, minutes: int): string {
-        return "Scarico il modello: " + downloaded(done, total, minutes) + ". Finché non è pronto, i promemoria non avvisano.";
+        return Catalog.downloading(done, total, minutes);
     }
 
     // What a problem with the model file means; `missing` in bytes, for SPACE.
     function modelTrouble(stage: int, missing: real): string {
         switch (stage) {
         case FirstRun.NETWORK:
-            return "Il download si è fermato: controlla la connessione. Riprova riprende da dove era rimasto.";
+            return Catalog.text("model_file.network");
         case FirstRun.SPACE:
-            // In tenths, rounded up, so that freeing what it says is enough; the division by a
-            // power of two is exact.
-            return "Il disco è pieno: libera altri " + gigabytes(Math.ceil(missing * 10 / 1073741824) * 107374182.4) + ", poi riprova.";
+            return Catalog.space(missing);
         case FirstRun.DISK:
-            return "Non riesco a scrivere nella cartella dei modelli, o a leggerla. Controlla il disco, poi riprova.";
+            return Catalog.text("model_file.disk");
         case FirstRun.MISMATCH:
-            return "Il file del modello non è quello giusto. Se l'hai messo tu, sostituiscilo o eliminalo; poi premi Riprova.";
+            return Catalog.text("model_file.mismatch");
         }
         return "";
     }
 
     function byHandPlace(name: string): string {
-        return "2. Mettilo nella cartella dei modelli, con il nome " + name + ":";
+        return Catalog.byHandPlace(name);
     }
 
-    // The size in bytes, with Italian thousands: "2.600.224.416".
+    // The size in bytes, with its thousands: "2.600.224.416".
     function byHandCheck(size: real, sha256: string): string {
-        const bytes = size.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-        return "3. Premi Riprova: lo controllo. Deve pesare " + bytes + " byte, con sha256 " + sha256 + ".";
+        return Catalog.byHandCheck(size, sha256);
     }
 
     // The tray icon and its list
-    readonly property string appName: "Jiffin"
-    readonly property string quit: "Esci"
-    readonly property string pauseHour: "Sospendi per un'ora"
-    readonly property string pauseTomorrow: "Sospendi fino a domani"
-    readonly property string resume: "Riprendi"
-    readonly property string paused: "In pausa"
-    readonly property string reminders: "Promemoria"
-    readonly property string newOne: "Nuovo"
-    readonly property string unseen: "Non visti"
-    readonly property string active: "Attivi"
-    readonly property string noReminders: "Nessun promemoria attivo."
-    readonly property string edit: "Modifica"
-    readonly property string complete: "Completa"
-    readonly property string remove: "Elimina"
-    readonly property string removeQuestion: "Eliminare il promemoria per sempre?"
-    readonly property string retry: "Riprova"
-    readonly property string change: "Cambia"
-    readonly property var browsers: ({
-            "vivaldi.exe": "Vivaldi",
-            "chrome.exe": "Chrome",
-            "brave.exe": "Brave"
-        })
+    readonly property string appName: Catalog.text("app.name")
+    readonly property string quit: Catalog.text("tray.quit")
+    readonly property string pauseHour: Catalog.text("tray.pause_hour")
+    readonly property string pauseTomorrow: Catalog.text("tray.pause_tomorrow")
+    readonly property string resume: Catalog.text("tray.resume")
+    readonly property string paused: Catalog.text("tray.paused")
+    readonly property string reminders: Catalog.text("tray_list.title")
+    readonly property string newOne: Catalog.text("tray_list.new")
+    readonly property string unseen: Catalog.text("tray_list.unseen")
+    readonly property string active: Catalog.text("tray_list.active")
+    readonly property string noReminders: Catalog.text("tray_list.no_reminders")
+    readonly property string edit: Catalog.text("tray_list.edit")
+    readonly property string complete: Catalog.text("tray_list.complete")
+    readonly property string remove: Catalog.text("tray_list.delete")
+    readonly property string removeQuestion: Catalog.text("tray_list.delete_question")
+    readonly property string retry: Catalog.text("command.retry")
+    readonly property string change: Catalog.text("tray_list.change")
     // What the engine's trouble means, by TrayList.Engine; WORKING says nothing.
-    readonly property var engineTrouble: ["", "Il modello si è fermato: lo sto riavviando.", "Il modello si è fermato quattro volte in un'ora. Finché non riparte, i promemoria non avvisano.", "Il modello non si carica. Finché non riparte, i promemoria non avvisano.", "La scheda video non ha abbastanza memoria per il modello. Chiudi un'app che la usa, poi riprova.", "Il modello è di un'altra versione di Jiffin: reinstalla l'app."]
+    readonly property var engineTrouble: ["", Catalog.text("engine.restarting"), Catalog.text("engine.failures"), Catalog.text("engine.model"), Catalog.text("engine.gpu_memory"), Catalog.text("engine.mismatch")]
 
     // The sentence the two boxes make (#12): "Quando …, ti ricordo di …", "ti ricordo ogni volta"
-    // for a perennial reminder (#84). The full stop comes with the action: Italian puts none after
-    // an ellipsis.
+    // for a perennial reminder (#84).
     function preview(condition: string, action: string, perennial: bool): string {
-        return (condition || "Quando …") + ", ti ricordo " + (perennial ? "ogni volta " : "") + "di " + (action ? action + "." : "…");
+        return Catalog.preview(condition, action, perennial);
     }
 
     // Under "Quando", for the words of a time not understood (#90): the reminder still saves,
     // without its time. "Non capisco «verso sera» e «a dicembre»: …".
     function notUnderstood(words: list<string>): string {
-        const quoted = words.map(word => "«" + word + "»");
-        const listed = quoted.length > 1 ? quoted.slice(0, -1).join(", ") + " e " + quoted[quoted.length - 1] : quoted.join("");
-        return "Non capisco " + listed + ": suona a qualsiasi ora.";
+        return Catalog.notUnderstood(words);
     }
 
-    // Under the sentence, while a time already over keeps Salva off (#84): "Oggi alle 09:00 …".
+    // Under the sentence, while a time already over keeps Save off (#84): "Oggi alle 09:00 …".
     function past(when: string): string {
-        return when + " è già passato. Per salvare, scrivi un giorno o un'ora che deve ancora venire.";
+        return Catalog.past(when);
     }
 
     // Under an active reminder, when useful: its period over (#91), "il 20 ottobre", its snooze,
-    // and the places "Non qui" silenced it in.
+    // and the places Not here silenced it in.
     function status(endedOn: string, returnsIn: int, returnsAt: string, tomorrow: bool, silences: int): string {
-        const parts = [];
-        if (endedOn.length > 0)
-            parts.push("Periodo finito " + endedOn);
-        if (returnsIn > 0)
-            parts.push("Rimandato: torna tra " + returnsIn + " min");
-        else if (returnsAt.length > 0)
-            parts.push("Rimandato: torna " + (tomorrow ? "domani " : "") + "alle " + returnsAt);
-        if (silences > 0)
-            parts.push("Taciuto in " + silences + (silences === 1 ? " posto" : " posti"));
-        return parts.join(" · ");
+        return Catalog.status(endedOn, returnsIn, returnsAt, tomorrow, silences);
     }
 
     // At the top of the tray list while Jiffin is paused (ADR-0024): "In pausa fino alle 15:30.",
     // "In pausa fino a domani alle 08:00.".
     function pausedUntil(at: string, tomorrow: bool): string {
-        return "In pausa fino " + (tomorrow ? "a domani " : "") + "alle " + at + ".";
+        return Catalog.pausedUntil(at, tomorrow);
     }
 
     // At the bottom of the tray list (#84): the return pause, in minutes when it is whole
     // minutes, as the settings show it, else in seconds.
     function returnsAfter(seconds: int): string {
-        const pause = seconds % 60 === 0 ? seconds / 60 + " min" : seconds + " s";
-        return "Gli avvisi tornano se riprendi una cosa dopo almeno " + pause + ".";
+        return Catalog.returnsAfter(seconds);
     }
 
     // The browsers whose address cannot be read, by app: "Chrome e Brave: …".
     function unreadable(apps: list<string>): string {
-        const names = apps.map(app => browsers[app] ?? app);
-        const listed = names.length > 1 ? names.slice(0, -1).join(", ") + " e " + names[names.length - 1] : names.join("");
-        return listed + ": non riesco a leggere l'indirizzo. Uso solo app e titolo.";
+        return Catalog.unreadable(apps);
     }
 }

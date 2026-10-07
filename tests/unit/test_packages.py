@@ -2,7 +2,18 @@ import importlib
 
 import pytest
 
-PARTS = ["core", "protocol", "engine", "client", "platform", "store", "ui", "app", "harness"]
+PARTS = [
+    "lang",
+    "core",
+    "protocol",
+    "engine",
+    "client",
+    "platform",
+    "store",
+    "ui",
+    "app",
+    "harness",
+]
 
 
 @pytest.mark.parametrize("part", PARTS)

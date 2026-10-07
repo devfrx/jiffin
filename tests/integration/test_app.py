@@ -30,6 +30,7 @@ import pytest
 from jiffin.app.root import INSTANCE
 from jiffin.client.model_file import MODEL
 from jiffin.core.reminders import THRESHOLD
+from jiffin.lang.texts import TEXTS
 
 pytestmark = pytest.mark.integration
 
@@ -343,7 +344,7 @@ def test_python_m_jiffin_runs_the_whole_loop(app: App, target: Target) -> None:
         ),
     )
     jiffin = process_of(foreground())
-    wait_for("focus in the Quando box", lambda: focused() == "Quando")
+    wait_for("focus in the Quando box", lambda: focused() == TEXTS.creation.condition)
     type_text(CONDITION)
     press(_VK_TAB)
     type_text(ACTION)
@@ -351,10 +352,10 @@ def test_python_m_jiffin_runs_the_whole_loop(app: App, target: Target) -> None:
     wait_for("target window back in front", lambda: foreground() == target.window)
     wait_for("alert", lambda: app.count("alert", "shown_at IS NOT NULL") == 1)
     time.sleep(1)  # it enters in 250 ms, moving: its buttons settle first
-    wait_for("Fatto on the alert", lambda: button(jiffin, "Fatto") is not None)
-    fatto = button(jiffin, "Fatto")
-    assert fatto is not None
-    click(*fatto)
+    wait_for("Fatto on the alert", lambda: button(jiffin, TEXTS.alert.done) is not None)
+    done = button(jiffin, TEXTS.alert.done)
+    assert done is not None
+    click(*done)
     wait_for("answer", lambda: app.count("alert", "answer = 'fatto'") == 1)
 
     assert app.count("reminder", "completed_at IS NOT NULL") == 1

@@ -19,7 +19,10 @@ from PySide6.QtQuick import QQuickImageProvider
 
 from jiffin.core.alerts import AlertsView
 from jiffin.core.reminders import Pause, RemindersView
-from jiffin.ui import win32
+from jiffin.ui import (
+    catalog,  # noqa: F401  # Catalog, which Texts.qml reads
+    win32,
+)
 from jiffin.ui.look import Look
 
 QML_IMPORT_NAME = "Jiffin"

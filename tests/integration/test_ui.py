@@ -28,6 +28,7 @@ from jiffin.core.alerts import AlertsView
 from jiffin.core.context import Context
 from jiffin.core.records import Alert, Revision, Snooze
 from jiffin.core.reminders import Pause
+from jiffin.lang.texts import TEXTS
 from jiffin.ui.alert import AlertSlot
 from jiffin.ui.first_run import ModelFile
 from jiffin.ui.interface import Interface
@@ -36,10 +37,10 @@ from jiffin.ui.look import Material
 TARGET = [sys.executable, str(Path(__file__).with_name("target_window.py"))]
 ROUNDS = 20
 ANSWERS: tuple[tuple[tuple[str, ...], tuple[object, ...]], ...] = (
-    (("Fatto",), ("done",)),
-    (("Rimanda", "Tra un'ora"), ("snooze", Snooze.HOUR)),
-    (("Rimanda", "Alla prossima volta"), ("snooze", Snooze.NEXT_TIME)),
-    (("Chiudi",), ("close",)),
+    ((TEXTS.alert.done,), ("done",)),
+    ((TEXTS.alert.snooze, TEXTS.snooze.hour), ("snooze", Snooze.HOUR)),
+    ((TEXTS.alert.snooze, TEXTS.snooze.next_time), ("snooze", Snooze.NEXT_TIME)),
+    ((TEXTS.command.close,), ("close",)),
 )
 """How the rounds answer, in turn: the buttons clicked, on the alert or on Rimanda's menu, and
 the answer they give."""
@@ -371,7 +372,7 @@ class Screen:
 
     def creation(self) -> QQuickWindow:
         for window in QGuiApplication.topLevelWindows():
-            if window.title() in ("Nuovo promemoria", "Modifica promemoria"):
+            if window.title() in (TEXTS.creation.new, TEXTS.creation.edit):
                 assert isinstance(window, QQuickWindow)
                 return window
         raise LookupError("no creation window")
@@ -500,7 +501,7 @@ def test_rimandas_menu_is_over_the_alert_below(qtbot: QtBot, screen: Screen, des
     screen.show(201, 202)
     qtbot.wait(500)
     upper, lower = screen.window(201), screen.window(202)
-    x, y = on_screen(upper, button(upper, "Rimanda"))
+    x, y = on_screen(upper, button(upper, TEXTS.alert.snooze))
     move_mouse(x, y)
     qtbot.wait(200)
     click(int(upper.winId()), x, y)
@@ -556,7 +557,7 @@ def test_the_shortcut_brings_the_creation_window_over_another_app(
     desk.type("prima ", "before the shortcut")
     press(_VK_LWIN, _VK_SHIFT, ord("N"))
     qtbot.waitUntil(lambda: foreground() == int(window.winId()))
-    qtbot.waitUntil(lambda: focused(window) == "Quando")
+    qtbot.waitUntil(lambda: focused(window) == TEXTS.creation.condition)
     type_text("quando apro Figma")
     press(_VK_TAB)
     type_text("esportare le icone")

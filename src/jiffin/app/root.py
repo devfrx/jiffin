@@ -27,6 +27,7 @@ from jiffin.client.model_file import MODEL, PinnedFile
 from jiffin.core.clock import Clock, SystemClock
 from jiffin.core.context import Observation
 from jiffin.core.reminders import Pause
+from jiffin.lang.texts import TEXTS
 from jiffin.platform.capture import Capture
 from jiffin.store.folders import Folders
 from jiffin.ui.first_run import ModelFile
@@ -42,7 +43,6 @@ LOG_FILE = "jiffin.log"
 LOG_BYTES = 1 << 20
 LOG_BACKUPS = 4
 """The log turns over at 1 MiB and keeps four old files."""
-CANNOT_START = "Jiffin non è riuscito a partire.\n\nIl motivo è scritto nel log:\n{log}"
 
 type MakeCapture = Callable[
     [Clock, Callable[[Observation], None], Callable[[frozenset[str]], None]], Source
@@ -147,7 +147,7 @@ def main() -> None:
     except Exception:
         log.exception("Jiffin cannot start")
         jiffin.close()
-        win32.show_error(CANNOT_START.format(log=folders.logs / LOG_FILE))
+        win32.show_error(TEXTS.app.cannot_start.format(log=folders.logs / LOG_FILE))
         sys.exit(1)
     try:
         code = app.exec()

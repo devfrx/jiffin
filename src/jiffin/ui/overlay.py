@@ -20,7 +20,10 @@ from PySide6.QtQuick import QQuickWindow
 
 from jiffin.core.alerts import MAX_VISIBLE, AlertsView
 from jiffin.core.clock import Clock
-from jiffin.ui import win32
+from jiffin.ui import (
+    catalog,  # noqa: F401  # Catalog, which Texts.qml reads
+    win32,
+)
 from jiffin.ui.alert import AlertSlot, Answers
 from jiffin.ui.glass import Glass
 
