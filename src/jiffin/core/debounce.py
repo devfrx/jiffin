@@ -34,6 +34,11 @@ class Debounce:
         return self._stable
 
     @property
+    def pending(self) -> EvaluationRequest | None:
+        """The request of the current context while it waits to be stable."""
+        return self._pending
+
+    @property
     def deadline(self) -> int | None:
         """When the pending request falls due, or None when nothing is pending."""
         if self._pending is None:

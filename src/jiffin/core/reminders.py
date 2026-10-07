@@ -26,7 +26,7 @@ from jiffin.core.clock import Clock
 from jiffin.core.context import Context, Observation
 from jiffin.core.debounce import Debounce, EvaluationRequest
 from jiffin.core.meanings import read
-from jiffin.core.model import EngineBuild, Model, ModelError
+from jiffin.core.model import EngineBuild, Model, ModelError, Need
 from jiffin.core.records import (
     Alert,
     Answer,
@@ -227,6 +227,28 @@ class Reminders:
         if self._paused_until is not None:
             deadlines.append(self._paused_until)
         return min(deadlines, default=None)
+
+    @property
+    def need(self) -> Need:
+        """When the model will be asked next, as far as `core` knows: the client lets the engine
+        sleep by it (ADR-0027). Soon when the context waiting to be stable has a judgement not in
+        the cache, a revision without its statement included: it was never judged."""
+        if self._paused_until is not None or self._seen is None:
+            return Need.NOTHING_IN_FRONT
+        pending = self._debounce.pending
+        if pending is None:
+            return Need.NOT_NOW
+        try:
+            build: EngineBuild | None = self._model.build()
+        except ModelError:
+            build = None  # no engine has started yet: no score can be found in the cache
+        missing = any(
+            reminder.completed_at is None
+            and reminder.revision.remainder
+            and (pending.context, reminder.revision.id, build) not in self._cache
+            for reminder in self._reminders.values()
+        )
+        return Need.SOON if missing else Need.NOT_NOW
 
     def observe(self, observation: Observation) -> None:
         self._catch_up(observation.at)

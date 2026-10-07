@@ -23,6 +23,16 @@ def test_a_context_is_requested_once_it_has_been_stable_for_the_debounce() -> No
     assert debounce.poll(clock.now()) == EvaluationRequest(ROSSI, context_since=START)
 
 
+def test_a_request_is_pending_until_it_falls_due() -> None:
+    clock, debounce = SimulatedClock(START), Debounce()
+    assert debounce.pending is None
+    observe(debounce, clock, ROSSI)
+    assert debounce.pending == EvaluationRequest(ROSSI, context_since=START)
+    clock.advance(DEBOUNCE_MS)
+    assert debounce.poll(clock.now()) is not None
+    assert debounce.pending is None
+
+
 def test_the_debounce_is_five_seconds() -> None:
     assert DEBOUNCE_MS == 5_000  # ADR-0019: the owner found 20 s too long to wait
 

@@ -86,7 +86,7 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         """What the list says of the engine: app maps the supervisor's status to it (#44)."""
 
         WORKING = 0
-        """Ready, starting, or not started yet."""
+        """Ready, asleep, starting, or not started yet."""
         RESTARTING = 1
         """Down after a failure: it starts again on its own."""
         FAILURES = 2
@@ -94,7 +94,7 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         MODEL = 3
         """Stopped: the model cannot be loaded."""
         GPU_MEMORY = 4
-        """Stopped: the GPU is out of memory."""
+        """Stopped, or asleep after a wake refused: the GPU is out of memory."""
         MISMATCH = 5
         """Stopped: the engine speaks another protocol version, which Retry cannot mend."""
 

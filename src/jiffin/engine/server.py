@@ -38,6 +38,16 @@ log = logging.getLogger(__name__)
 
 type Response = SuccessResponse[Any] | ErrorResponse
 
+WARM_UP = Context(app="notepad.exe", title="Untitled - Notepad", address=None)
+"""The context of the judgement that ends every load, so that the first true one costs no more
+than the next (ADR-0027)."""
+
+
+def warm_up_statements(count: int) -> list[Statement]:
+    """The statements of the warm-up: a full micro-batch, the shape the return was measured
+    with (#121)."""
+    return [Statement(id=i, text=f"The user is working on task number {i}.") for i in range(count)]
+
 
 class Backend(Protocol):
     """A loaded model, as the server uses it."""
@@ -106,8 +116,19 @@ class Engine:
         self.close()
         started = time.perf_counter()
         backend = self._load(Path(params.model_path), params.settings)
+        loaded = time.perf_counter()
+        try:
+            backend.judge(WARM_UP, warm_up_statements(params.settings.micro_batch))
+        except BaseException:
+            backend.close()
+            raise
         self._backend = backend
-        log.info("model loaded on %s in %.1f s", backend.gpu, time.perf_counter() - started)
+        log.info(
+            "model loaded on %s in %.1f s, warmed up in %.2f s",
+            backend.gpu,
+            loaded - started,
+            time.perf_counter() - loaded,
+        )
         return InitializeResult(
             protocol=PROTOCOL_VERSION,
             engine_version=version("jiffin"),

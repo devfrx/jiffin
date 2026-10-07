@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The model frees the graphics card when Jiffin does not need it: at once
+  during a pause, with the screen locked or a window in full screen, and 5
+  minutes after it was last needed. It comes back within the 5 s a window
+  waits before its reminders are judged.
+
 ## [0.2.0] - 2026-10-05
 
 Reminders that ring once per occasion, and that understand a time.

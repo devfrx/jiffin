@@ -1,6 +1,6 @@
 """The client with the real model: its file against the pin (ADR-0006), and the real engine
 under the client's supervision, on the GPU (ADR-0011), from the checkout and from the installed
-app (ADR-0015).
+app (ADR-0015), with its light sleep (ADR-0027).
 
 These tests run only on the owner's machine, with `uv run pytest -m integration`; they skip
 when the model is not in the `NO_GIT` folder beside the repository, or Jiffin is not installed.
@@ -18,7 +18,8 @@ from jiffin.client.model_file import Phase, Progress
 from jiffin.client.supervisor import TIMEOUTS, State, Status, Supervisor
 from jiffin.core.clock import SystemClock
 from jiffin.core.context import Context
-from jiffin.core.model import ModelError
+from jiffin.core.model import ModelError, Need
+from jiffin.core.records import Waker
 
 pytestmark = pytest.mark.integration
 
@@ -109,3 +110,28 @@ def test_an_engine_that_does_not_answer_in_time_is_ended_and_comes_back(model: P
         assert supervisor.rewrite("se sono su Amazon").startswith("The user ")
     finally:
         supervisor.close()
+
+
+def test_the_engine_sleeps_and_wakes_to_judge_as_before(model: Path) -> None:
+    statuses: list[Status] = []
+    supervisor = Supervisor(model, MODEL_SHA256, SystemClock(), statuses.append, lambda: None)
+    try:
+        supervisor.start()
+        awake = supervisor.judge(CHANGELOG, STATEMENTS)
+        supervisor.need(Need.NOTHING_IN_FRONT)
+        supervisor.need(Need.SOON)
+        woken = supervisor.judge(CHANGELOG, STATEMENTS)
+        _, sleep = supervisor.take_records()
+    finally:
+        supervisor.close()
+    assert [status.state for status in statuses] == [
+        State.STARTING,
+        State.READY,
+        State.ASLEEP,
+        State.READY,
+        State.OFF,
+    ]
+    assert woken == pytest.approx(awake, abs=1e-3)
+    assert sleep.woken_by is Waker.CONTEXT
+    assert sleep.ready_at is not None and sleep.woken_at is not None
+    assert sleep.slept_at <= sleep.woken_at < sleep.ready_at

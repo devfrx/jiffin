@@ -75,6 +75,13 @@ its time or the end of its snooze, whichever came last
   until `deadline`. Every call handles the deadlines already due first, so a
   late `poll()` loses nothing. When the app closes, the worker observes "no
   context", so the context in front leaves with it.
+- **The engine's sleep.** After every event the worker reads `need` and
+  passes it to the engine's supervisor
+  ([ADR-0027](../adr/0027-light-sleep-of-the-engine.md),
+  [engine](engine.md#supervision)): soon, while the context waiting for its 5 s
+  has a judgement not in the cache, a revision without its statement
+  included; nothing in front, with no context or during the pause; not now
+  otherwise. `core` does not know that the engine sleeps.
 - **Store.** After every event, `take_records()` returns what changed, in
   saving order: reminders (with their current revision), deletions, silences,
   cache entries, evaluations, when a stable context left, alerts.
@@ -99,8 +106,9 @@ its time or the end of its snooze, whichever came last
   whether a period has ended, are pure functions of `core/units.py` it may call
   itself: `next_occasion` and `ended`.
 - **Model port.** `build()` names the engine that answers, also while it
-  restarts; `judge()` scores every statement it gets; `rewrite()` turns a
-  remainder into its statement; any failure is a `ModelError`.
+  restarts or sleeps; `judge()` scores every statement it gets; `rewrite()`
+  turns a remainder into its statement; a call while the engine sleeps waits
+  for it to wake; any failure is a `ModelError`.
 - **Harness.** A replay moves the simulated clock to the next observation or
   `deadline`, whichever comes first, so every evaluation happens at its exact
   time.

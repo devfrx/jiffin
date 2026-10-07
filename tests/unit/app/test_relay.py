@@ -72,6 +72,8 @@ def test_what_other_threads_say_reaches_the_interface_on_its_thread(qtbot: QtBot
         (Status(State.OFF), TrayList.Engine.WORKING),
         (Status(State.STARTING), TrayList.Engine.WORKING),
         (Status(State.READY), TrayList.Engine.WORKING),
+        (Status(State.ASLEEP), TrayList.Engine.WORKING),
+        (Status(State.ASLEEP, StopReason.GPU_MEMORY), TrayList.Engine.GPU_MEMORY),
         (Status(State.RESTARTING), TrayList.Engine.RESTARTING),
         (Status(State.STOPPED, StopReason.FAILURES), TrayList.Engine.FAILURES),
         (Status(State.STOPPED, StopReason.MODEL), TrayList.Engine.MODEL),

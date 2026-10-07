@@ -69,9 +69,11 @@ flowchart LR
   wait: what the interface asks of `core`, through `QueuedCore`; the capture's
   observations; the model file checked; an engine whose output ended. After
   each command the worker handles whatever deadline has come, on `core`'s
-  clock: the engine's restart, the debounce or a snooze
-  ([pipeline](pipeline.md)), the daily cleanup. Then it saves what `core`
-  changed. A command that fails is logged, and the worker goes on.
+  clock: the engine's restart or sleep, the debounce or a snooze
+  ([pipeline](pipeline.md)), the daily cleanup. Then it tells the supervisor
+  what `core` needs of the engine now ([engine](engine.md#supervision)), and
+  saves what `core` changed. A command that fails is logged, and the worker
+  goes on.
 - **Out to the interface.** The worker, the context thread and the model
   file's thread emit the relay's signals. The relay lives on the interface
   thread, so Qt runs its slots there, and they call `Interface.show_alerts`,
@@ -136,7 +138,10 @@ sequenceDiagram
 - **The engine back.** When the supervisor reports it ready, after the first
   start or a restart, `core` writes the statements it missed and judges the
   stable context again; the cache spares what was judged already
-  ([ADR-0011](../adr/0011-engine-child-process-json-rpc.md)).
+  ([ADR-0011](../adr/0011-engine-child-process-json-rpc.md)). A wake from the
+  light sleep is not a return, since nothing failed while the engine slept;
+  a wake after one the GPU's memory refused is
+  ([ADR-0027](../adr/0027-light-sleep-of-the-engine.md)).
 - **The model file's thread** is a daemon: a download cut short by Quit keeps
   its part, and the next start resumes it.
 - **The log** is `logs\jiffin.log` in the data folder: ids and numbers only, a
