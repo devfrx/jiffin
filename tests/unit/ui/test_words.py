@@ -243,6 +243,10 @@ def test_days_of_the_week_take_their_hours_without_a_comma(
         (EveryNWeeks(6, 2, date(2026, 10, 4)), "Una domenica sì e una no, da domenica 4 ottobre"),
         (EveryNWeeks(0, 3, date(2026, 10, 5)), "Un lunedì ogni tre settimane, da lunedì 5 ottobre"),
         (
+            EveryNWeeks(6, 4, date(2026, 10, 4)),
+            "Una domenica ogni quattro settimane, da domenica 4 ottobre",
+        ),
+        (
             EveryNWeeks(5, 2, date(2026, 10, 3)),
             "Un sabato sì e uno no, da domani, sabato 3 ottobre",
         ),

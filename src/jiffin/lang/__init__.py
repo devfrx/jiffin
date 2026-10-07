@@ -38,8 +38,9 @@ class Plural:
 
 def read[T](kind: type[T], name: str) -> T:
     """The language file `name`, as `kind`: a frozen dataclass whose fields are the file's keys.
-    A field is a text, a `Plural`, a table of texts by key (`Mapping[str, str]`) or a table of
-    its own, another such dataclass."""
+    A field is a text, a list of texts (`tuple[str, ...]`), a `Plural`, a table of texts or of
+    whole numbers by key (`Mapping[str, str]`, `Mapping[str, int]`) or a table of its own,
+    another such dataclass."""
     try:
         with (FOLDER / name).open("rb") as file:
             table = tomllib.load(file)
@@ -65,9 +66,18 @@ def _value(kind: object, value: object, name: str, key: str) -> object:
         if not isinstance(value, str):
             raise CatalogError(f"{name}: {key} is not a text")
         return value
+    if kind == tuple[str, ...]:
+        if not isinstance(value, list) or not all(isinstance(text, str) for text in value):
+            raise CatalogError(f"{name}: {key} is not a list of texts")
+        return tuple(value)
     if kind == Mapping[str, str]:
         if not isinstance(value, dict) or not all(isinstance(text, str) for text in value.values()):
             raise CatalogError(f"{name}: {key} is not a table of texts")
+        return types.MappingProxyType(value)
+    if kind == Mapping[str, int]:
+        # A TOML true or false is a bool, which Python counts as an int.
+        if not isinstance(value, dict) or not all(type(n) is int for n in value.values()):
+            raise CatalogError(f"{name}: {key} is not a table of whole numbers")
         return types.MappingProxyType(value)
     if isinstance(kind, type) and is_dataclass(kind):
         if not isinstance(value, dict):

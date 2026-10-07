@@ -6,13 +6,18 @@ sera", "prima di lunedì"), make the time unclear, and the labels say where thos
 Names are not time: quoted names, words with a digit or a dot inside, capitalized words after
 the first, the number after a name ("Windows 11"), a number that counts something ("alle 20
 pagine"). The labels say what the words say; `meanings` knows what they mean.
+
+The words are the lexicon of `jiffin.lang.time` (ADR-0026); the rules that read them are here:
+the patterns, in order, and what each match says.
 """
 
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from enum import StrEnum
 
 from jiffin.core.schedule import MonthDay, MonthWeekday, Unit, YearDay
+from jiffin.lang.time import TIME, Fused
 
 
 class Unclear(Exception):
@@ -74,11 +79,13 @@ class Clock:
     minute: int = 0
 
 
-@dataclass(frozen=True, slots=True)
-class Part:
+class Part(StrEnum):
     """A part of the day: "la sera", "stamattina"."""
 
-    name: str
+    MORNING = "morning"
+    AFTERNOON = "afternoon"
+    EVENING = "evening"
+    NIGHT = "night"
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,7 +93,7 @@ class At:
     """ "alle 15", "verso le 9", "a mezzogiorno"."""
 
     clock: Clock
-    part: str | None = None
+    part: Part | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,7 +101,7 @@ class After:
     """ "dopo le 23", "dalle 22 in poi"."""
 
     clock: Clock
-    part: str | None = None
+    part: Part | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,7 +109,7 @@ class Before:
     """ "prima delle 9", "fino alle 8"."""
 
     clock: Clock
-    part: str | None = None
+    part: Part | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,8 +118,8 @@ class Between:
 
     start: Clock
     end: Clock
-    start_part: str | None = None
-    end_part: str | None = None
+    start_part: Part | None = None
+    end_part: Part | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -207,79 +214,156 @@ class Labels:
     frequency: Every | None = None
 
 
-# The vocabulary
+# The vocabulary: the lexicon's words, as the patterns read them
 
-NUMBERS = {
-    "un": 1, "uno": 1, "una": 1, "due": 2, "tre": 3, "quattro": 4, "cinque": 5, "sei": 6,
-    "sette": 7, "otto": 8, "nove": 9, "dieci": 10, "undici": 11, "dodici": 12, "tredici": 13,
-    "quattordici": 14, "quindici": 15, "sedici": 16, "diciassette": 17, "diciotto": 18,
-    "diciannove": 19, "venti": 20, "ventuno": 21, "ventidue": 22, "ventitré": 23,
-    "ventitre": 23, "ventiquattro": 24, "venticinque": 25, "ventisei": 26, "ventisette": 27,
-    "ventotto": 28, "ventinove": 29, "trenta": 30, "trentuno": 31,
-}  # fmt: skip
-MINUTE_WORDS = {
-    **NUMBERS, "quaranta": 40, "quarantacinque": 45, "cinquanta": 50, "cinquantacinque": 55,
-}  # fmt: skip
-FRACTIONS = {"mezza": 30, "mezzo": 30, "un quarto": 15, "tre quarti": 45}
-MONTHS = (
-    "gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto",
-    "settembre", "ottobre", "novembre", "dicembre",
-)  # fmt: skip
-SHORT_PARTS = {
-    "stamattina": "mattina",
-    "stamani": "mattina",
-    "stamane": "mattina",
-    "stasera": "sera",
-    "stanotte": "notte",
-    "domattina": "mattina",
+WORDS = TIME.read
+UNITS = TIME.units
+NUMBERS = WORDS.numbers
+MINUTE_WORDS = {**NUMBERS, **WORDS.minute_numbers}
+FRACTIONS = WORDS.fractions
+MONTHS = TIME.months
+WEEKDAY_STARTS = tuple(day[:3] for day in TIME.weekdays)
+"""A weekday by its first three letters, whatever its ending or its accent."""
+SINGULAR_PARTS = {
+    Part.MORNING: WORDS.parts.morning,
+    Part.AFTERNOON: WORDS.parts.afternoon,
+    Part.EVENING: WORDS.parts.evening,
+    Part.NIGHT: WORDS.parts.night,
 }
 PLURAL_PARTS = {
-    "mattino": "mattina",
-    "mattine": "mattina",
-    "pomeriggi": "pomeriggio",
-    "sere": "sera",
-    "notti": "notte",
+    Part.MORNING: WORDS.part_plurals.morning,
+    Part.AFTERNOON: WORDS.part_plurals.afternoon,
+    Part.EVENING: WORDS.part_plurals.evening,
+    Part.NIGHT: WORDS.part_plurals.night,
 }
-RELATIVE_DAYS = {"oggi": 0, "domani": 1, "dopodomani": 2}
-NTH = {"prim": 1, "second": 2, "terz": 3, "quart": 4, "ultim": -1}
-UNITS = {"giorn": Unit.DAY, "settiman": Unit.WEEK, "mes": Unit.MONTH, "ann": Unit.YEAR}
+PARTS = {
+    word: part
+    for forms in (SINGULAR_PARTS, PLURAL_PARTS)
+    for part, words in forms.items()
+    for word in words
+}
+SHORT_PARTS = {
+    **dict.fromkeys(WORDS.short_parts.this_morning, (0, Part.MORNING)),
+    **dict.fromkeys(WORDS.short_parts.this_evening, (0, Part.EVENING)),
+    **dict.fromkeys(WORDS.short_parts.tonight, (0, Part.NIGHT)),
+    **dict.fromkeys(WORDS.short_parts.tomorrow_morning, (1, Part.MORNING)),
+}
+"""One word for a part of a day: the day, from today, and the part."""
+RELATIVE_DAYS = {**WORDS.relative_days, **WORDS.split_relative_days}
+NTH = {
+    form: nth
+    for nth, ordinal in (
+        (1, TIME.ordinals.first),
+        (2, TIME.ordinals.second),
+        (3, TIME.ordinals.third),
+        (4, TIME.ordinals.fourth),
+        (-1, TIME.ordinals.last),
+    )
+    for form in (ordinal.masculine, ordinal.feminine)
+}
+HOUR_FORMS = (UNITS.hour.one, UNITS.hour.other)
+MINUTE_FORMS = (UNITS.minute.one, UNITS.minute.other)
+DAY_FORMS = (UNITS.day.one, UNITS.day.other)
+WEEK_FORMS = (UNITS.week.one, UNITS.week.other)
+UNIT_OF = {
+    form: unit
+    for unit, plural in (
+        (Unit.DAY, UNITS.day),
+        (Unit.WEEK, UNITS.week),
+        (Unit.MONTH, UNITS.month),
+        (Unit.YEAR, UNITS.year),
+    )
+    for form in (plural.one, plural.other)
+}
+"""The units a frequency counts."""
 EVERY_DAY = DayNames(frozenset(range(7)), every=True)
 WEEKEND = frozenset({5, 6})
 WORKING_DAYS = frozenset(range(5))
 AFTER_DINNER = Clock(21)
 """"dopo cena" is "dopo le 21" (#90)."""
 
+ACCENT = rf"(?:{'|'.join(re.escape(spelling) for spelling in TIME.final_i)})"
+"""A final accented i, as it may be typed."""
 
-def _alternatives(words: dict[str, int]) -> str:
-    return "|".join(sorted(words, key=len, reverse=True))
+
+def alternatives(forms: Iterable[str]) -> str:
+    """The forms as one alternation, the longest first."""
+    return "|".join(phrase(form) for form in sorted(forms, key=len, reverse=True))
 
 
-ACCENT = r"(?:ì|í|i'|i)"
-WEEKDAY = (
-    rf"(?:luned{ACCENT}|marted{ACCENT}|mercoled{ACCENT}|gioved{ACCENT}|venerd{ACCENT}"
-    r"|sabat[oi]|domenic(?:a|he))(?![\w'])"
+def phrase(form: str) -> str:
+    """A form as it may be typed: any space between its words, and a final accented i in any of
+    its spellings ("lunedi'")."""
+    return r"\s+".join(_word(word) for word in form.split())
+
+
+def _word(word: str) -> str:
+    accented = TIME.final_i[0]
+    if word.endswith(accented):
+        return re.escape(word.removesuffix(accented)) + ACCENT
+    return re.escape(word)
+
+
+def leading(forms: Iterable[str]) -> str:
+    """Forms that lead into the next word: a space after them, or none after an elision, "un
+    paio di ore", "un paio d'ore"."""
+    return "|".join(
+        phrase(form) + ("" if form.endswith("'") else r"\s+")
+        for form in sorted(forms, key=len, reverse=True)
+    )
+
+
+EVERY = phrase(WORDS.every)
+AND = phrase(WORDS.conjunction)
+OF = phrase(WORDS.of)
+UP_TO = phrase(WORDS.up_to)
+BY = phrase(WORDS.by)
+ELIDED = phrase(WORDS.elided_article)
+DAY_ARTICLE = phrase(WORDS.day_article)
+WITHIN = alternatives(WORDS.within)
+INDEFINITE = alternatives(WORDS.indefinite)
+OF_MONTH = alternatives(WORDS.of_month)
+WEEKDAY = rf"(?:{alternatives((*TIME.weekdays, *WORDS.weekday_plurals))})(?![\w'])"
+MONTH = rf"(?:{alternatives(MONTHS)})(?!\w)"
+PART_WORD = (
+    rf"(?:{alternatives(word for words in SINGULAR_PARTS.values() for word in words)})(?!\w)"
 )
-MONTH = rf"(?:{'|'.join(MONTHS)})(?!\w)"
-PART_WORD = r"(?:mattin[ao]|pomeriggio|sera|notte)(?!\w)"
-NUMBER = rf"(?:\d{{1,2}}|{_alternatives(NUMBERS)})(?![\w'])"
-PAIR = r"un\s+paio\s+d(?:i\s+|')"
+NUMBER = rf"(?:\d{{1,2}}|{alternatives(NUMBERS)})(?![\w'])"
+PAIR = rf"(?:{leading(WORDS.pair)})"
 """"un paio d'ore" is 2 hours (#90); a pair of days is two days too."""
-DAY_NUMBER = r"(?:\d{1,2}|primo|1°|1º)"
-HOUR_WORD = _alternatives({word: number for word, number in NUMBERS.items() if number <= 24})
-MINUTES = rf"(?:[0-5]?\d(?!\d)|(?:{_alternatives(MINUTE_WORDS)})(?![\w']))"
+DAY_NUMBER = rf"(?:\d{{1,2}}|{alternatives(WORDS.first_of_month)})"
+HOUR_WORD = alternatives(word for word, number in NUMBERS.items() if number <= 24)
+MINUTES = rf"(?:[0-5]?\d(?!\d)|(?:{alternatives(MINUTE_WORDS)})(?![\w']))"
 AND_MINUTES = (
-    rf"(?:\s+e\s+(?:mezza|mezzo|un\s+quarto|tre\s+quarti|{MINUTES})"
-    rf"|\s+meno\s+(?:un\s+quarto|{MINUTES}))"
+    rf"(?:\s+{AND}\s+(?:{alternatives(FRACTIONS)}|{MINUTES})"
+    rf"|\s+{phrase(WORDS.minus)}\s+(?:{alternatives(WORDS.minus_fractions)}|{MINUTES}))"
 )
 CLOCK = (
-    rf"(?:(?:ore\s+)?(?:\d{{1,2}}(?:[:.,][0-5]\d(?!\d))?|(?:{HOUR_WORD})(?!\w))"
-    rf"{AND_MINUTES}?(?:\s+in\s+punto)?)"
+    rf"(?:(?:{phrase(WORDS.hours_word)}\s+)?(?:\d{{1,2}}(?:[:.,][0-5]\d(?!\d))?"
+    rf"|(?:{HOUR_WORD})(?!\w)){AND_MINUTES}?(?:\s+{phrase(WORDS.sharp)})?)"
 )
-WITH_ARTICLE = rf"(?:le\s+{CLOCK}|l'(?:una|1){AND_MINUTES}?|la\s+mezzanotte{AND_MINUTES}?)"
-BARE = rf"(?:mezzogiorno{AND_MINUTES}?|mezzanotte{AND_MINUTES}?)"
-SUFFIX = rf"(?:di|del|della|al|alla)\s+{PART_WORD}"
-NEGATION = r"(?P<neg>(?:\bma\s+)?(?:\bnon|\btranne(?:\s+che)?|\beccetto|\bsalvo|\besclus[oaie])\s+)"
-ARTICLE = r"(?:ogni|tutti\s+i|tutte\s+le|il|la|i|le|di|nei|nelle)"
+WITH_ARTICLE = (
+    rf"(?:{phrase(WORDS.hour_article)}\s+{CLOCK}"
+    rf"|{ELIDED}(?:{alternatives(WORDS.one_oclock)}){AND_MINUTES}?"
+    rf"|{phrase(WORDS.midnight_article)}\s+{phrase(WORDS.midnight)}{AND_MINUTES}?)"
+)
+BARE = rf"(?:{phrase(WORDS.noon)}{AND_MINUTES}?|{phrase(WORDS.midnight)}{AND_MINUTES}?)"
+NOON_OR_MIDNIGHT = rf"(?:{alternatives((WORDS.noon, WORDS.midnight))})"
+TIME_ARTICLES = (
+    rf"(?:{alternatives((WORDS.hour_article, WORDS.elided_article, WORDS.midnight_article))})"
+)
+"""The articles a time may start with, which a preposition before it fuses with: "dalle"."""
+SUFFIX = rf"(?:{alternatives(WORDS.part_prepositions)})\s+{PART_WORD}"
+NEGATION = rf"(?P<neg>(?:\b{phrase(WORDS.but)}\s+)?\b(?:{alternatives(WORDS.negations)})\s+)"
+ARTICLE = rf"(?:{alternatives(WORDS.before_weekdays)})"
+LIST_JOINS = "|".join(rf"\b{phrase(join)}\b" for join in WORDS.list_joins)
+TIME_PREFIXES = (
+    f"{WORDS.hour_article} ",
+    f"{WORDS.midnight_article} ",
+    WORDS.elided_article,
+)
+"""What a time may start with, before its hour: "le 9", "la mezzanotte", "l'una"."""
+PLUS_OR_MINUS = rf"[:.,](\d{{2}})|({re.escape(WORDS.conjunction)}|{re.escape(WORDS.minus)}) (.+)"
 
 
 def timed(n: int) -> str:
@@ -287,17 +371,23 @@ def timed(n: int) -> str:
     return rf"(?P<t{n}>{WITH_ARTICLE}|{BARE})(?:\s+(?P<p{n}>{SUFFIX}))?"
 
 
-def fused(joined: str, plain: str) -> str:
+def fused(preposition: Fused) -> str:
     """A preposition before timed(): fused with the article ("alle 9") or not ("a mezzogiorno")."""
-    return rf"(?:\b{joined}(?=l)|\b{plain}\s+(?=mezz))"
+    return (
+        rf"(?:\b{phrase(preposition.joined)}(?={TIME_ARTICLES})"
+        rf"|\b{phrase(preposition.plain)}\s+(?={NOON_OR_MIDNIGHT}))"
+    )
 
 
 def parse_time(text: str) -> Clock | None:
     words = re.sub(r"\s+", " ", text).strip()
-    words = re.sub(r"^(?:le |la |l')", "", words)
-    words = re.sub(r"^ore ", "", words)
-    words = re.sub(r" in punto$", "", words)
-    for name, hour in (("mezzogiorno", 12), ("mezzanotte", 0)):
+    for prefix in TIME_PREFIXES:
+        if words.startswith(prefix):
+            words = words.removeprefix(prefix)
+            break
+    words = words.removeprefix(f"{WORDS.hours_word} ")
+    words = words.removesuffix(f" {WORDS.sharp}")
+    for name, hour in ((WORDS.noon, 12), (WORDS.midnight, 0)):
         if words.startswith(name):
             rest = words[len(name) :]
             break
@@ -312,7 +402,7 @@ def parse_time(text: str) -> Clock | None:
         hour, rest = found_hour, words[head.end() :]
     minutes = 0
     if rest := rest.strip():
-        found = re.fullmatch(r"[:.,](\d{2})|(e|meno) (.+)", rest)
+        found = re.fullmatch(PLUS_OR_MINUS, rest)
         if found is None:
             return None
         if found[1]:
@@ -324,24 +414,24 @@ def parse_time(text: str) -> Clock | None:
             if amount is None or not 0 < amount < 60:
                 return None
             # "le 7 meno un quarto" is 06:45.
-            minutes = amount if found[2] == "e" else -amount
+            minutes = amount if found[2] == WORDS.conjunction else -amount
     if not 0 <= hour <= 24 or minutes > 59 or (hour == 24 and minutes > 0):
         return None
     total = (hour * 60 + minutes) % (24 * 60)
     return Clock(total // 60, total % 60)
 
 
-def part_name(text: str) -> str:
-    word = text.split()[-1]
-    return PLURAL_PARTS.get(word, word)
+def part_of(text: str) -> Part:
+    """The part of the day a phrase ends with: "della sera", "mattine"."""
+    return PARTS[text.split()[-1]]
 
 
-def optional_part(text: str | None) -> str | None:
-    return None if text is None else part_name(text)
+def optional_part(text: str | None) -> Part | None:
+    return None if text is None else part_of(text)
 
 
 def weekday_index(text: str) -> int:
-    return ("lun", "mar", "mer", "gio", "ven", "sab", "dom").index(text[:3])
+    return WEEKDAY_STARTS.index(text[:3])
 
 
 def counted(match: re.Match[str]) -> int:
@@ -353,7 +443,7 @@ def counted(match: re.Match[str]) -> int:
 
 
 def day_number(text: str) -> int:
-    return 1 if text in ("primo", "1°", "1º") else int(text)
+    return 1 if text in WORDS.first_of_month else int(text)
 
 
 def date_words(match: re.Match[str]) -> DateWords:
@@ -378,21 +468,18 @@ type Handler = Callable[[re.Match[str]], list[Piece] | None]
 
 def on_minutes(match: re.Match[str]) -> list[Piece]:
     if match["w"]:
-        whole = re.sub(r"\s+", " ", match["w"])
-        minutes = {"un'ora": 60, "mezz'ora": 30, "mezzora": 30, "un quarto d'ora": 15}.get(
-            whole, 45
-        )
+        minutes = WORDS.durations[" ".join(match["w"].split())]
     else:
-        minutes = counted(match) * (60 if match["pair"] or match["u"].startswith("or") else 1)
+        minutes = counted(match) * (60 if match["pair"] or match["u"] in HOUR_FORMS else 1)
     if match["xm"]:
         minutes += int(match["xm"])
     elif match["x"]:
-        minutes += 15 if "quarto" in match["x"] else 30
+        minutes += WORDS.added_minutes[" ".join(match["x"].split())]
     return [InMinutes(minutes)]
 
 
 def on_days_in(match: re.Match[str]) -> list[Piece]:
-    return [InDays(counted(match) * (7 if match["u"].startswith("settiman") else 1))]
+    return [InDays(counted(match) * (7 if match["u"] in WEEK_FORMS else 1))]
 
 
 def on_between(match: re.Match[str]) -> list[Piece] | None:
@@ -433,7 +520,7 @@ def on_until(match: re.Match[str]) -> list[Piece]:
         return [Until(date_words(match))]
     if match["wd"]:
         return [Until(DayNames(frozenset({weekday_index(match["wd"])}), every=False))]
-    return [Until(InDays(RELATIVE_DAYS[match["r"]]))]
+    return [Until(InDays(WORDS.relative_days[match["r"]]))]
 
 
 def on_until_date(match: re.Match[str]) -> list[Piece]:
@@ -443,7 +530,7 @@ def on_until_date(match: re.Match[str]) -> list[Piece]:
 
 
 def on_for_days(match: re.Match[str]) -> list[Piece]:
-    return [ForDays(counted(match) * (7 if match["u"].startswith("settiman") else 1))]
+    return [ForDays(counted(match) * (7 if match["u"] in WEEK_FORMS else 1))]
 
 
 def on_week(match: re.Match[str]) -> list[Piece]:
@@ -455,7 +542,7 @@ def on_every_other_week(match: re.Match[str]) -> list[Piece]:
 
 
 def on_month_weekday(match: re.Match[str]) -> list[Piece]:
-    return [MonthWeekday(weekday_index(match["wd"]), NTH[match["nth"][:-1]])]
+    return [MonthWeekday(weekday_index(match["wd"]), NTH[match["nth"]])]
 
 
 def on_month_day(match: re.Match[str]) -> list[Piece]:
@@ -468,29 +555,30 @@ def on_month_end(match: re.Match[str]) -> list[Piece]:
 
 def on_every(match: re.Match[str]) -> list[Piece]:
     number = counted(match) if match["n"] or match["pair"] else 1
-    unit = next(unit for stem, unit in UNITS.items() if match["u"].startswith(stem))
-    return [Every(number, unit)]
+    return [Every(number, UNIT_OF[match["u"]])]
 
 
 def on_relative(match: re.Match[str]) -> list[Piece]:
     if match["s"]:
-        return [InDays(int(match["s"] == "domattina")), Part(SHORT_PARTS[match["s"]])]
-    found: list[Piece] = [InDays(RELATIVE_DAYS[re.sub(r"\s+", "", match["r"])])]
+        days, part = SHORT_PARTS[match["s"]]
+        return [InDays(days), part]
+    found: list[Piece] = [InDays(RELATIVE_DAYS[" ".join(match["r"].split())])]
     if match["rp"]:
-        found.append(Part(part_name(match["rp"])))
+        found.append(part_of(match["rp"]))
     return found
 
 
 def on_day_range(match: re.Match[str]) -> list[Piece]:
     first, last = weekday_index(match["a"]), weekday_index(match["b"])
     found: list[Piece]
-    if match["from"] == "da":
+    # Without its article, the first preposition makes it once: "da lunedì a giovedì".
+    if match["from"] == WORDS.from_the.plain:
         found = [WeekdaysOnce(first, last)]
     else:
         days = frozenset((first + step) % 7 for step in range((last - first) % 7 + 1))
         found = [DayNames(days, every=True)]
     if match["part"]:
-        found.append(Part(part_name(match["part"])))
+        found.append(part_of(match["part"]))
     return found
 
 
@@ -508,238 +596,251 @@ def on_every_day(match: re.Match[str]) -> list[Piece]:
 def on_weekdays(match: re.Match[str]) -> list[Piece]:
     names = re.findall(WEEKDAY, match["list"])
     days = frozenset(weekday_index(name) for name in names)
-    plural = any(name in ("sabati", "domeniche") for name in names)
+    plural = any(name in WORDS.weekday_plurals for name in names)
     every = (match["art"] is not None or plural) and match["next"] is None
     found: list[Piece] = [DayNames(days, every, negated=match["neg"] is not None)]
     if match["part"]:
-        found.append(Part(part_name(match["part"])))
+        found.append(part_of(match["part"]))
     return found
 
 
 def on_part(match: re.Match[str]) -> list[Piece]:
-    return [Part(part_name(match["part"]))]
+    return [part_of(match["part"])]
 
+
+EVERY_UNIT_FORMS = (
+    UNITS.day.other,
+    *(form for unit in (UNITS.week, UNITS.month, UNITS.year) for form in (unit.one, unit.other)),
+)
+"""The units after "ogni": not one day, which is every day ("ogni giorno"), read further on."""
+ALL_UNIT_FORMS = tuple(UNIT_OF)
 
 # Tried in order; a match may not overlap an earlier one.
 PATTERNS: list[tuple[str, Handler]] = [
     (
         (
-            rf"\b(?:tra|fra)\s+(?:(?P<n>{NUMBER})\s+(?P<u>ore|ora|minuti|minuto)(?!\w)"
-            rf"|(?P<pair>{PAIR})ore(?!\w)"
-            r"|(?P<w>un'ora|mezz'ora|mezzora|un\s+quarto\s+d'ora|tre\s+quarti\s+d'ora))"
-            r"(?:\s+e\s+(?P<x>mezza|mezzo|un\s+quarto|(?P<xm>\d{1,2})\s+minuti))?"
+            rf"\b(?:{WITHIN})\s+(?:(?P<n>{NUMBER})\s+"
+            rf"(?P<u>{alternatives((*HOUR_FORMS, *MINUTE_FORMS))})(?!\w)"
+            rf"|(?P<pair>{PAIR}){phrase(UNITS.hour.other)}(?!\w)"
+            rf"|(?P<w>{alternatives(WORDS.durations)}))"
+            rf"(?:\s+{AND}\s+(?P<x>{alternatives(WORDS.added_minutes)}"
+            rf"|(?P<xm>\d{{1,2}})\s+{phrase(UNITS.minute.other)}))?"
         ),
         on_minutes,
     ),
     (
         (
-            rf"\b(?:tra|fra)\s+(?:(?P<n>{NUMBER})\s+|(?P<pair>{PAIR}))"
-            r"(?P<u>giorni|giorno|settimane|settimana)(?!\w)"
+            rf"\b(?:{WITHIN})\s+(?:(?P<n>{NUMBER})\s+|(?P<pair>{PAIR}))"
+            rf"(?P<u>{alternatives((*DAY_FORMS, *WEEK_FORMS))})(?!\w)"
         ),
         on_days_in,
     ),
-    (rf"\b(?:tra|fra)\s+{timed(1)}\s+e\s+{timed(2)}", on_between),
+    (rf"\b(?:{WITHIN})\s+{timed(1)}\s+{AND}\s+{timed(2)}", on_between),
     (
-        rf"{fused('dal', 'da')}{timed(1)}\s+(?:fino\s+)?{fused('al', 'a')}{timed(2)}",
+        rf"{fused(WORDS.from_the)}{timed(1)}\s+(?:{UP_TO}\s+)?{fused(WORDS.to_the)}{timed(2)}",
         on_between,
     ),
     (
         (
-            rf"\bdal(?:l'|\s+)(?P<d1>{DAY_NUMBER})(?:\s+(?:di\s+)?(?P<mo1>{MONTH}))?"
-            rf"\s+(?:fino\s+)?al(?:l'|\s+)(?P<d2>{DAY_NUMBER})\s+(?:di\s+)?(?P<mo2>{MONTH})"
+            rf"\b{phrase(WORDS.from_the.joined)}(?:{ELIDED}|\s+)(?P<d1>{DAY_NUMBER})"
+            rf"(?:\s+(?:{OF}\s+)?(?P<mo1>{MONTH}))?"
+            rf"\s+(?:{UP_TO}\s+)?{phrase(WORDS.to_the.joined)}(?:{ELIDED}|\s+)"
+            rf"(?P<d2>{DAY_NUMBER})\s+(?:{OF}\s+)?(?P<mo2>{MONTH})"
             r"(?:\s+(?P<y>\d{4}))?"
         ),
         on_date_range,
     ),
     (
         (
-            rf"\b(?:fino\s+a|entro)\s+(?:(?P<wd>{WEEKDAY})(?:\s+(?P<d>{DAY_NUMBER})\s+"
-            rf"(?:di\s+)?(?P<mo>{MONTH})(?:\s+(?P<y>\d{{4}}))?)?"
-            r"|(?P<r>oggi|domani|dopodomani)(?!\w))"
+            rf"\b(?:{UP_TO}\s+{phrase(WORDS.to_the.plain)}|{BY})\s+(?:(?P<wd>{WEEKDAY})"
+            rf"(?:\s+(?P<d>{DAY_NUMBER})\s+(?:{OF}\s+)?(?P<mo>{MONTH})(?:\s+(?P<y>\d{{4}}))?)?"
+            rf"|(?P<r>{alternatives(WORDS.relative_days)})(?!\w))"
         ),
         on_until,
     ),
     (
         (
-            rf"\b(?:fino\s+al(?:l'|\s+)|entro\s+(?:il\s+|l'))(?P<d>{DAY_NUMBER})"
-            rf"(?:\s+(?:di\s+)?(?P<mo>{MONTH})(?:\s+(?P<y>\d{{4}}))?)?(?![\d/])"
+            rf"\b(?:{UP_TO}\s+{phrase(WORDS.to_the.joined)}(?:{ELIDED}|\s+)"
+            rf"|{BY}\s+(?:{DAY_ARTICLE}\s+|{ELIDED}))(?P<d>{DAY_NUMBER})"
+            rf"(?:\s+(?:{OF}\s+)?(?P<mo>{MONTH})(?:\s+(?P<y>\d{{4}}))?)?(?![\d/])"
         ),
         on_until_date,
     ),
     (
         (
-            rf"\bper\s+(?:(?P<n>{NUMBER})\s+|(?P<pair>{PAIR}))"
-            r"(?P<u>giorni|giorno|settimane|settimana)(?!\w)"
+            rf"\b{phrase(WORDS.lasting)}\s+(?:(?P<n>{NUMBER})\s+|(?P<pair>{PAIR}))"
+            rf"(?P<u>{alternatives((*DAY_FORMS, *WEEK_FORMS))})(?!\w)"
         ),
         on_for_days,
     ),
     (
         (
-            r"\b(?:(?:in\s+)?questa\s+settimana"
-            r"|(?P<next>(?:la\s+|nella\s+)?(?:prossima\s+settimana|settimana\s+prossima)))(?!\w)"
+            rf"\b(?:{alternatives(WORDS.this_week)}"
+            rf"|(?P<next>{alternatives(WORDS.next_week)}))(?!\w)"
         ),
         on_week,
     ),
     (
-        rf"\bun[oa]?\s+(?P<wd>{WEEKDAY})\s+s{ACCENT}\s+e\s+un[oa]?\s+(?:{WEEKDAY}\s+)?no(?!\w)",
+        (
+            rf"\b(?:{INDEFINITE})\s+(?P<wd>{WEEKDAY})\s+{phrase(WORDS.yes)}\s+{AND}"
+            rf"\s+(?:{INDEFINITE})\s+(?:{WEEKDAY}\s+)?{phrase(WORDS.no)}(?!\w)"
+        ),
         on_every_other_week,
     ),
     (
         (
-            rf"(?:\b(?:ogni|il|la)\s+|\bl')?(?P<nth>prim[oa]|second[oa]|terz[oa]|quart[oa]"
-            rf"|ultim[oa])\s+(?P<wd>{WEEKDAY})\s+(?:del|di\s+ogni)\s+mese(?!\w)"
+            rf"(?:\b(?:{alternatives(WORDS.before_month_weekday)})\s+|\b{ELIDED})?"
+            rf"(?P<nth>{alternatives(NTH)})\s+(?P<wd>{WEEKDAY})\s+(?:{OF_MONTH})(?!\w)"
         ),
         on_month_weekday,
     ),
     (
-        rf"(?:\b(?:ogni|il)\s+|\bl')?(?<!\d)(?P<d>{DAY_NUMBER})\s+(?:del|di\s+ogni)\s+mese(?!\w)",
+        (
+            rf"(?:\b(?:{alternatives(WORDS.before_month_day)})\s+|\b{ELIDED})?(?<!\d)"
+            rf"(?P<d>{DAY_NUMBER})\s+(?:{OF_MONTH})(?!\w)"
+        ),
         on_month_day,
     ),
     (
         (
-            r"\b(?:a|ogni)\s+fine\s+mese(?!\w)"
-            r"|(?:\bl'|\bogni\s+)ultimo\s+giorno\s+(?:del|di\s+ogni)\s+mese(?!\w)"
+            rf"\b(?:{alternatives(WORDS.month_end)})(?!\w)"
+            rf"|\b(?:{alternatives(WORDS.month_last_day)})\s+(?:{OF_MONTH})(?!\w)"
         ),
         on_month_end,
     ),
     (
         (
-            rf"(?:(?P<wd>{WEEKDAY})\s+)?(?:\bil\s+|\bl')?(?<!\d)(?P<d>{DAY_NUMBER})\s+(?:di\s+)?"
-            rf"(?P<mo>{MONTH})(?:\s+(?P<y>\d{{4}})|(?P<every>\s+(?:di\s+)?ogni\s+anno(?!\w)))?"
+            rf"(?:(?P<wd>{WEEKDAY})\s+)?(?:\b{DAY_ARTICLE}\s+|\b{ELIDED})?(?<!\d)"
+            rf"(?P<d>{DAY_NUMBER})\s+(?:{OF}\s+)?(?P<mo>{MONTH})(?:\s+(?P<y>\d{{4}})"
+            rf"|(?P<every>\s+(?:{alternatives(WORDS.every_year)})(?!\w)))?"
         ),
         on_date,
     ),
     (
         (
-            rf"(?:(?P<wd>{WEEKDAY})\s+)?(?:\bil\s+|\bl')(?P<d>\d{{1,2}})/(?P<mo>\d{{1,2}})"
-            r"(?:/(?P<y>\d{4}|\d{2}))?(?![\d/])"
+            rf"(?:(?P<wd>{WEEKDAY})\s+)?(?:\b{DAY_ARTICLE}\s+|\b{ELIDED})"
+            r"(?P<d>\d{1,2})/(?P<mo>\d{1,2})(?:/(?P<y>\d{4}|\d{2}))?(?![\d/])"
         ),
         on_date,
     ),
     # "una volta ogni due settimane" before "ogni due settimane", or "una volta" would stay.
     (
         (
-            rf"\buna\s+volta\s+(?:a(?:l|lla|ll')?\s*"
-            rf"|ogni\s+(?:(?P<n>{NUMBER})\s+|(?P<pair>{PAIR}))?)"
-            r"(?P<u>giorno|giorni|settimana|settimane|mese|mesi|anno|anni)(?!\w)"
+            rf"\b{phrase(WORDS.once)}\s+(?:(?:{alternatives(WORDS.per)})\s*"
+            rf"|{EVERY}\s+(?:(?P<n>{NUMBER})\s+|(?P<pair>{PAIR}))?)"
+            rf"(?P<u>{alternatives(ALL_UNIT_FORMS)})(?!\w)"
         ),
         on_every,
     ),
     (
         (
-            rf"\bogni\s+(?:(?P<n>{NUMBER})\s+|(?P<pair>{PAIR}))?"
-            r"(?P<u>giorni|settimane|settimana|mesi|mese|anni|anno)(?!\w)"
+            rf"\b{EVERY}\s+(?:(?P<n>{NUMBER})\s+|(?P<pair>{PAIR}))?"
+            rf"(?P<u>{alternatives(EVERY_UNIT_FORMS)})(?!\w)"
         ),
         on_every,
     ),
-    (r"\bdopo\s+(?:la\s+)?cena(?!\w)", on_after_dinner),
+    (rf"\b(?:{alternatives(WORDS.after_dinner)})(?!\w)", on_after_dinner),
     (
-        rf"(?:\bprima\s+{fused('del', 'di')}|\bfino\s+{fused('al', 'a')}|\bentro\s+){timed(1)}",
+        (
+            rf"(?:\b{phrase(WORDS.before)}\s+{fused(WORDS.of_the)}"
+            rf"|\b{UP_TO}\s+{fused(WORDS.to_the)}|\b{BY}\s+){timed(1)}"
+        ),
         on_clock(Before),
     ),
     (
         (
-            rf"(?:\bdopo\s+|\ba\s+partire\s+{fused('dal', 'da')}|{fused('dal', 'da')}){timed(1)}"
-            r"(?:\s+in\s+poi(?!\w))?"
+            rf"(?:\b{phrase(WORDS.after)}\s+|\b{phrase(WORDS.starting_from)}\s+"
+            rf"{fused(WORDS.from_the)}|{fused(WORDS.from_the)}){timed(1)}"
+            rf"(?:\s+{phrase(WORDS.onwards)}(?!\w))?"
         ),
         on_clock(After),
     ),
-    (rf"(?:\bverso\s+|{fused('al', 'a')}){timed(1)}", on_clock(At)),
+    (rf"(?:\b{phrase(WORDS.toward)}\s+|{fused(WORDS.to_the)}){timed(1)}", on_clock(At)),
     (
-        rf"\bore\s+(?P<t1>\d{{1,2}}(?:[:.,][0-5]\d(?!\d))?)(?:\s+(?P<p1>{SUFFIX}))?",
+        (
+            rf"\b{phrase(WORDS.hours_word)}\s+(?P<t1>\d{{1,2}}(?:[:.,][0-5]\d(?!\d))?)"
+            rf"(?:\s+(?P<p1>{SUFFIX}))?"
+        ),
         on_clock(At),
     ),
     (
         (
-            rf"\b(?P<r>oggi|domani|dopodomani|dopo\s+domani)(?:\s+(?P<rp>{PART_WORD}))?(?!\w)"
-            r"|\b(?P<s>stamattina|stamani|stamane|stasera|stanotte|domattina)(?!\w)"
+            rf"\b(?P<r>{alternatives(RELATIVE_DAYS)})(?:\s+(?P<rp>{PART_WORD}))?(?!\w)"
+            rf"|\b(?P<s>{alternatives(SHORT_PARTS)})(?!\w)"
         ),
         on_relative,
     ),
     (
         (
-            rf"\b(?P<from>dal|da)\s+(?P<a>{WEEKDAY})\s+al?\s+(?P<b>{WEEKDAY})"
-            rf"(?:\s+(?P<part>{PART_WORD}))?"
+            rf"\b(?P<from>{alternatives((WORDS.from_the.joined, WORDS.from_the.plain))})"
+            rf"\s+(?P<a>{WEEKDAY})\s+(?:{alternatives((WORDS.to_the.joined, WORDS.to_the.plain))})"
+            rf"\s+(?P<b>{WEEKDAY})(?:\s+(?P<part>{PART_WORD}))?"
         ),
         on_day_range,
     ),
     (
         (
-            rf"{NEGATION}?\b(?:nel|nei|il|durante\s+il|durante\s+i|ogni|tutti\s+i|i|di|per\s+il"
-            r"|al)\s+(?:weekend|week-end|fine\s+settimana|fine-settimana|finesettimana)(?!\w)"
+            rf"{NEGATION}?\b(?:{alternatives(WORDS.before_weekend)})\s+"
+            rf"(?:{alternatives(WORDS.weekend)})(?!\w)"
         ),
         on_set(WEEKEND),
     ),
-    (
-        (
-            rf"{NEGATION}?\b(?:(?:nei|i|durante\s+i|tutti\s+i|di)\s+giorni\s+"
-            r"(?:feriali|lavorativi)|nei\s+feriali|in\s+settimana)(?!\w)"
-        ),
-        on_set(WORKING_DAYS),
-    ),
-    (r"\b(?:ogni\s+giorno|tutti\s+i\s+giorni)(?!\w)", on_every_day),
+    (rf"{NEGATION}?\b(?:{alternatives(WORDS.working_days)})(?!\w)", on_set(WORKING_DAYS)),
+    (rf"\b(?:{alternatives(WORDS.every_day)})(?!\w)", on_every_day),
     (
         (
             rf"{NEGATION}?(?:\b(?P<art>{ARTICLE})\s+)?\b(?P<list>{WEEKDAY}"
-            rf"(?:\s*(?:,|\be\b|\bed\b)\s*(?:{ARTICLE}\s+)?{WEEKDAY})*)"
-            rf"(?:\s+(?P<next>prossim[oa])(?!\w))?(?:\s+(?P<part>{PART_WORD}))?"
+            rf"(?:\s*(?:,|{LIST_JOINS})\s*(?:{ARTICLE}\s+)?{WEEKDAY})*)"
+            rf"(?:\s+(?P<next>{alternatives(WORDS.next)})(?!\w))?(?:\s+(?P<part>{PART_WORD}))?"
         ),
         on_weekdays,
     ),
     (
-        (
-            r"\b(?:la|di|alla|ogni|nella|il|nel|al|tutte\s+le|le|tutti\s+i|i)\s+"
-            r"(?P<part>mattin[ao]|mattine|pomeriggio|pomeriggi|sera|sere|notte|notti)(?!\w)"
-        ),
+        (rf"\b(?:{alternatives(WORDS.before_parts)})\s+(?P<part>{alternatives(PARTS)})(?!\w)"),
         on_part,
     ),
 ]
 COMPILED = [(re.compile(pattern), handle) for pattern, handle in PATTERNS]
 
-LEFTOVER = re.compile(
-    r"(?<![\w'])(?:"
-    r"(?:luned|marted|mercoled|gioved|venerd)(?:ì|í|i'|i)|sabat[oi]|domenic(?:a|he)"
-    rf"|{'|'.join(MONTHS)}"
-    r"|mattin[aoe]|mattinat[ae]|pomerigg(?:io|i)|ser[ae]|serat[ae]|nott[ei]|nottat[ae]"
-    r"|oggi|domani|dopodomani|ieri|altroieri|avantieri|stamattina|stamani|stamane|stasera"
-    r"|stanotte|domattina|weekend|week-end|finesettimana|feriali|festivi|prefestivi|lavorativi"
-    r"|mezzogiorno|mezzanotte|mezz'ora|mezzora|un'ora|tardi|orario"
-    r")(?![\w'])"
-    r"|(?<![\w'])(?:quest[oa]|prossim[oa]|scors[oa]|ogni|fine|inizio|met[àa]|entro"
-    r"|tutt[oa]\s+(?:il|la)|durante\s+la|nella|per\s+la)\s+(?:del\s+)?"
-    r"(?:settimana|mese|anno|giorno|giornata)(?!\w)"
-    r"|(?<![\w'])tutt[ie]\s+(?:i|le|gli)\s+(?:settimane|mesi|anni)(?!\w)"
-    r"|(?<![\w'])quest'(?:anno|oggi)(?!\w)"
-    r"|(?<![\w'])(?:settimana|mese)\s+(?:prossim[oa]|scors[oa])(?!\w)"
-    r"|(?<![\w'])(?:di|durante\s+il|in)\s+(?:giorno|giornata)(?!\w)"
-    r"|(?<![\w'])(?:dopo|prima\s+di|prima\s+del(?:la)?|prima\s+dell'|verso|durante\s+(?:la|il)"
-    r"|in\s+pausa|a|all'ora\s+di)\s*(?:colazione|pranzo|cena|merenda|aperitivo)(?!\w)"
-    r"|(?<![\w'])(?:all'alba|al\s+tramonto)(?!\w)"
-    # An hour, or a day of the month without its month: "alle 25", "ogni mese il 15".
-    r"|(?<![\w'])(?:alle|dalle|delle|le|l'|ore|h|il|dal|dall'|al|all')\s*\d+(?:[:.,]\d+)?"
-    r"(?![\d%°])"
-    # A count of hours or minutes, whole: "da 20 minuti", "dopo 1,5 ore", "da 1 ora".
-    r"|\d+(?:[:.,]\d+)?\s*(?:or[ae]|minut[oi]|h)(?!\w)"
-    rf"|(?<![\w'])s{ACCENT}\s+e\s+(?:un[oa]?\s+)?no(?!\w)"
-    r"|(?<![\w'])ogni\s+tanto(?!\w)"
-    rf"|(?<![\w'])(?:tra|fra|per|ogni|entro)\s+(?:{PAIR}|(?:[\w']+\s+){{0,2}})"
-    r"(?:minut[oi]|or[ae]|giorn[oi]|settiman[ae]|mes[ei]|ann[oi])(?!\w)"
+LEFT = WORDS.leftover
+LEFTOVER_WORDS = (
+    *TIME.weekdays,
+    *WORDS.weekday_plurals,
+    *MONTHS,
+    *PARTS,
+    *WORDS.relative_days,
+    *SHORT_PARTS,
+    WORDS.noon,
+    WORDS.midnight,
+    *LEFT.words,
 )
-MODIFIERS_BEFORE = {
-    "verso", "intorno", "circa", "attorno", "questo", "questa", "quel", "quella", "prossimo",
-    "prossima", "scorso", "scorsa", "ultimo", "ultima", "primo", "prima", "secondo", "seconda",
-    "terzo", "terza", "quarto", "quarta", "quinto", "quinta", "tardo", "tarda", "fine",
-    "inizio", "metà", "da", "dal", "dalla", "fino", "entro", "oltre", "dopo",
-}  # fmt: skip
+LEFTOVER = re.compile(
+    rf"(?<![\w'])(?:{alternatives(LEFTOVER_WORDS)})(?![\w'])"
+    rf"|(?<![\w'])(?:{alternatives(LEFT.before_span)})\s+(?:{phrase(LEFT.span_of)}\s+)?"
+    rf"(?:{alternatives(LEFT.spans)})(?!\w)"
+    rf"|(?<![\w'])(?:{alternatives(WORDS.all_of)})\s+"
+    rf"(?:{alternatives((UNITS.week.other, UNITS.month.other, UNITS.year.other))})(?!\w)"
+    rf"|(?<![\w'])(?:{alternatives(LEFT.this_year)})(?!\w)"
+    rf"|(?<![\w'])(?:{alternatives((UNITS.week.one, UNITS.month.one))})\s+"
+    rf"(?:{alternatives(LEFT.after_span)})(?!\w)"
+    rf"|(?<![\w'])(?:{alternatives(LEFT.during_day)})\s+(?:{alternatives(LEFT.days)})(?!\w)"
+    rf"|(?<![\w'])(?:{alternatives(LEFT.before_meal)})\s*(?:{alternatives(LEFT.meals)})(?!\w)"
+    rf"|(?<![\w'])(?:{alternatives(LEFT.dawn_and_dusk)})(?!\w)"
+    # An hour, or a day of the month without its month: "alle 25", "ogni mese il 15".
+    rf"|(?<![\w'])(?:{alternatives(LEFT.before_number)})\s*\d+(?:[:.,]\d+)?(?![\d%°])"
+    # A count of hours or minutes, whole: "da 20 minuti", "dopo 1,5 ore", "da 1 ora".
+    rf"|\d+(?:[:.,]\d+)?\s*"
+    rf"(?:{alternatives((*HOUR_FORMS, *MINUTE_FORMS, WORDS.hour_abbreviation))})(?!\w)"
+    rf"|(?<![\w']){phrase(WORDS.yes)}\s+{AND}\s+(?:(?:{INDEFINITE})\s+)?{phrase(WORDS.no)}(?!\w)"
+    rf"|(?<![\w']){phrase(LEFT.now_and_then)}(?!\w)"
+    rf"|(?<![\w'])(?:{alternatives((*WORDS.within, WORDS.lasting, WORDS.every, WORDS.by))})\s+"
+    rf"(?:{PAIR}|(?:[\w']+\s+){{0,2}})"
+    rf"(?:{alternatives((*HOUR_FORMS, *MINUTE_FORMS, *ALL_UNIT_FORMS))})(?!\w)"
+)
+MODIFIERS_BEFORE = frozenset(WORDS.modifiers.before)
 """Words before a time that change it: "verso sera", "il secondo lunedì", "un quarto alle 9"."""
-MODIFIERS_AFTER = {
-    "circa", "prossimo", "prossima", "scorso", "scorsa", "inoltrata", "tardi", "presto",
-    "passate", "precise", "esatte",
-}  # fmt: skip
-LINKS = {
-    "di", "del", "della", "dello", "dell'", "dei", "degli", "delle", "il", "lo", "la", "l'",
-    "i", "gli", "le", "a", "al", "alla", "all'", "ai", "alle", "in", "nel", "nella", "e", "ed",
-}  # fmt: skip
+MODIFIERS_AFTER = frozenset(WORDS.modifiers.after)
+LINKS = frozenset(WORDS.modifiers.links)
 """Words a modifier reaches across: "prima del 20 ottobre", "dopo il 5 ottobre", "prima e dopo
 cena", "il primo e il terzo lunedì del mese"."""
 WORD_BEFORE = re.compile(r"([\w']+)\s*$")
@@ -747,21 +848,26 @@ WORD_AFTER = re.compile(r"\s*([\w']+)")
 
 QUOTED = re.compile(r'"[^"]*"|“[^”]*”|«[^»]*»')
 NAME_INSIDE = re.compile(r"[^\W\d_][-._/@\\]\w|\w[-._/@\\][^\W\d_]|[^\W\d_]\d|\d[^\W\d_]")
-NOT_NAMES = re.compile(r"week-end|fine-settimana|h\d{1,2}|\d{1,2}h|\d{1,2}º")
-COUNTED = (
-    r"(?:pagin[ae]|righ[ae]|parol[ae]|slide|e-?mail|messaggi|persone|euro|punti|km|chilometri"
-    r"|passi|file|foto|video|episodi|capitoli|esercizi|domande)"
+HOUR_SIGN = phrase(WORDS.hour_abbreviation)
+NOT_NAMES = re.compile(
+    rf"{alternatives(WORDS.names.hyphenated)}|{HOUR_SIGN}\d{{1,2}}|\d{{1,2}}{HOUR_SIGN}|\d{{1,2}}º"
 )
-QUANTITY = re.compile(rf"(?<![\w'])(?:\d+|{_alternatives(NUMBERS)})\s+{COUNTED}(?!\w)")
+QUANTITY = re.compile(
+    rf"(?<![\w'])(?:\d+|{alternatives(NUMBERS)})\s+(?:{alternatives(WORDS.names.counted)})(?!\w)"
+)
 """A number that counts something is not an hour: "se arrivo alle 20 pagine"."""
 DURATION = re.compile(
-    rf"(?<![\w'])le\s+(?P<amount>(?:\d+|{_alternatives(NUMBERS)})\s+(?:ore|minuti))(?!\w)"
+    rf"(?<![\w']){phrase(WORDS.hour_article)}\s+(?P<amount>(?:\d+|{alternatives(NUMBERS)})\s+"
+    rf"(?:{alternatives((UNITS.hour.other, UNITS.minute.other))}))(?!\w)"
 )
 """"le 8 ore di lavoro": hours counted, not a time."""
-NAMED_BY_TIME = re.compile(r"(?<![\w'])delle\s+\d{1,2}(?:[:.,][0-5]\d)?(?!\d)")
+NAMED_BY_TIME = re.compile(
+    rf"(?<![\w']){phrase(WORDS.names.by_time)}\s+\d{{1,2}}(?:[:.,][0-5]\d)?(?!\d)"
+)
 """"il treno delle 7:40": a time that names a thing; but "prima delle 9" is a time."""
-EVERY_TIME = re.compile(r"\bogni\s+volta\b")
-EVERY_WORDS = re.compile(r"\bogni\b|\btutt[ie]\s+(?:i|le|gli)\b")
+BEFORE_IT = re.compile(rf"\b{phrase(WORDS.before)}\s+$")
+EVERY_TIME = re.compile(rf"\b{phrase(WORDS.every_time)}\b")
+EVERY_WORDS = re.compile(rf"\b{EVERY}\b|\b(?:{alternatives(WORDS.all_of)})\b")
 
 
 def masked(condition: str) -> str:
@@ -792,7 +898,7 @@ def masked(condition: str) -> str:
     for found in DURATION.finditer(text):
         blank(*found.span("amount"))
     for found in NAMED_BY_TIME.finditer(text):
-        if re.search(r"\bprima\s+$", text[: found.start()]) is None:
+        if BEFORE_IT.search(text[: found.start()]) is None:
             blank(*found.span())
     return "".join(chars)
 
@@ -831,7 +937,7 @@ def combine(
 ) -> tuple[DayLabel | None, HourLabel | None, PeriodLabel | None, Every | None]:
     """One label of each kind, or Unclear when the words disagree."""
     days: list[DayLabel] = [piece for piece in pieces if isinstance(piece, DAY_LABELS)]
-    parts = {piece.name for piece in pieces if isinstance(piece, Part)}
+    parts = {piece for piece in pieces if isinstance(piece, Part)}
     hours: list[ClockLabel] = [
         piece for piece in pieces if isinstance(piece, (At, After, Before, Between))
     ]
@@ -875,10 +981,10 @@ def combine(
     part = next(iter(parts), None)
     if hours:
         return day, with_part(hours[0], part), period, every
-    return day, (Part(part) if part else None), period, every
+    return day, part, period, every
 
 
-def with_part(hours: ClockLabel, part: str | None) -> ClockLabel:
+def with_part(hours: ClockLabel, part: Part | None) -> ClockLabel:
     """ "stasera alle 9", "la sera tra le 9 e le 11": the part of the day moves the hours."""
     if part is None:
         return hours

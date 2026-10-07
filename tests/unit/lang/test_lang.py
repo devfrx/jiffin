@@ -24,11 +24,15 @@ class House:
     name: str
     door: Door
     rooms: Mapping[str, str]
+    windows: tuple[str, ...]
+    floors: Mapping[str, int]
 
 
 HOUSE = """
 name = "Casa"
 rooms = { "a.exe" = "Cucina" }
+windows = ["Nord", "Sud"]
+floors = { terra = 0, primo = 1 }
 
 [door]
 open = "Apri {what}"
@@ -54,8 +58,12 @@ def test_a_file_is_read_into_its_dataclasses(folder: Path) -> None:
     assert read_house.door.open.format(what="tutto") == "Apri tutto"
     assert read_house.door.count.format(3) == "3 porte"
     assert read_house.rooms["a.exe"] == "Cucina"
+    assert read_house.windows == ("Nord", "Sud")
+    assert read_house.floors == {"terra": 0, "primo": 1}
     with pytest.raises(TypeError):
         read_house.rooms["b.exe"] = "Bagno"  # type: ignore[index]
+    with pytest.raises(TypeError):
+        read_house.floors["secondo"] = 2  # type: ignore[index]
 
 
 @pytest.mark.parametrize(
@@ -66,6 +74,12 @@ def test_a_file_is_read_into_its_dataclasses(folder: Path) -> None:
         ('name = "Casa"', "name = 1", "name is not a text"),
         ('rooms = { "a.exe" = "Cucina" }', 'rooms = "Cucina"', "rooms is not a table of texts"),
         ('"a.exe" = "Cucina"', '"a.exe" = 1', "rooms is not a table of texts"),
+        ('windows = ["Nord", "Sud"]', 'windows = "Nord"', "windows is not a list of texts"),
+        ('windows = ["Nord", "Sud"]', 'windows = ["Nord", 2]', "windows is not a list of texts"),
+        ("floors = { terra = 0, primo = 1 }", 'floors = ["terra"]',
+         "floors is not a table of whole numbers"),
+        ("primo = 1", 'primo = "1"', "floors is not a table of whole numbers"),
+        ("primo = 1", "primo = true", "floors is not a table of whole numbers"),
         ('count = { one = "{count} porta", other = "{count} porte" }', 'count = "porte"',
          "door.count is not a table"),
         ('count = { one = "{count} porta", other = "{count} porte" }', 'count = { one = "porta" }',

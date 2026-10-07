@@ -1,0 +1,394 @@
+# The words of a time, in Italian (ADR-0026): what core's grammar reads in a condition ("dopo
+# le 23", "il primo lunedì del mese"), and what ui/words.py writes back ("Ogni lunedì alle
+# 09:00"). The rules stay code: which words go together and in which order, the accents a word
+# may be typed with, the agreement of the feminine Sunday, the elision before a vowel. A word
+# here is read whole, in lower case; a space between two words stands for any space.
+# jiffin.lang.time reads this file once, at the start, and a key missing or one too many stops
+# the start and the tests.
+
+# The ways a final "ì" may be typed, in any word: "lunedì", "lunedí", "lunedi'", "lunedi".
+final_i = ["ì", "í", "i'", "i"]
+# Monday first, as Python counts them.
+weekdays = ["lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica"]
+months = [
+    "gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno",
+    "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre",
+]
+
+# The ordinals of a weekday in its month: "il primo lunedì", "l'ultima domenica".
+[ordinals]
+first = { masculine = "primo", feminine = "prima" }
+second = { masculine = "secondo", feminine = "seconda" }
+third = { masculine = "terzo", feminine = "terza" }
+fourth = { masculine = "quarto", feminine = "quarta" }
+last = { masculine = "ultimo", feminine = "ultima" }
+
+# The units of a count, for one and for any other count.
+[units]
+hour = { one = "ora", other = "ore" }
+minute = { one = "minuto", other = "minuti" }
+day = { one = "giorno", other = "giorni" }
+week = { one = "settimana", other = "settimane" }
+month = { one = "mese", other = "mesi" }
+year = { one = "anno", other = "anni" }
+
+# What the grammar reads.
+[read]
+# Weekdays in the plural, where it is not the singular: "i sabati", "le domeniche".
+weekday_plurals = ["sabati", "domeniche"]
+# The first of the month: "il primo", "il 1°".
+first_of_month = ["primo", "1°", "1º"]
+# How far ahead: "tra 2 ore", "fra un'ora"; and between two hours: "tra le 9 e le 12".
+within = ["tra", "fra"]
+# Two of a unit: "un paio d'ore", "tra un paio di giorni".
+pair = ["un paio di", "un paio d'"]
+# Before a count of days or weeks it lasts: "per tre giorni".
+lasting = "per"
+# Up to a day or an hour: "fino a domenica", "fino alle 8", "dalle 14 fino alle 18".
+up_to = "fino"
+# By a day or an hour: "entro domani", "entro il 20", "entro le 18".
+by = "entro"
+before = "prima"
+after = "dopo"
+toward = "verso"
+# "a partire dalle 22".
+starting_from = "a partire"
+# "dalle 22 in poi".
+onwards = "in poi"
+every = "ogni"
+# "tra le 9 e le 12", "alle 9 e mezza", "un lunedì sì e uno no".
+conjunction = "e"
+# Between weekdays in a list, beside commas: "lunedì, mercoledì e venerdì".
+list_joins = ["e", "ed"]
+# "le 7 meno un quarto".
+minus = "meno"
+# Before the hours of a clock: "ore 15".
+hours_word = "ore"
+# After a number of hours: "1h", "h9", "dopo 2h".
+hour_abbreviation = "h"
+# "alle 15 in punto".
+sharp = "in punto"
+noon = "mezzogiorno"
+midnight = "mezzanotte"
+# The article before hours, "le 9", before midnight, "la mezzanotte", and elided, "l'una".
+hour_article = "le"
+midnight_article = "la"
+elided_article = "l'"
+# After "l'": "l'una", "l'1".
+one_oclock = ["una", "1"]
+# The article before a day of the month: "il 20", "entro il 15".
+day_article = "il"
+# Between a day and its month: "il 15 di ottobre".
+of = "di"
+# After a day and its month: "il 12 marzo di ogni anno".
+every_year = ["di ogni anno", "ogni anno"]
+# After a weekday or a day of the month: "il primo lunedì del mese", "il 15 di ogni mese".
+of_month = ["del mese", "di ogni mese"]
+# Before them, or "l'": "la prima domenica del mese", "il 15 del mese", "l'8 del mese".
+before_month_weekday = ["ogni", "il", "la"]
+before_month_day = ["ogni", "il"]
+month_end = ["a fine mese", "ogni fine mese"]
+month_last_day = ["l'ultimo giorno", "ogni ultimo giorno"]
+this_week = ["in questa settimana", "questa settimana"]
+next_week = [
+    "la prossima settimana", "nella prossima settimana", "prossima settimana",
+    "la settimana prossima", "nella settimana prossima", "settimana prossima",
+]
+# "un lunedì sì e uno no": the article, then "sì" (also "si'", "si") and "no".
+indefinite = ["un", "uno", "una"]
+yes = "sì"
+no = "no"
+# "una volta al giorno", "una volta ogni due settimane".
+once = "una volta"
+per = ["a", "al", "alla", "all'"]
+# "dopo cena" is "dopo le 21" (#90).
+after_dinner = ["dopo cena", "dopo la cena"]
+# "stasera alle 9", "fino a domani".
+relative_days = { oggi = 0, domani = 1, dopodomani = 2 }
+# Read alone, never after "fino a" or "entro".
+split_relative_days = { "dopo domani" = 2 }
+weekend = ["weekend", "week-end", "fine settimana", "fine-settimana", "finesettimana"]
+before_weekend = [
+    "nel", "nei", "il", "durante il", "durante i", "ogni", "tutti i", "i", "di", "per il", "al",
+]
+working_days = [
+    "nei giorni feriali", "nei giorni lavorativi", "i giorni feriali", "i giorni lavorativi",
+    "durante i giorni feriali", "durante i giorni lavorativi", "tutti i giorni feriali",
+    "tutti i giorni lavorativi", "di giorni feriali", "di giorni lavorativi", "nei feriali",
+    "in settimana",
+]
+every_day = ["ogni giorno", "tutti i giorni"]
+before_weekdays = ["ogni", "tutti i", "tutte le", "il", "la", "i", "le", "di", "nei", "nelle"]
+next = ["prossimo", "prossima"]
+before_parts = [
+    "la", "di", "alla", "ogni", "nella", "il", "nel", "al", "tutte le", "le", "tutti i", "i",
+]
+# "ma non nel weekend", "tranne il venerdì".
+but = "ma"
+negations = [
+    "non", "tranne", "tranne che", "eccetto", "salvo", "escluso", "esclusa", "esclusi", "escluse",
+]
+# Before a part of the day, after a time: "alle 3 del pomeriggio", "alle 11 di sera".
+part_prepositions = ["di", "del", "della", "al", "alla"]
+# "ogni volta" ticks "Ogni volta"; so do "ogni…" and these, in a time.
+every_time = "ogni volta"
+all_of = ["tutti i", "tutti le", "tutti gli", "tutte i", "tutte le", "tutte gli"]
+
+# Counts as words: "tra due ore", "ogni tre giorni".
+[read.numbers]
+un = 1
+uno = 1
+una = 1
+due = 2
+tre = 3
+quattro = 4
+cinque = 5
+sei = 6
+sette = 7
+otto = 8
+nove = 9
+dieci = 10
+undici = 11
+dodici = 12
+tredici = 13
+quattordici = 14
+quindici = 15
+sedici = 16
+diciassette = 17
+diciotto = 18
+diciannove = 19
+venti = 20
+ventuno = 21
+ventidue = 22
+"ventitré" = 23
+ventitre = 23
+ventiquattro = 24
+venticinque = 25
+ventisei = 26
+ventisette = 27
+ventotto = 28
+ventinove = 29
+trenta = 30
+trentuno = 31
+
+# Minutes as words, beyond the numbers above: "alle 9 e quaranta".
+[read.minute_numbers]
+quaranta = 40
+quarantacinque = 45
+cinquanta = 50
+cinquantacinque = 55
+
+# After "e" in a clock: "alle 9 e mezza", "alle 9 e un quarto".
+[read.fractions]
+mezza = 30
+mezzo = 30
+"un quarto" = 15
+"tre quarti" = 45
+
+# After "meno" in a clock: "le 7 meno un quarto".
+[read.minus_fractions]
+"un quarto" = 15
+
+# A span of time, whole: "tra un'ora", "fra un quarto d'ora".
+[read.durations]
+"un'ora" = 60
+"mezz'ora" = 30
+mezzora = 30
+"un quarto d'ora" = 15
+"tre quarti d'ora" = 45
+
+# After a count of hours: "tra 2 ore e mezza".
+[read.added_minutes]
+mezza = 30
+mezzo = 30
+"un quarto" = 15
+
+# The words of each part of the day, then its words in the plural.
+[read.parts]
+morning = ["mattina", "mattino"]
+afternoon = ["pomeriggio"]
+evening = ["sera"]
+night = ["notte"]
+
+[read.part_plurals]
+morning = ["mattine"]
+afternoon = ["pomeriggi"]
+evening = ["sere"]
+night = ["notti"]
+
+# One word for a part of today, or of tomorrow.
+[read.short_parts]
+this_morning = ["stamattina", "stamani", "stamane"]
+this_evening = ["stasera"]
+tonight = ["stanotte"]
+tomorrow_morning = ["domattina"]
+
+# A preposition before a time, fused with its article or not: "alle 9", "a mezzogiorno".
+[read.from_the]
+joined = "dal"
+plain = "da"
+
+[read.to_the]
+joined = "al"
+plain = "a"
+
+[read.of_the]
+joined = "del"
+plain = "di"
+
+# Time words that, outside a time understood, make the time not understood: "verso sera", "a
+# dicembre", "il 15" without its month. Weekdays, months, parts of the day, relative days,
+# noon and midnight count too.
+[read.leftover]
+words = [
+    "mattinata", "mattinate", "serata", "serate", "nottata", "nottate", "ieri", "altroieri",
+    "avantieri", "weekend", "week-end", "finesettimana", "feriali", "festivi", "prefestivi",
+    "lavorativi", "mezz'ora", "mezzora", "un'ora", "tardi", "orario",
+]
+# "questa settimana", "fine del mese", "la prossima settimana".
+before_span = [
+    "questo", "questa", "prossimo", "prossima", "scorso", "scorsa", "ogni", "fine", "inizio",
+    "metà", "meta", "entro", "tutto il", "tutto la", "tutta il", "tutta la", "durante la",
+    "nella", "per la",
+]
+span_of = "del"
+spans = ["settimana", "mese", "anno", "giorno", "giornata"]
+this_year = ["quest'anno", "quest'oggi"]
+# "settimana prossima", "mese scorso".
+after_span = ["prossimo", "prossima", "scorso", "scorsa"]
+during_day = ["di", "durante il", "in"]
+days = ["giorno", "giornata"]
+before_meal = [
+    "dopo", "prima di", "prima del", "prima della", "prima dell'", "verso", "durante la",
+    "durante il", "in pausa", "a", "all'ora di",
+]
+meals = ["colazione", "pranzo", "cena", "merenda", "aperitivo"]
+dawn_and_dusk = ["all'alba", "al tramonto"]
+# An hour, or a day of the month without its month: "alle 25", "ogni mese il 15".
+before_number = [
+    "alle", "dalle", "delle", "le", "l'", "ore", "h", "il", "dal", "dall'", "al", "all'",
+]
+now_and_then = "ogni tanto"
+
+# Words before a time that change it: "verso sera", "il secondo lunedì", "un quarto alle 9".
+[read.modifiers]
+before = [
+    "verso", "intorno", "circa", "attorno", "questo", "questa", "quel", "quella", "prossimo",
+    "prossima", "scorso", "scorsa", "ultimo", "ultima", "primo", "prima", "secondo", "seconda",
+    "terzo", "terza", "quarto", "quarta", "quinto", "quinta", "tardo", "tarda", "fine",
+    "inizio", "metà", "da", "dal", "dalla", "fino", "entro", "oltre", "dopo",
+]
+after = [
+    "circa", "prossimo", "prossima", "scorso", "scorsa", "inoltrata", "tardi", "presto",
+    "passate", "precise", "esatte",
+]
+# Words a modifier reaches across: "prima del 20 ottobre", "prima e dopo cena".
+links = [
+    "di", "del", "della", "dello", "dell'", "dei", "degli", "delle", "il", "lo", "la", "l'", "i",
+    "gli", "le", "a", "al", "alla", "all'", "ai", "alle", "in", "nel", "nella", "e", "ed",
+]
+
+# Names are not time.
+[read.names]
+# Written with a hyphen, but not names: "nel week-end".
+hyphenated = ["week-end", "fine-settimana"]
+# A number that counts something is not an hour: "se arrivo alle 20 pagine".
+counted = [
+    "pagina", "pagine", "riga", "righe", "parola", "parole", "slide", "email", "e-mail",
+    "messaggi", "persone", "euro", "punti", "km", "chilometri", "passi", "file", "foto",
+    "video", "episodi", "capitoli", "esercizi", "domande",
+]
+# A time that names a thing, "il treno delle 7:40"; but "prima delle 9" is a time.
+by_time = "delle"
+
+# What the time leaves of the condition: the remainder the engine rewrites.
+[read.remainder]
+# Words a removed time leaves hanging: "quando apro Steam, ma non nel weekend".
+connectors = ["e", "ed", "ma", "o", "oppure"]
+# Prepositions that lead into a removed time and go with it: "nel pomeriggio di domani". After
+# a time they stay: "domani a casa".
+leads = [
+    "di", "del", "della", "dei", "delle", "a", "al", "alla", "ai", "alle", "da", "dal", "dalla",
+    "in", "nel", "nella", "per", "su", "sul", "tra", "fra",
+]
+
+# What ui/words.py writes: the words of a time, and its phrases, a case of agreement or of
+# elision as a key of its own. Hours have two digits: "09:00".
+[write]
+yesterday = "ieri"
+today = "oggi"
+tomorrow = "domani"
+
+# Counts up to ten in words, as they are written: "ogni due settimane", but "ogni 15 giorni".
+[write.numbers]
+2 = "due"
+3 = "tre"
+4 = "quattro"
+5 = "cinque"
+6 = "sei"
+7 = "sette"
+8 = "otto"
+9 = "nove"
+10 = "dieci"
+
+[write.hours]
+moment = "alle {time}"
+midnight = "a mezzanotte"
+slot = "dalle {start} alle {end}"
+# Hours before 04:00 are the night after their day (#90): "alle 02:00 di notte".
+moment_night = "alle {time} di notte"
+slot_night = "dalle {start} alle {end} di notte"
+
+[write.days]
+every_day = "ogni giorno"
+every = "ogni {weekday}"
+every_day_but = "ogni giorno tranne {days}"
+# Sunday is feminine: "il lunedì", "la domenica".
+the = "il {weekday}"
+the_feminine = "la {weekday}"
+# Days in a row: "dal lunedì al venerdì", "dalla domenica al martedì", "dal venerdì alla
+# domenica".
+run = "dal {first} al {last}"
+run_from_feminine = "dalla {first} al {last}"
+run_to_feminine = "dal {first} alla {last}"
+# A day in the middle of a line: "il 20 ottobre", "l'8 ottobre", "l'1 ottobre".
+dated = "il {day} {month}"
+dated_elided = "l'{day} {month}"
+
+[write.recurring]
+# A weekday every two weeks, or more: "un lunedì sì e uno no", "una domenica ogni tre settimane".
+alternate = "un {weekday} sì e uno no"
+alternate_feminine = "una {weekday} sì e una no"
+every_weeks = "un {weekday} ogni {count} settimane"
+every_weeks_feminine = "una {weekday} ogni {count} settimane"
+# "il primo lunedì di ogni mese", "la prima domenica", "l'ultimo venerdì".
+month_weekday = "il {nth} {weekday} di ogni mese"
+month_weekday_feminine = "la {nth} {weekday} di ogni mese"
+month_weekday_elided = "l'{nth} {weekday} di ogni mese"
+month_last_day = "l'ultimo giorno di ogni mese"
+month_day = "{day} di ogni mese"
+year_day = "{day} {month} di ogni anno"
+# A day of the month with its article: "il 15", "l'8", "l'11", "il primo".
+numbered = "il {day}"
+numbered_elided = "l'{day}"
+first_of_month = "il primo"
+
+[write.period]
+since = "da {date}"
+until = "fino a {date}"
+from_today = "da oggi a {date}"
+# "sabato 10 a martedì 20 ottobre".
+range = "{first} a {last}"
+
+# How often, by unit: "una volta al mese", "una volta ogni due settimane".
+[write.once]
+day = "una volta al giorno"
+week = "una volta alla settimana"
+month = "una volta al mese"
+year = "una volta all'anno"
+
+[write.once_every]
+day = "una volta ogni {count} giorni"
+week = "una volta ogni {count} settimane"
+month = "una volta ogni {count} mesi"
+year = "una volta ogni {count} anni"

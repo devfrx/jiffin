@@ -3,11 +3,11 @@
 How Jiffin reads the time of a condition: "quando apro Claude dopo le 23",
 "alle 15", "il primo lunedì del mese"
 ([ADR-0020](../adr/0020-read-the-time-in-core.md)), and how it writes it
-back. The reading is in `core`, pure and without dependencies: `grammar.py`
-finds the time words and labels them, `meanings.py` turns the labels into a
-`Schedule` with every decided meaning and has `read`, the only way in, and
-`schedule.py` holds the `Schedule` and its calendar. The writing is in
-`ui/words.py`.
+back. The reading is in `core`, pure, with no dependency but the lexicon:
+`grammar.py` finds the time words and labels them, `meanings.py` turns the
+labels into a `Schedule` with every decided meaning and has `read`, the only
+way in, and `schedule.py` holds the `Schedule` and its calendar. The writing
+is in `ui/words.py`. Both take their words from the lexicon, `time.toml`.
 
 ## The stages
 
@@ -118,6 +118,33 @@ Known limits: a part of the day in a lowercase name is not told from a time
 and the condition is saved whole, without time, as if it had none. A time
 word capitalized after the first word is a name: "quando apro Excel Lunedì"
 has no time.
+
+## The lexicon
+
+The words are data, the rules are code
+([ADR-0026](../adr/0026-italian-in-language-files.md)).
+`src/jiffin/lang/it/time.toml` holds the words, and `jiffin.lang.time` reads
+it once, at import, into `TIME`.
+
+- **Shared** by reading and writing: the weekdays, Monday first, the months,
+  the ordinals in both genders, the units for one and for any other count,
+  and the ways a final "ì" may be typed.
+- **`read`**: the words of `grammar.py` and `meanings.py`, by role (`within`,
+  `negations`, `leftover.words`). The patterns build their regexes from them:
+  the forms of a role as one alternation, the longest first; a space in a form
+  matches any space; an elided form ("l'", "un paio d'") joins the next word
+  directly; a final "ì" matches every way it may be typed.
+- **`write`**: the words and phrases of `ui/words.py`, as templates with named
+  placeholders ("alle {time}", "il {nth} {weekday} di ogni mese"); a case of
+  agreement or of elision is a key of its own (`the_feminine`,
+  `numbered_elided`).
+- **The rules stay code:** which forms make a time, and in which order; a
+  weekday known by its first three letters; the feminine Sunday ("la
+  domenica", "dalla domenica al martedì"); the elision before 1, 8 and 11
+  ("l'8 ottobre") and before "ultimo" ("l'ultimo venerdì"); the plain joins of
+  a line, a space or a comma. `Part`, a part of the day, is an English enum,
+  `MORNING`, `AFTERNOON`, `EVENING` and `NIGHT`, and its words are the
+  lexicon's.
 
 ## The words of a time
 
