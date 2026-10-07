@@ -13,7 +13,9 @@ from jiffin.core.records import (
     Alert,
     Answer,
     CacheEntry,
+    ContextAnswer,
     Evaluation,
+    Here,
     LastIds,
     Left,
     Outcome,
@@ -22,17 +24,19 @@ from jiffin.core.records import (
     ReminderDeleted,
     Revision,
     Silence,
-    SilencesCleared,
     Snapshot,
     Snooze,
 )
 from jiffin.core.reminders import (
     HOUR_MS,
     MINUTE_MS,
+    NEAR_CUT,
     RETURN_PAUSE_MS,
     THRESHOLD,
     ActiveReminder,
+    HereView,
     Pause,
+    Place,
     Reminders,
     RemindersView,
     snooze_end,
@@ -48,6 +52,12 @@ ROSSI = Context("code.exe", "changelog.md - rossi", None)
 CLAUDE = Context("claude.exe", "Claude", None)
 TEAMS = Context("ms-teams.exe", "Chat | Microsoft Teams", None)
 OUTLOOK = Context("olk.exe", "Posta in arrivo - Outlook", None)
+DRAFTS = tuple(Context("figma.exe", f"Bozza {n} - Figma", None) for n in range(6))
+MID = Context("figma.exe", "Logo - Figma", None)
+"""Where "quando apro Figma" is 0.8: under the threshold, over it lowered a step."""
+LOW = Context("figma.exe", "Palette - Figma", None)
+"""Where "quando apro Figma" is 0.6: over the threshold lowered two steps only."""
+UPDATED = replace(BUILD, engine_version="0.3.0")
 DAY_MS = 24 * HOUR_MS
 
 
@@ -70,6 +80,8 @@ class FakeModel:
     def __init__(self) -> None:
         self.scores: dict[tuple[Context, str], float] = {}
         self.down = False
+        self.engine = BUILD
+        """The build that answers."""
         self.calls: list[dict[int, str]] = []
         self.rewritten: list[str] = []
 
@@ -78,7 +90,7 @@ class FakeModel:
 
     def build(self) -> EngineBuild:
         self._answer()
-        return BUILD
+        return self.engine
 
     def judge(self, context: Context, statements: Mapping[int, str]) -> dict[int, float]:
         self._answer()
@@ -236,7 +248,7 @@ def test_a_new_text_is_a_new_revision_without_silences() -> None:
     scene.stay(ROSSI)
     scene.reminders.not_here(scene.alert().id)
     scene.reminders.edit(reminder.id, "quando lavoro al progetto Rossi", "aggiornare la versione")
-    assert scene.saved(SilencesCleared) == [SilencesCleared(reminder.id)]
+    assert [answer.here for answer in scene.saved(ContextAnswer)] == [Here.NO, Here.WITHDRAWN]
     edited = scene.saved(Reminder)[-1].revision
     assert (edited.number, edited.action) == (2, "aggiornare la versione")
     assert edited.statement == english("quando lavoro al progetto Rossi")
@@ -306,7 +318,7 @@ def test_ogni_volta_alone_is_a_new_revision_that_keeps_the_silences() -> None:
     scene.reminders.edit(active.reminder.id, "quando apro Figma", "esportare le icone", True)
     edited = scene.saved(Reminder)[-1].revision
     assert (edited.number, edited.perennial) == (2, True)
-    assert scene.saved(SilencesCleared) == []
+    assert [answer.here for answer in scene.saved(ContextAnswer)] == [Here.NO]
     assert scene.listed[0].silences == 1
 
 
@@ -933,7 +945,10 @@ def test_not_here_silences_the_reminder_in_that_exact_context() -> None:
     scene.model.says(report, "quando lavoro al progetto Rossi")
     scene.stay(ROSSI)
     scene.reminders.not_here(scene.alert().id)
-    assert scene.saved(Silence) == [Silence(reminder.id, ROSSI)]
+    now = scene.clock.now()
+    assert scene.saved(ContextAnswer) == [
+        ContextAnswer(reminder.id, ROSSI, Here.NO, 4.0, BUILD, now)
+    ]
     scene.stay(BANK, HOUR_MS)
     scene.stay(ROSSI)
     assert scene.outcomes() == [Outcome.SILENCED]
@@ -1011,6 +1026,359 @@ def test_the_tray_list_keeps_one_unseen_alert_per_reminder() -> None:
     assert not scene.view.unseen
     scene.reminders.vanished(second.id)
     assert [alert.id for alert in scene.view.unseen] == [second.id]
+
+
+# Answers per place and a threshold per reminder (ADR-0029)
+
+
+def judged_in_drafts(*scores: float) -> tuple[Scene, Reminder]:
+    """ "quando apro Figma", judged once in a draft of Figma for each score, then left for the
+    bank."""
+    scene = Scene()
+    reminder = scene.create("quando apro Figma")
+    for draft, d in zip(DRAFTS[: len(scores)], scores, strict=True):
+        scene.model.says(draft, "quando apro Figma", d)
+        scene.stay(draft)
+    scene.model.says(MID, "quando apro Figma", 0.8)
+    scene.model.says(LOW, "quando apro Figma", 0.6)
+    scene.stay(BANK)
+    return scene, reminder
+
+
+def true_in(scene: Scene, context: Context) -> bool:
+    """Whether the one reminder judged in the context is true there, after an absence long
+    enough for a new occasion."""
+    scene.stay(BANK, RETURN_PAUSE_MS)
+    scene.stay(context)
+    [outcome] = scene.outcomes()
+    return outcome is not Outcome.BELOW_THRESHOLD
+
+
+def test_remind_here_rings_at_once_where_the_user_is_and_learns_the_place() -> None:
+    scene = Scene()
+    reminder = scene.create("quando apro Figma")
+    scene.model.says(FIGMA, "quando apro Figma", 0.5)
+    scene.stay(FIGMA)
+    assert scene.outcomes() == [Outcome.BELOW_THRESHOLD]
+    evaluations = len(scene.saved(Evaluation))
+    scene.wait(MINUTE_MS)
+    scene.reminders.remind_here(reminder.id, FIGMA)
+    now = scene.clock.now()
+    alert = scene.alert()
+    assert (alert.requested, alert.evaluation_id, alert.d) == (True, None, 0.5)
+    assert (alert.created_at, alert.due_at) == (now, now)
+    assert len(scene.saved(Evaluation)) == evaluations  # it is never the judge's
+    assert scene.saved(ContextAnswer) == [
+        ContextAnswer(reminder.id, FIGMA, Here.YES, 0.5, BUILD, now)
+    ]
+
+
+def test_remind_here_from_a_card_of_jiffin_rings_once_for_the_window_before() -> None:
+    scene = Scene()
+    reminder = scene.create("quando apro Figma")
+    scene.model.says(FIGMA, "quando apro Figma", 0.5)
+    scene.stay(FIGMA)
+    scene.stay(None, 3_000)  # one of Jiffin's windows: no context
+    scene.reminders.remind_here(reminder.id, FIGMA)
+    assert scene.alert().requested
+    scene.stay(None, 1_000)  # the card closes
+    scene.stay(FIGMA)
+    assert scene.outcomes() == [Outcome.SAME_OCCASION]
+    scene.stay(BANK, RETURN_PAUSE_MS)
+    scene.stay(FIGMA)
+    assert scene.outcomes() == [Outcome.ALERT]
+    assert [alert.requested for alert in scene.rang()] == [True, False]
+
+
+def test_after_remind_here_from_a_card_an_absence_still_starts_a_new_occasion() -> None:
+    scene = Scene()
+    reminder = scene.create("quando apro Figma")
+    scene.model.says(FIGMA, "quando apro Figma", 0.5)
+    scene.stay(FIGMA)
+    scene.stay(None, 3_000)
+    scene.reminders.remind_here(reminder.id, FIGMA)
+    scene.stay(None, RETURN_PAUSE_MS)  # then a private window: no context either
+    scene.stay(FIGMA)
+    assert scene.outcomes() == [Outcome.ALERT]
+
+
+def test_remind_here_rings_although_it_rang_was_snoozed_or_out_of_its_time() -> None:
+    rang = figma()
+    rang.stay(FIGMA)
+    alert = rang.alert()
+    rang.reminders.close(alert.id)
+    rang.reminders.remind_here(alert.reminder_id, FIGMA)
+    assert rang.alert().requested
+    snoozed = figma()
+    snoozed.stay(FIGMA)
+    alert = snoozed.alert()
+    snoozed.reminders.snooze(alert.id, Snooze.HOUR)
+    snoozed.reminders.remind_here(alert.reminder_id, FIGMA)
+    assert snoozed.alert().requested
+    late = Scene(start=at(2, 22))
+    reminder = late.create("quando apro Claude dopo le 23", "chiudere il portatile")
+    late.model.says(CLAUDE, "quando apro Claude")
+    late.stay(CLAUDE)
+    assert late.outcomes() == [Outcome.OUTSIDE_TIME]
+    late.reminders.remind_here(reminder.id, CLAUDE)
+    assert late.alert().requested
+
+
+def test_remind_here_for_a_window_left_holds_from_the_next_time_there() -> None:
+    scene = Scene()
+    reminder = scene.create("quando apro Figma")
+    scene.model.says(FIGMA, "quando apro Figma", 0.5)
+    scene.stay(FIGMA)
+    scene.stay(BANK, 2_000)  # a glance at the bank, too short to be judged
+    scene.stay(None, 1_000)
+    assert scene.reminders.here().place == FIGMA
+    scene.reminders.remind_here(reminder.id, FIGMA)
+    assert scene.view.visible == ()
+    assert [answer.here for answer in scene.saved(ContextAnswer)] == [Here.YES]
+    scene.stay(FIGMA)
+    assert scene.outcomes() == [Outcome.ALERT]
+    assert not scene.alert().requested
+
+
+def test_remind_here_during_a_pause_holds_until_it_ends() -> None:
+    scene = Scene()
+    reminder = scene.create("quando apro Figma")
+    scene.model.says(FIGMA, "quando apro Figma", 0.5)
+    scene.stay(FIGMA)
+    scene.reminders.pause(Pause.HOUR)
+    scene.reminders.remind_here(reminder.id, FIGMA)
+    assert scene.view.visible == ()
+    scene.reminders.resume()
+    scene.wait(DEBOUNCE_MS)
+    assert scene.outcomes() == [Outcome.ALERT]
+
+
+def test_remind_here_on_a_reminder_with_only_a_time_just_rings() -> None:
+    scene = Scene(start=at(2, 14, 50))
+    reminder = scene.create("alle 15", "chiamare Mario")
+    scene.stay(FIGMA)
+    scene.until(at(2, 15))
+    scene.reminders.close(scene.alert().id)
+    scene.reminders.remind_here(reminder.id, FIGMA)
+    alert = scene.alert()
+    assert (alert.requested, alert.d) == (True, None)
+    scene.stay(BANK)
+    scene.reminders.remind_here(reminder.id, FIGMA)
+    assert len(scene.rang()) == 2
+    assert scene.saved(ContextAnswer) == []
+
+
+def test_a_yes_still_waits_for_the_time_of_its_reminder() -> None:
+    scene = Scene(start=at(2, 22))
+    reminder = scene.create("quando apro Claude dopo le 23", "chiudere il portatile")
+    scene.model.says(CLAUDE, "quando apro Claude", 0.5)
+    scene.stay(CLAUDE)
+    scene.stay(BANK)
+    scene.reminders.remind_here(reminder.id, CLAUDE)
+    scene.stay(CLAUDE)
+    assert scene.outcomes() == [Outcome.OUTSIDE_TIME]
+    scene.until(at(2, 23))
+    assert scene.outcomes() == [Outcome.ALERT]
+
+
+def test_the_last_answer_in_a_place_counts() -> None:
+    scene = figma()
+    scene.stay(FIGMA)
+    alert = scene.alert()
+    scene.reminders.not_here(alert.id)
+    assert true_in(scene, FIGMA)
+    assert scene.outcomes() == [Outcome.SILENCED]
+    scene.reminders.remind_here(alert.reminder_id, FIGMA)
+    requested = scene.alert()
+    scene.reminders.close(requested.id)
+    assert true_in(scene, FIGMA)
+    assert scene.outcomes() == [Outcome.ALERT]
+    scene.reminders.not_here(scene.alert().id)
+    assert true_in(scene, FIGMA)
+    assert scene.outcomes() == [Outcome.SILENCED]
+    assert [answer.here for answer in scene.saved(ContextAnswer)] == [Here.NO, Here.YES, Here.NO]
+
+
+def test_two_yes_near_the_cut_lower_the_threshold_of_their_reminder_a_step() -> None:
+    scene, reminder = judged_in_drafts(0.5, 0.5, 0.5, 0.5, 0.5, 0.5)
+    scene.reminders.remind_here(reminder.id, DRAFTS[0])
+    assert not true_in(scene, MID)
+    assert not scene.listed[0].attentive
+    scene.reminders.remind_here(reminder.id, DRAFTS[1])
+    assert true_in(scene, MID)
+    assert not true_in(scene, LOW)
+    assert scene.listed[0].attentive
+    assert scene.saved(Evaluation)[-1].threshold == THRESHOLD
+    for draft in DRAFTS[2:4]:
+        scene.reminders.remind_here(reminder.id, draft)
+    assert true_in(scene, LOW)
+    scene.model.says(ROSSI, "quando apro Figma", THRESHOLD - 0.51)
+    for draft in DRAFTS[4:]:
+        scene.reminders.remind_here(reminder.id, draft)
+    assert not true_in(scene, ROSSI)
+
+
+def test_near_the_cut_is_from_one_under_the_threshold_up_to_it() -> None:
+    edge = THRESHOLD - NEAR_CUT
+    scene, reminder = judged_in_drafts(
+        THRESHOLD, THRESHOLD, edge - 0.01, edge - 0.01, edge, THRESHOLD - 0.01
+    )
+    for draft in DRAFTS[:4]:
+        scene.reminders.remind_here(reminder.id, draft)
+    assert not true_in(scene, MID)
+    for draft in DRAFTS[4:]:
+        scene.reminders.remind_here(reminder.id, draft)
+    assert true_in(scene, MID)
+
+
+def test_not_here_on_a_requested_alert_takes_the_yes_back_and_lowers_nothing() -> None:
+    scene = Scene()
+    reminder = scene.create("quando apro Figma")
+    scene.model.says(MID, "quando apro Figma", 0.8)
+    for draft in DRAFTS[:2]:
+        scene.model.says(draft, "quando apro Figma", 0.5)
+        scene.stay(draft)
+        scene.reminders.remind_here(reminder.id, draft)
+        scene.reminders.not_here(scene.alert().id)  # a wrong place, taken back on its alert
+    [active] = scene.listed
+    assert active.places == (Place(DRAFTS[1], Here.NO), Place(DRAFTS[0], Here.NO))
+    assert not true_in(scene, MID)
+
+
+def test_a_place_answered_not_here_is_no_true_stretch() -> None:
+    scene = Scene()
+    scene.create("quando lavoro al progetto Rossi")
+    report = Context("code.exe", "report.md - rossi", None)
+    scene.model.says(ROSSI, "quando lavoro al progetto Rossi")
+    scene.model.says(report, "quando lavoro al progetto Rossi")
+    scene.stay(ROSSI)
+    scene.reminders.not_here(scene.alert().id)
+    scene.stay(report)
+    assert scene.outcomes() == [Outcome.ALERT]
+    scene.stay(ROSSI, RETURN_PAUSE_MS)  # away from the true contexts, in the silenced one
+    scene.stay(report)
+    assert scene.outcomes() == [Outcome.ALERT]
+
+
+def test_a_yes_far_from_the_cut_teaches_only_its_place() -> None:
+    scene, reminder = judged_in_drafts(-3.0, -3.0)
+    for draft in DRAFTS[:2]:
+        scene.reminders.remind_here(reminder.id, draft)
+    assert not true_in(scene, MID)
+    assert true_in(scene, DRAFTS[0])
+    assert not scene.listed[0].attentive
+
+
+def test_yes_said_with_another_build_lower_nothing() -> None:
+    scene, reminder = judged_in_drafts(0.5, 0.5)
+    for draft in DRAFTS[:2]:
+        scene.reminders.remind_here(reminder.id, draft)
+    scene.model.engine = UPDATED
+    scene.reminders.model_ready()
+    assert not scene.listed[0].attentive
+    assert not true_in(scene, MID)
+    assert true_in(scene, DRAFTS[0])  # the answers per place stay
+
+
+def test_each_withdrawal_puts_the_threshold_back_exactly() -> None:
+    scene, reminder = judged_in_drafts(0.5, 0.5, 0.5, 0.5)
+    for draft in DRAFTS[:4]:
+        scene.reminders.remind_here(reminder.id, draft)
+    scene.reminders.withdraw(reminder.id, DRAFTS[0])
+    assert (true_in(scene, LOW), true_in(scene, MID)) == (False, True)
+    assert not true_in(scene, DRAFTS[0])
+    for draft in DRAFTS[1:3]:
+        scene.reminders.withdraw(reminder.id, draft)
+    assert not true_in(scene, MID)
+    scene.reminders.remind_here(reminder.id, DRAFTS[0])
+    assert true_in(scene, MID)
+    scene.reminders.withdraw_all(reminder.id)
+    assert not true_in(scene, MID)
+    assert (scene.listed[0].places, scene.listed[0].attentive) == ((), False)
+
+
+def test_a_withdrawal_is_recorded_with_the_d_of_its_place() -> None:
+    scene, reminder = judged_in_drafts(0.5, 0.5)
+    for draft in DRAFTS[:2]:
+        scene.reminders.remind_here(reminder.id, draft)
+    scene.reminders.withdraw(reminder.id, FIGMA)  # nothing was said there
+    scene.reminders.withdraw_all(reminder.id)
+    now = scene.clock.now()
+    assert scene.saved(ContextAnswer)[2:] == [
+        ContextAnswer(reminder.id, draft, Here.WITHDRAWN, 0.5, BUILD, now) for draft in DRAFTS[:2]
+    ]
+
+
+def test_a_new_text_withdraws_every_answer_with_the_ds_of_the_old_one() -> None:
+    scene, reminder = judged_in_drafts(0.5)
+    scene.reminders.remind_here(reminder.id, DRAFTS[0])
+    scene.reminders.edit(reminder.id, "quando apro Figma", "esportare i loghi")
+    [_, withdrawn] = scene.saved(ContextAnswer)
+    assert (withdrawn.here, withdrawn.d, withdrawn.build) == (Here.WITHDRAWN, 0.5, BUILD)
+    assert scene.listed[0].places == ()
+    assert not true_in(scene, DRAFTS[0])
+
+
+def test_a_deleted_reminder_takes_its_answers_with_it() -> None:
+    scene, reminder = judged_in_drafts(0.5)
+    scene.reminders.remind_here(reminder.id, DRAFTS[0])
+    scene.saved(ContextAnswer)
+    scene.reminders.delete(reminder.id)
+    assert scene.reminders.take_records() == [ReminderDeleted(reminder.id)]
+
+
+def test_here_is_the_last_window_judged_even_once_it_left() -> None:
+    scene = Scene()
+    assert scene.reminders.here() == HereView(None)
+    scene.stay(FIGMA, 2_000)
+    assert scene.reminders.here().place is None
+    scene.wait(DEBOUNCE_MS)
+    assert scene.reminders.here().place == FIGMA
+    scene.stay(None)  # one of Jiffin's windows
+    assert scene.reminders.here().place == FIGMA
+    scene.stay(BANK)
+    assert scene.reminders.here().place == BANK
+
+
+def test_here_lists_the_closest_to_ringing_first_then_the_others_newest_first() -> None:
+    scene = Scene(start=at(2, 14))
+    later = scene.create("quando apro Figma dopo le 23", "chiudere il portatile")
+    rang = scene.create("quando modifico le icone")
+    silenced = scene.create("quando esporto il logo")
+    snoozed = scene.create("quando apro la palette")
+    far = scene.create("quando disegno un'icona")
+    call = scene.create("alle 15", "chiamare Mario")
+    for reminder, d in ((later, 2.0), (rang, 4.0), (silenced, 3.0), (snoozed, 1.5), (far, -3.0)):
+        scene.model.says(FIGMA, reminder.revision.remainder, d)
+    scene.stay(FIGMA)
+    alerts = {alert.reminder_id: alert.id for alert in scene.view.visible}
+    scene.reminders.not_here(alerts[silenced.id])
+    scene.reminders.snooze(alerts[snoozed.id], Snooze.HOUR)
+    new = scene.create("quando ritaglio le foto")
+    meeting = scene.create("alle 16", "entrare in riunione")
+    scene.stay(None)
+    view = scene.reminders.here()
+    assert view.place == FIGMA
+    assert [(each.reminder.id, each.quiet) for each in view.reminders] == [
+        (rang.id, Outcome.SAME_OCCASION),
+        (silenced.id, Outcome.SILENCED),
+        (later.id, Outcome.OUTSIDE_TIME),
+        (snoozed.id, Outcome.SNOOZED),
+        (far.id, None),
+        (new.id, None),
+        (meeting.id, Outcome.OUTSIDE_TIME),
+        (call.id, Outcome.OUTSIDE_TIME),
+    ]
+
+
+def test_here_puts_first_the_closest_to_its_own_threshold() -> None:
+    scene, lowered = judged_in_drafts(0.5, 0.5, 0.5, 0.5)
+    for draft in DRAFTS[:4]:
+        scene.reminders.remind_here(lowered.id, draft)
+    other = scene.create("quando apro le icone")
+    scene.model.says(LOW, "quando apro le icone", 0.8)
+    scene.stay(LOW)
+    assert [each.reminder.id for each in scene.reminders.here().reminders] == [lowered.id, other.id]
 
 
 # The pause from the tray (ADR-0024)
@@ -1160,7 +1528,8 @@ def test_reminders_go_on_from_what_was_saved() -> None:
     scene = Scene(saved=saved)
     scene.wait(0)
     assert scene.view.unseen == (unseen,)
-    assert scene.listed == (ActiveReminder(Reminder(3, START - DAY_MS, revision), silences=1),)
+    listed = ActiveReminder(Reminder(3, START - DAY_MS, revision), (Place(BANK, Here.NO),))
+    assert scene.listed == (listed,)
     scene.stay(FIGMA)
     # Occasions start afresh: staying on the thing across a restart may give one alert more.
     assert (scene.model.calls, scene.outcomes()) == ([], [Outcome.ALERT])
@@ -1238,3 +1607,35 @@ def test_the_tray_list_shows_a_snooze_and_the_silences() -> None:
     assert scene.listed[0].silences == 1
     scene.reminders.edit(reminder.id, "quando apro Figma", "esportare i loghi")
     assert scene.listed[0].silences == 0
+
+
+def test_the_tray_list_shows_where_a_reminder_was_answered_the_last_first() -> None:
+    scene, reminder = judged_in_drafts(0.5, 0.5)
+    scene.reminders.remind_here(reminder.id, DRAFTS[0])
+    [first] = scene.listed
+    assert first.places == (Place(DRAFTS[0], Here.YES),)
+    scene.reminders.remind_here(reminder.id, DRAFTS[1])
+    scene.model.says(FIGMA, "quando apro Figma")
+    scene.stay(FIGMA)
+    scene.reminders.not_here(scene.alert().id)
+    [then] = scene.listed
+    assert then.places == (
+        Place(FIGMA, Here.NO),
+        Place(DRAFTS[1], Here.YES),
+        Place(DRAFTS[0], Here.YES),
+    )
+    assert (then.silences, then.attentive) == (1, True)
+    scene.reminders.remind_here(reminder.id, DRAFTS[0])
+    assert scene.listed[0].places[0] == Place(DRAFTS[0], Here.YES)
+
+
+def test_the_tray_list_learns_the_build_in_use_when_the_model_is_ready() -> None:
+    scene, reminder = judged_in_drafts(0.5, 0.5)
+    for draft in DRAFTS[:2]:
+        scene.reminders.remind_here(reminder.id, draft)
+    scene.model.down = True  # as before the first engine starts: no build in use
+    scene.create("se sono sul sito della banca", "pagare l'F24")
+    assert not scene.listed[1].attentive
+    scene.model.down = False
+    scene.reminders.model_ready()
+    assert scene.listed[1].attentive

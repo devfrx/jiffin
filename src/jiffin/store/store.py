@@ -19,7 +19,9 @@ from jiffin.core.records import (
     Answer,
     CacheEntry,
     Candidate,
+    ContextAnswer,
     Evaluation,
+    Here,
     LastIds,
     Left,
     Outcome,
@@ -28,7 +30,6 @@ from jiffin.core.records import (
     ReminderDeleted,
     Revision,
     Silence,
-    SilencesCleared,
     Snapshot,
     Snooze,
 )
@@ -103,14 +104,21 @@ class Store:
                     case ReminderDeleted():
                         self._delete_reminder(record.reminder_id)
                         deleted = True
-                    case Silence():
+                    # Until migration 0003 gives the answers per place their table (#150),
+                    # `silence` holds the places whose last answer is Not here: Remind here and
+                    # the withdrawals only take a silence away.
+                    case ContextAnswer(here=Here.NO):
                         self._db.execute(
                             "INSERT OR IGNORE INTO silence (reminder, context) VALUES (?, ?)",
                             (record.reminder_id, self._context_id(record.context)),
                         )
-                    case SilencesCleared():
+                    case ContextAnswer():
+                        context = record.context
                         self._db.execute(
-                            "DELETE FROM silence WHERE reminder = ?", (record.reminder_id,)
+                            """DELETE FROM silence WHERE reminder = ? AND context IN (
+                                SELECT id FROM context WHERE app = ? AND title = ?
+                                AND ifnull(address, '') = ifnull(?, ''))""",
+                            (record.reminder_id, context.app, context.title, context.address),
                         )
                     case CacheEntry():
                         self._save_cache_entry(record)

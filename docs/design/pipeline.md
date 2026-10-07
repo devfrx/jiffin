@@ -3,7 +3,8 @@
 How a context in the foreground becomes an alert, in `jiffin.core`
 ([ADR-0007](../adr/0007-single-stage-pipeline.md),
 [ADR-0012](../adr/0012-package-structure-ports.md),
-[ADR-0021](../adr/0021-one-alert-per-unit.md)). The code is
+[ADR-0021](../adr/0021-one-alert-per-unit.md),
+[ADR-0029](../adr/0029-learn-from-answers-per-place.md)). The code is
 `core/reminders.py`; the debounce is `core/debounce.py`, the units and the
 windows of a time `core/units.py`.
 
@@ -25,7 +26,7 @@ sequenceDiagram
     R->>M: judge(context, the statements missing from the cache)
     alt the engine answers
         M-->>R: d for every statement
-        R->>R: an outcome for every judged reminder
+        R->>R: an outcome for every judged reminder, at its own threshold
     else the engine fails
         M-->>R: ModelError
         R->>R: the evaluation is recorded as failed, never as "no alert"
@@ -47,11 +48,10 @@ Every active reminder whose revision has a statement is judged in every stable
 context, also out of its time, so that its score is in the cache when its time
 comes. The first outcome that applies is recorded with the evaluation:
 
-1. **below threshold**: d < `THRESHOLD` (0.97, a constant tied to the engine's
-   model and prompts, kept on the acceptance day of 0.2; only the harness
-   replays a day at another);
+1. **below threshold**: d is under the reminder's threshold, and the user did
+   not say Remind here in this exact context;
 2. **outside time**: true, but its time does not hold now;
-3. **silenced**: Not here was answered in this exact context;
+3. **silenced**: Not here is what counts in this exact context;
 4. **snoozed**: its snooze with a time has not ended;
 5. **same occasion**: it has rung already in its unit, and no snooze has ended
    since ([lifecycles.md](lifecycles.md));
@@ -65,6 +65,30 @@ and no d, and rings while the engine is down.
 An alert records when it became due: the arrival of its context, the start of
 its time or the end of its snooze, whichever came last
 ([ADR-0022](../adr/0022-acceptance-thresholds-v0-2.md)).
+
+## A threshold per reminder
+
+`THRESHOLD` (0.97) is tied to the engine's model and prompts, and was kept on
+the acceptance day of 0.2; only the harness replays a day at another, and the
+evaluation records it. Each reminder judges at its own threshold
+([ADR-0029](../adr/0029-learn-from-answers-per-place.md)): `THRESHOLD` less
+0.25 (`STEP_DOWN`) for every two Remind here near the cut, where its d was at
+most 1 (`NEAR_CUT`) under `THRESHOLD`, said with the engine build in use; 0.5
+(`MOST_DOWN`) under it at most. It never goes up. Farther from the cut, a
+Remind here makes the reminder true only in its place. The threshold is
+computed again from the answers at every judgement and never kept: a
+withdrawal, a new text or a new build puts it back exactly.
+
+**Remind here** in a context still in front rings at once, as asked: a
+`requested` alert with no evaluation, the d the cache holds there and due when
+asked, also when the reminder rang already in its unit, was snoozed or out of
+its time. It counts in its unit and starts a true stretch at its time, ended at
+once unless its context is the stable one, so that coming back right after the
+card rings no second alert. "In front" is the last context in front for the
+reminders: Jiffin's windows, which the capture observes as no context, do not
+take it away; during the pause nothing is in front, and the yes rings at its
+end like any alert. A context no longer in front waits for the next time
+there.
 
 ## Driving `Reminders`
 
@@ -83,8 +107,11 @@ its time or the end of its snooze, whichever came last
   included; nothing in front, with no context or during the pause; not now
   otherwise. `core` does not know that the engine sleeps.
 - **Store.** After every event, `take_records()` returns what changed, in
-  saving order: reminders (with their current revision), deletions, silences,
-  cache entries, evaluations, when a stable context left, alerts.
+  saving order: reminders (with their current revision), deletions, answers
+  per place and their withdrawals, cache entries, evaluations, when a stable
+  context left, alerts. Until migration 0003 the store keeps only the places
+  whose answer is Not here, in `silence`: Remind here, the withdrawals and
+  `requested` do not survive a restart.
   `Store.save()` keeps them in one transaction: records with an id replace the
   previous record with that id, a cache entry replaces the one with the same
   context, revision and engine build, and when a context left goes on the
@@ -96,15 +123,24 @@ its time or the end of its snooze, whichever came last
 - **Interface.** `on_alerts` receives an `AlertsView` after every change, on
   the worker thread: the alerts on screen (at most 3), how many wait, and those
   that vanished unanswered, one per reminder. `on_reminders` receives a
-  `RemindersView` after every change of a reminder or of its silences: the
-  active reminders, newest first, each with how many contexts Not here
-  silenced it in. The interface answers with `done`, `snooze` (with its kind),
-  `not_here`, `close` (the X), `vanished` (its own 10 s timer) and `seen` (the
-  tray list is open), and changes the reminders with `create`, `edit` (both
-  with "Ogni volta"), `complete` and `delete`. Commands about something already
-  gone do nothing. Whether Next time has a unit to wait for, and
-  whether a period has ended, are pure functions of `core/units.py` it may call
-  itself: `next_occasion` and `ended`.
+  `RemindersView` after every change of a reminder or of its answers, and when
+  the model is ready: the active reminders, newest first, each with the places
+  of its answers, the last answered first, and whether its threshold went down
+  with the build in use. The interface answers with `done`, `snooze` (with its
+  kind), `not_here`, `close` (the X), `vanished` (its own 10 s timer) and
+  `seen` (the tray list is open), and changes the reminders with `create`,
+  `edit` (both with "Ogni volta"), `complete` and `delete`. Commands about
+  something already gone do nothing. Whether Next time has a unit to wait for,
+  and whether a period has ended, are pure functions of `core/units.py` it may
+  call itself: `next_occasion` and `ended`.
+- **Remind here.** `core` takes `remind_here` (a reminder, a context),
+  `withdraw` (a reminder, a context) and `withdraw_all` (a reminder), and gives
+  `here()`: the place, the last context stable for 5 s, which stays the place
+  while one of Jiffin's windows is in front; and the active reminders, those
+  judged there first, by their d there less their threshold, then those not
+  judged there and those with only a time, the newest first; each with what
+  else keeps it quiet there now: its time, Not here, a snooze, or a ring in its
+  unit.
 - **Model port.** `build()` names the engine that answers, also while it
   restarts or sleeps; `judge()` scores every statement it gets; `rewrite()`
   turns a remainder into its statement; a call while the engine sleeps waits

@@ -1,5 +1,5 @@
 """The rules of the product: reminders, their judging, and their alerts (ADR-0007, ADR-0014,
-ADR-0021).
+ADR-0021, ADR-0029).
 
 The worker thread owns `Reminders` and gives it one event at a time: observations, deadlines
 and the user's commands (ADR-0012). It keeps its state in memory, tells the interface about
@@ -10,12 +10,15 @@ A reminder rings at most once per unit (`units`): the instance of its time, or t
 occasion starts with a true stretch, a stable context judged true while its time holds, that
 begins at least the return pause after the previous one ended.
 
+What the user says of a reminder in a place, an exact context, counts there until its text
+changes: Not here keeps it quiet there, Remind here makes it true there, and Remind here near
+the cut lowers its threshold (ADR-0029).
+
 A pause from the tray is away until it ends (ADR-0024): nothing is in front for the reminders,
 whatever the capture sees, and its end is a return.
 """
 
 import itertools
-from collections import Counter
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from datetime import datetime, time, timedelta
@@ -32,15 +35,15 @@ from jiffin.core.records import (
     Answer,
     CacheEntry,
     Candidate,
+    ContextAnswer,
     Evaluation,
+    Here,
     Left,
     Outcome,
     Record,
     Reminder,
     ReminderDeleted,
     Revision,
-    Silence,
-    SilencesCleared,
     Snapshot,
     Snooze,
 )
@@ -51,6 +54,14 @@ THRESHOLD = 0.97
 """d from which a reminder alerts: the starting value of ADR-0007, kept on the acceptance day of
 0.2 (#106). It belongs to the engine's model and prompts, and is measured again when they
 change (ADR-0017)."""
+STEP_DOWN = 0.25
+"""How far a reminder's threshold goes down for every two Remind here near the cut (ADR-0029)."""
+MOST_DOWN = 0.5
+"""How far below the threshold a reminder's own may go: learning adds alerts, which show, never
+missed reminders, which would not (ADR-0029)."""
+NEAR_CUT = 1.0
+"""A Remind here is near the cut when its d is under the threshold by this much at most; one
+farther away teaches only its place (ADR-0029)."""
 
 MINUTE_MS = 60_000
 HOUR_MS = 60 * MINUTE_MS
@@ -96,12 +107,50 @@ class Pause(Enum):
 
 
 @dataclass(frozen=True, slots=True)
+class Place:
+    """A place where the user answered for a reminder, and the answer (ADR-0029)."""
+
+    context: Context
+    here: Here
+    """Not here or Remind here: a withdrawn answer leaves no place."""
+
+
+@dataclass(frozen=True, slots=True)
 class ActiveReminder:
     """A reminder not completed yet, as the tray list shows it."""
 
     reminder: Reminder
-    silences: int
-    """How many contexts Not here has silenced it in, until its text changes."""
+    places: tuple[Place, ...] = ()
+    """Where the user answered for it, until its text changes: the last answered first."""
+    attentive: bool = False
+    """Its threshold went down, with the engine build in use (ADR-0029)."""
+
+    @property
+    def silences(self) -> int:
+        """How many contexts Not here has silenced it in."""
+        return sum(place.here is Here.NO for place in self.places)
+
+
+@dataclass(frozen=True, slots=True)
+class HereReminder:
+    """An active reminder on the card of Remind here (ADR-0029)."""
+
+    reminder: Reminder
+    quiet: Outcome | None
+    """What else keeps it quiet in the place now, in the order of ADR-0021: its time, Not here,
+    a snooze, or a ring in its unit; None when nothing does but the judge."""
+
+
+@dataclass(frozen=True, slots=True)
+class HereView:
+    """What the card of Remind here shows (ADR-0029)."""
+
+    place: Context | None
+    """The last context stable for 5 s, still the place once it leaves the foreground, since
+    Jiffin's windows are no place; None until the first."""
+    reminders: tuple[HereReminder, ...] = ()
+    """The active reminders: first those judged in the place, the closest to ringing first;
+    then those not judged there, then those with only a time, the newest first."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +175,17 @@ class _Time:
 
 
 _ALWAYS = _Time(None, None, None)
+
+
+@dataclass(frozen=True, slots=True)
+class _Said:
+    """The answer that counts in a place, with the reminder's d there and the build of that d,
+    when the cache knew them as it was given (ADR-0029)."""
+
+    here: Here
+    """Not here or Remind here."""
+    d: float | None
+    build: EngineBuild | None
 
 
 @dataclass(slots=True)
@@ -171,7 +231,12 @@ class Reminders:
         self._debounce = Debounce()
         self._alerts = Alerts(saved.unseen)
         self._reminders = {reminder.id: reminder for reminder in saved.reminders}
-        self._silences = {(silence.reminder_id, silence.context) for silence in saved.silences}
+        self._answers = {
+            (silence.reminder_id, silence.context): _Said(Here.NO, None, None)
+            for silence in saved.silences
+        }
+        """The answer that counts in each place, by reminder and context: the last answered
+        last."""
         self._cache = {(e.context, e.revision_id, e.build): e.d for e in saved.cache}
         self._counted = {
             reminder_id: [(alert_id, at)] for reminder_id, alert_id, at in saved.last_alerts
@@ -192,6 +257,11 @@ class Reminders:
         self._seen: Context | None = None
         """The context in front as the capture last saw it, paused or not: the pause's end
         brings it back."""
+        self._front: Context | None = None
+        """The last context in front for the reminders, no context aside: one of Jiffin's
+        windows, which asks for Remind here, leaves the context before it in front."""
+        self._place: Context | None = None
+        """The last context stable for 5 s: "here", for Remind here."""
         self._records: list[Record] = []
         self._alerts_changed = bool(saved.unseen)
         self._reminders_changed = bool(saved.reminders) or paused_until is not None
@@ -238,10 +308,7 @@ class Reminders:
         pending = self._debounce.pending
         if pending is None:
             return Need.NOT_NOW
-        try:
-            build: EngineBuild | None = self._model.build()
-        except ModelError:
-            build = None  # no engine has started yet: no score can be found in the cache
+        build = self._build()  # None before any engine started: no score is in the cache then
         missing = any(
             reminder.completed_at is None
             and reminder.revision.remainder
@@ -264,13 +331,15 @@ class Reminders:
     def model_ready(self) -> None:
         """The model answers again, after a start or a restart (ADR-0011): the statements it
         missed are written, and the stable context, if any, is judged again. The cache spares
-        what was judged already, and the unit a second alert."""
+        what was judged already, and the unit a second alert. The build may be a new one, and
+        the reminders' thresholds with it (ADR-0029)."""
         stable = self._debounce.stable
         if stable is None:
             self._write_missing_statements()
         else:
             self._evaluate(stable.context, stable.context_since, None)
             self._plan()
+        self._reminders_changed = True
         self._publish()
 
     # The pause from the tray (ADR-0024)
@@ -323,9 +392,9 @@ class Reminders:
         return self._reminders[reminder_id]
 
     def edit(self, reminder_id: int, condition: str, action: str, perennial: bool = False) -> None:
-        """A new revision. A new text clears its silences; a new condition is read again from now,
-        and a new remainder waits for a new statement. The same condition keeps its time
-        (ADR-0020)."""
+        """A new revision. A new text withdraws what was said of it in every place (ADR-0029); a
+        new condition is read again from now, and a new remainder waits for a new statement. The
+        same condition keeps its time (ADR-0020)."""
         reminder = self._reminders.get(reminder_id)
         if reminder is None:
             return
@@ -333,12 +402,9 @@ class Reminders:
         if (condition, action, perennial) == (old.condition, old.action, old.perennial):
             return
         now = self._clock.now()
+        if (condition, action) != (old.condition, old.action):
+            self._withdraw_all(reminder_id)  # before its scores go: the withdrawals carry its d
         self._forget(old)
-        if (condition, action) != (old.condition, old.action) and any(
-            silenced == reminder_id for silenced, _ in self._silences
-        ):
-            self._silences = {s for s in self._silences if s[0] != reminder_id}
-            self._records.append(SilencesCleared(reminder_id))
         revision = replace(
             old,
             id=next(self._revision_ids),
@@ -383,7 +449,7 @@ class Reminders:
         if reminder is None:
             return
         self._forget(reminder.revision)
-        self._silences = {s for s in self._silences if s[0] != reminder_id}
+        self._answers = {key: said for key, said in self._answers.items() if key[0] != reminder_id}
         self._counted.pop(reminder_id, None)
         self._stretches.pop(reminder_id, None)
         self._snooze_deadlines.pop(reminder_id, None)
@@ -403,17 +469,43 @@ class Reminders:
 
     def not_here(self, alert_id: int) -> None:
         """Not here: the reminder keeps quiet in this exact context until its text changes, and the
-        alert does not count, so it may ring elsewhere in the same unit (ADR-0021)."""
+        alert does not count, so it may ring elsewhere in the same unit (ADR-0021). It takes the
+        place of a Remind here said there (ADR-0029)."""
         alert = self._answer(alert_id, Answer.NOT_HERE)
         if alert is not None and alert.reminder_id in self._reminders:
-            self._silences.add((alert.reminder_id, alert.context))
-            self._records.append(Silence(alert.reminder_id, alert.context))
-            self._reminders_changed = True
+            self._say(alert.reminder_id, alert.context, Here.NO)
             counted = self._counted.get(alert.reminder_id, [])
             self._counted[alert.reminder_id] = [c for c in counted if c[0] != alert.id]
             stable = self._debounce.stable
             if stable is not None and stable.context == alert.context:
                 self._close(alert.reminder_id, self._clock.now())
+        self._publish()
+
+    def remind_here(self, reminder_id: int, context: Context) -> None:
+        """Remind here, "qui dovevi avvisarmi" (ADR-0029): the reminder is true in this exact
+        context until its text changes, and takes the place of a Not here said there. If the
+        context is still in front it rings at once, as asked: also when it rang already in its
+        unit, was snoozed or out of its time. Otherwise the yes holds from the next time there.
+        A reminder with only a time just rings: there is nothing to learn."""
+        reminder = self._reminders.get(reminder_id)
+        if reminder is None or reminder.completed_at is not None:
+            return
+        if reminder.revision.remainder:
+            self._say(reminder_id, context, Here.YES)
+        if self._paused_until is None and context == self._front:
+            self._ring_requested(reminder, context)
+        self._publish()
+
+    def withdraw(self, reminder_id: int, context: Context) -> None:
+        """Forget what was said of the reminder in one place, from the tray list: as if never
+        answered there, and its threshold is what its other answers make it (ADR-0029)."""
+        if (reminder_id, context) in self._answers:
+            self._say(reminder_id, context, Here.WITHDRAWN)
+        self._publish()
+
+    def withdraw_all(self, reminder_id: int) -> None:
+        """Forget everything the reminder learned, from the tray list (ADR-0029)."""
+        self._withdraw_all(reminder_id)
         self._publish()
 
     def snooze(self, alert_id: int, snooze: Snooze) -> None:
@@ -449,6 +541,36 @@ class Reminders:
         self._alerts_changed = True
         self._publish()
 
+    def here(self) -> HereView:
+        """What the card of Remind here shows: the place, and the active reminders in their order
+        there (ADR-0029)."""
+        place = self._place
+        if place is None:
+            return HereView(None)
+        now = self._clock.now()
+        build = self._build()
+        judged: list[tuple[float, Reminder]] = []
+        unjudged: list[Reminder] = []
+        on_time: list[Reminder] = []
+        for reminder in self._active():
+            if not reminder.revision.remainder:
+                on_time.append(reminder)
+                continue
+            d = None if build is None else self._cache.get((place, reminder.revision.id, build))
+            if d is None:
+                unjudged.append(reminder)
+            else:
+                judged.append((d - self._threshold_of(reminder.id, build), reminder))
+        judged.sort(key=lambda judgement: judgement[0], reverse=True)
+        ordered = [reminder for _, reminder in judged] + unjudged + on_time
+        return HereView(
+            place,
+            tuple(
+                HereReminder(r, self._quiet(r, place, self._time(r.revision, now), now))
+                for r in ordered
+            ),
+        )
+
     # Judging
 
     def _catch_up(self, until: int) -> None:
@@ -460,6 +582,7 @@ class Reminders:
             if deadline == self._debounce.deadline:
                 request = self._debounce.poll(deadline)
                 if request is not None:
+                    self._place = request.context
                     self._evaluate(request.context, request.context_since, None)
                     self._plan()
                 continue
@@ -489,6 +612,8 @@ class Reminders:
         self._debounce.observe(observation)
         if self._debounce.stable is None:
             self._edges = {}
+        if observation.context is not None:
+            self._front = observation.context
 
     def _end_pause(self, at: int) -> None:
         """The pause is over: what the capture sees is in front again."""
@@ -578,13 +703,14 @@ class Reminders:
             d = scores[revision_id]
             self._records.append(CacheEntry(context, revision_id, build, d, now))
             span = self._time(reminder.revision, now)
-            silenced = (reminder.id, context) in self._silences
-            if d >= self._threshold and span is not None and not silenced:
+            here = self._here(reminder.id, context)
+            true = here is Here.YES or d >= self._threshold_of(reminder.id, build)
+            if true and span is not None and here is not Here.NO:
                 start = context_since if span.start is None else max(context_since, span.start)
                 self._open(reminder.id, start, span.end)
             else:
                 self._close(reminder.id, now)
-            outcome = self._outcome(reminder, context, d, span, now)
+            outcome = self._outcome(reminder, context, true, span, now)
             candidates.append(Candidate(revision_id, d, revision_id not in fresh, outcome))
             if outcome is Outcome.ALERT and span is not None:
                 alerts.append((reminder, d, self._due(reminder, span, context_since, now)))
@@ -613,34 +739,53 @@ class Reminders:
         return scores, set(missing)
 
     def _outcome(
-        self, reminder: Reminder, context: Context, d: float, span: _Time | None, now: int
+        self, reminder: Reminder, context: Context, true: bool, span: _Time | None, now: int
     ) -> Outcome:
-        if d < self._threshold:
+        """`true`: at or above its threshold, or Remind here was said there (ADR-0029)."""
+        if not true:
             return Outcome.BELOW_THRESHOLD
+        quiet = self._quiet(reminder, context, span, now)
+        return Outcome.ALERT if quiet is None else quiet
+
+    def _quiet(
+        self, reminder: Reminder, context: Context, span: _Time | None, now: int
+    ) -> Outcome | None:
+        """What keeps the reminder quiet in the context but the judge, in the order of ADR-0021;
+        None when nothing does."""
         if span is None:
             return Outcome.OUTSIDE_TIME
-        if (reminder.id, context) in self._silences:
+        if self._here(reminder.id, context) is Here.NO:
             return Outcome.SILENCED
         if self._snoozed(reminder, now):
             return Outcome.SNOOZED
         if self._rang(reminder, span, now):
             return Outcome.SAME_OCCASION
-        return Outcome.ALERT
+        return None
 
     def _ring_on_time(self, reminder: Reminder, context: Context, context_since: int) -> None:
         """A reminder with only a time rings in any stable context: the user is there."""
         now = self._clock.now()
         span = self._time(reminder.revision, now)
-        if (
-            span is None
-            or (reminder.id, context) in self._silences
-            or self._snoozed(reminder, now)
-            or self._rang(reminder, span, now)
-        ):
+        if span is None or self._quiet(reminder, context, span, now) is not None:
             return
         self._alert(
             reminder, None, context, None, now, self._due(reminder, span, context_since, now)
         )
+
+    def _ring_requested(self, reminder: Reminder, context: Context) -> None:
+        """The alert asked for with Remind here: it counts in the unit, and it is never the
+        judge's (ADR-0029). A true stretch starts with it, so that coming back to the context
+        rings no second alert in the same occasion (ADR-0021); it ends at once unless the
+        context is the stable one, since the card that asks is one of Jiffin's windows."""
+        now = self._clock.now()
+        span = self._time(reminder.revision, now)
+        if span is not None and reminder.revision.remainder:
+            self._open(reminder.id, now, span.end)
+            stable = self._debounce.stable
+            if stable is None or stable.context != context:
+                self._close(reminder.id, now)
+        d, _ = self._known(reminder, context)
+        self._alert(reminder, None, context, d, now, now, requested=True)
 
     def _alert(
         self,
@@ -650,6 +795,7 @@ class Reminders:
         d: float | None,
         now: int,
         due: int,
+        requested: bool = False,
     ) -> None:
         alert = Alert(
             next(self._alert_ids),
@@ -660,10 +806,56 @@ class Reminders:
             d,
             now,
             due,
+            requested=requested,
         )
         self._counted.setdefault(reminder.id, []).append((alert.id, now))
         self._records.append(self._alerts.add(alert, now))
         self._alerts_changed = True
+
+    # Answers per place (ADR-0029)
+
+    def _say(self, reminder_id: int, context: Context, here: Here) -> None:
+        """Answer in a place, or withdraw the answer, which leaves no place: the last one counts.
+        Each is recorded with the reminder's d there, when the cache knows it."""
+        d, build = self._known(self._reminders[reminder_id], context)
+        self._answers.pop((reminder_id, context), None)  # an answer again is the last answered
+        if here is not Here.WITHDRAWN:
+            self._answers[(reminder_id, context)] = _Said(here, d, build)
+        self._records.append(ContextAnswer(reminder_id, context, here, d, build, self._clock.now()))
+        self._reminders_changed = True
+
+    def _withdraw_all(self, reminder_id: int) -> None:
+        for answered, context in list(self._answers):
+            if answered == reminder_id:
+                self._say(reminder_id, context, Here.WITHDRAWN)
+
+    def _here(self, reminder_id: int, context: Context) -> Here | None:
+        """What counts of what the user said of the reminder in the context; None if nothing."""
+        said = self._answers.get((reminder_id, context))
+        return None if said is None else said.here
+
+    def _threshold_of(self, reminder_id: int, build: EngineBuild | None) -> float:
+        """The reminder's threshold: `STEP_DOWN` under the threshold for every two Remind here
+        near the cut said with the build in use, `MOST_DOWN` under it at most. Computed again
+        each time from the answers, never kept, so a withdrawal puts it back exactly."""
+        near = sum(
+            said.here is Here.YES
+            and said.build == build
+            and said.d is not None
+            and self._threshold - NEAR_CUT <= said.d < self._threshold
+            for (answered, _), said in self._answers.items()
+            if answered == reminder_id
+        )
+        return self._threshold - min(MOST_DOWN, STEP_DOWN * (near // 2))
+
+    def _known(
+        self, reminder: Reminder, context: Context
+    ) -> tuple[float | None, EngineBuild | None]:
+        """The reminder's d in the context, with its build, when the cache holds a score of its
+        revision there from the build in use; else None and None."""
+        build = self._build()
+        d = None if build is None else self._cache.get((context, reminder.revision.id, build))
+        return (None, None) if d is None else (d, build)
 
     # Units
 
@@ -783,6 +975,21 @@ class Reminders:
         revision = replace(reminder.revision, statement=statement, statement_build=build)
         self._save(replace(reminder, revision=revision))
 
+    def _build(self) -> EngineBuild | None:
+        """The engine build in use; None before any engine started."""
+        try:
+            return self._model.build()
+        except ModelError:
+            return None
+
+    def _active(self) -> list[Reminder]:
+        """The reminders not completed, the newest first: ids grow with each new reminder."""
+        return sorted(
+            (reminder for reminder in self._reminders.values() if reminder.completed_at is None),
+            key=lambda reminder: reminder.id,
+            reverse=True,
+        )
+
     def _write_missing_statements(self) -> None:
         for reminder in list(self._reminders.values()):
             revision = reminder.revision
@@ -822,14 +1029,19 @@ class Reminders:
             self._on_reminders(self._reminders_view())
 
     def _reminders_view(self) -> RemindersView:
-        silences = Counter(reminder_id for reminder_id, _ in self._silences)
-        # Ids grow with each new reminder.
-        newest_first = sorted(self._reminders.values(), key=lambda r: r.id, reverse=True)
+        build = self._build()
+        places: dict[int, list[Place]] = {}
+        # The last answered first.
+        for (reminder_id, context), said in reversed(self._answers.items()):
+            places.setdefault(reminder_id, []).append(Place(context, said.here))
         return RemindersView(
             tuple(
-                ActiveReminder(reminder, silences[reminder.id])
-                for reminder in newest_first
-                if reminder.completed_at is None
+                ActiveReminder(
+                    reminder,
+                    tuple(places.get(reminder.id, ())),
+                    self._threshold_of(reminder.id, build) < self._threshold,
+                )
+                for reminder in self._active()
             ),
             self._paused_until,
         )

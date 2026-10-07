@@ -27,12 +27,13 @@ from jiffin.core.alerts import AlertsView
 from jiffin.core.clock import SystemClock
 from jiffin.core.context import Context
 from jiffin.core.meanings import read
-from jiffin.core.records import Alert, Reminder, Revision, Snooze
+from jiffin.core.records import Alert, Here, Reminder, Revision, Snooze
 from jiffin.core.reminders import (
     HOUR_MS,
     MINUTE_MS,
     ActiveReminder,
     Pause,
+    Place,
     RemindersView,
     tomorrow,
 )
@@ -149,7 +150,9 @@ class Preview:
                 self._revision(reminder_id, condition, action, perennial, written_at),
                 snoozed_until=now + minutes * MINUTE_MS if minutes else None,
             )
-            self._reminders[reminder_id] = ActiveReminder(reminder, silences)
+            mail = (Context("olk.exe", f"Posta {n} - Outlook", None) for n in range(silences))
+            places = tuple(Place(context, Here.NO) for context in mail)
+            self._reminders[reminder_id] = ActiveReminder(reminder, places)
         self._paused_until: int | None = None
         self.interface: Interface | None = None
 
@@ -194,7 +197,7 @@ class Preview:
         reminder_id = next(self._ids)
         revision = self._revision(reminder_id, condition, action, perennial)
         reminder = Reminder(reminder_id, self._clock.now(), revision)
-        self._reminders[reminder_id] = ActiveReminder(reminder, 0)
+        self._reminders[reminder_id] = ActiveReminder(reminder)
         QTimer.singleShot(0, self._show_reminders)
 
     def edit(self, reminder_id: int, condition: str, action: str, perennial: bool) -> None:
@@ -209,7 +212,7 @@ class Preview:
             else:
                 revision = self._revision(reminder_id, condition, action, perennial)
             reminder = replace(active.reminder, revision=revision)
-            self._reminders[reminder_id] = ActiveReminder(reminder, 0)
+            self._reminders[reminder_id] = ActiveReminder(reminder)
         QTimer.singleShot(0, self._show_reminders)
 
     def complete(self, reminder_id: int) -> None:
