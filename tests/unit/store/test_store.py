@@ -15,7 +15,9 @@ from jiffin.core.records import (
     Answer,
     CacheEntry,
     Candidate,
+    ContextAnswer,
     Evaluation,
+    Here,
     LastIds,
     Left,
     Outcome,
@@ -23,7 +25,6 @@ from jiffin.core.records import (
     ReminderDeleted,
     Revision,
     Silence,
-    SilencesCleared,
     Snapshot,
     Snooze,
 )
@@ -70,6 +71,11 @@ def on_time(number: int, of: Reminder, at: int, context: Context = FIGMA) -> Ale
     return Alert(number, of.id, of.revision, None, context, None, at, at - 1_000)
 
 
+def said(reminder_id: int, context: Context, here: Here = Here.NO) -> ContextAnswer:
+    """An answer in a place, where the cache knew no d."""
+    return ContextAnswer(reminder_id, context, here, None, None, NOW)
+
+
 @pytest.fixture
 def path(tmp_path: Path) -> Path:
     return tmp_path / "jiffin.db"
@@ -94,9 +100,7 @@ def test_what_core_saved_comes_back(store: Store) -> None:
     judged = evaluation(1, NOW, FIGMA, figma, snoozed)
     vanished = replace(alert(1, figma, judged), shown_at=NOW, vanished_at=NOW + 10_000)
     entry = CacheEntry(FIGMA, figma.revision.id, BUILD, 2.5, NOW)
-    store.save(
-        [figma, snoozed, judged, vanished, entry, Silence(snoozed.id, BANK), Silence(2, FIGMA)]
-    )
+    store.save([figma, snoozed, judged, vanished, entry, said(snoozed.id, BANK), said(2, FIGMA)])
     assert store.load() == Snapshot(
         reminders=(figma, snoozed),
         silences=(Silence(2, FIGMA), Silence(2, BANK)),
@@ -205,9 +209,17 @@ def test_alerts_without_a_judgement_and_the_kind_of_a_rimanda_are_kept(store: St
     assert store.log().alerts == (later, closed)
 
 
-def test_silences_can_be_cleared(store: Store) -> None:
-    store.save([reminder(1), Silence(1, FIGMA), Silence(1, BANK), SilencesCleared(1)])
+def test_remind_here_and_a_withdrawal_take_a_silence_away(store: Store) -> None:
+    store.save([reminder(1), said(1, FIGMA), said(1, BANK)])
+    store.save([said(1, FIGMA, Here.YES), said(1, BANK, Here.WITHDRAWN)])
     assert store.load().silences == ()
+    store.save([said(1, BANK)])
+    assert store.load().silences == (Silence(1, BANK),)
+
+
+def test_an_answer_that_takes_no_silence_away_adds_no_context(store: Store, path: Path) -> None:
+    store.save([reminder(1), said(1, FIGMA, Here.YES), said(1, BANK, Here.WITHDRAWN)])
+    assert count(path, "context") == 0
 
 
 def test_retention_keeps_30_days(store: Store, path: Path) -> None:
@@ -253,7 +265,7 @@ def test_an_alert_answered_after_the_cleanup_took_it_comes_back_without_its_eval
 
 def test_contexts_nothing_uses_are_deleted(store: Store, path: Path) -> None:
     kept = reminder(1)
-    store.save([kept, evaluation(1, NOW - RETENTION_MS - 1, FIGMA, kept), Silence(1, BANK)])
+    store.save([kept, evaluation(1, NOW - RETENTION_MS - 1, FIGMA, kept), said(1, BANK)])
     store.cleanup(NOW)
     assert count(path, "context") == 1
 
@@ -271,7 +283,7 @@ def test_deleting_a_reminder_leaves_nothing_about_it(store: Store, path: Path) -
             alert(1, gone, alone),
             alert(2, other, shared),
             CacheEntry(FIGMA, gone.revision.id, BUILD, 2.5, NOW),
-            Silence(gone.id, FIGMA),
+            said(gone.id, FIGMA),
         ]
     )
     store.save([ReminderDeleted(gone.id)])
@@ -333,7 +345,7 @@ def test_the_log_holds_every_evaluation_alert_and_revision(store: Store) -> None
     answered = replace(
         alert(1, figma, first), shown_at=NOW, answer=Answer.USEFUL, answered_at=NOW + 5_000
     )
-    store.save([figma, bank, first, failed, answered, edited, later, Silence(2, FIGMA)])
+    store.save([figma, bank, first, failed, answered, edited, later, said(2, FIGMA)])
     log = store.log()
     assert log.reminders == (edited, bank)
     assert log.revisions == {10: figma.revision, 11: revised, 20: bank.revision}

@@ -59,15 +59,39 @@ class ReminderDeleted:
 
 @dataclass(frozen=True, slots=True)
 class Silence:
-    """Not here: the reminder keeps quiet in this context until its text changes."""
+    """Not here, as `store` keeps it until migration 0003 (#150): the reminder keeps quiet in
+    this context until its text changes."""
 
     reminder_id: int
     context: Context
 
 
+class Here(StrEnum):
+    """What the user said of a reminder in one place, an exact context (ADR-0029): the last one
+    counts, until the reminder's text changes."""
+
+    NO = "not_here"
+    """Not here: the reminder keeps quiet in this context."""
+    YES = "remind_here"
+    """Remind here, "qui dovevi avvisarmi": the reminder counts as true in this context, also
+    under its threshold."""
+    WITHDRAWN = "withdrawn"
+    """What was said there is taken back: from the tray list, or by a change of text."""
+
+
 @dataclass(frozen=True, slots=True)
-class SilencesCleared:
+class ContextAnswer:
+    """An answer per place, or its withdrawal (ADR-0029), for the table `context_answer` of
+    migration 0003 (#150)."""
+
     reminder_id: int
+    context: Context
+    here: Here
+    d: float | None
+    """The reminder's d in the context when it was said, from the cache; None when unknown."""
+    build: EngineBuild | None
+    """The engine build of that d: a threshold learns only from the build in use."""
+    at: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,11 +202,12 @@ class Alert:
     answered_at: int | None = None
     snooze: Snooze | None = None
     """Which Snooze, with the answer `rimanda`; unknown in version 0.1."""
+    requested: bool = False
+    """Asked for with Remind here (ADR-0029): it counts in its unit, and is never the judge's.
+    `store` keeps it from migration 0003 (#150)."""
 
 
-Record = (
-    Reminder | ReminderDeleted | Silence | SilencesCleared | CacheEntry | Evaluation | Left | Alert
-)
+Record = Reminder | ReminderDeleted | ContextAnswer | CacheEntry | Evaluation | Left | Alert
 
 
 class SleepReason(StrEnum):

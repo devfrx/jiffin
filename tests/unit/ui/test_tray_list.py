@@ -17,8 +17,8 @@ from jiffin.core.alerts import AlertsView
 from jiffin.core.clock import SimulatedClock
 from jiffin.core.context import Context
 from jiffin.core.meanings import read
-from jiffin.core.records import Alert, Reminder, Revision, Snooze
-from jiffin.core.reminders import HOUR_MS, MINUTE_MS, ActiveReminder, RemindersView
+from jiffin.core.records import Alert, Here, Reminder, Revision, Snooze
+from jiffin.core.reminders import HOUR_MS, MINUTE_MS, ActiveReminder, Place, RemindersView
 from jiffin.lang.texts import TEXTS
 from jiffin.ui import tray_list, win32
 from jiffin.ui.first_run import FirstRun, ModelFile, ModelState
@@ -123,7 +123,10 @@ def active(
     written_at: int = START,
 ) -> ActiveReminder:
     written = revision(reminder_id, condition, action, perennial, written_at)
-    return ActiveReminder(Reminder(reminder_id, written_at, written, None, snoozed_until), silences)
+    places = tuple(
+        Place(Context("olk.exe", f"Posta {n} - Outlook", None), Here.NO) for n in range(silences)
+    )
+    return ActiveReminder(Reminder(reminder_id, written_at, written, None, snoozed_until), places)
 
 
 def unseen(
