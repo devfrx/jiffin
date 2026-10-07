@@ -8,6 +8,8 @@ back. The reading is in `core`, pure, with no dependency but the lexicon:
 labels into a `Schedule` with every decided meaning and has `read`, the only
 way in, and `schedule.py` holds the `Schedule` and its calendar. The writing
 is in `ui/words.py`. Both take their words from the lexicon, `time.toml`.
+`read` reads the situations of a condition too, first, and sets them aside:
+see [situations.md](situations.md).
 
 ## The stages
 
@@ -52,10 +54,11 @@ flowchart LR
 | Field | What it holds |
 |---|---|
 | `schedule` | The time, in real dates; none without a time, or with one not understood |
-| `remainder` | What the engine rewrites: the condition without its time words and without what they leave hanging, that is connectors, commas, empty brackets and a preposition that led into the time ("il report di domani"). Without a time, or with one not understood, the condition byte for byte, so its statement stays as in 0.1 |
+| `remainder` | What the engine rewrites: the condition without its time words, and its situations' ([situations.md](situations.md#reading-them)), and without what they leave hanging, that is connectors, commas, empty brackets and a preposition that led into the time ("il report di domani"). Without a time or situations, or with a time not understood, the condition byte for byte, so its statement stays as in 0.1 |
 | `unclear` | Where the words not understood are, as phrases, for the line under "Quando" to name them |
 | `past` | The time has no instance left when written: Save turns off |
 | `recurring` | Words that tick "Ogni volta" by themselves: "ogni…", "tutti i…", "un lunedì sì e uno no", a recurrence of the month or of the year |
+| `situations` | The situations of the condition, as terms ([situations.md](situations.md)); none without, when they are not understood, or with a time not understood |
 
 `written_at` is the local time as the user's clock shows it: a zone, if it
 has one, is ignored, and so are the seconds.

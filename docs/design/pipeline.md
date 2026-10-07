@@ -4,9 +4,11 @@ How a context in the foreground becomes an alert, in `jiffin.core`
 ([ADR-0007](../adr/0007-single-stage-pipeline.md),
 [ADR-0012](../adr/0012-package-structure-ports.md),
 [ADR-0021](../adr/0021-one-alert-per-unit.md),
+[ADR-0028](../adr/0028-read-the-situations-in-core.md),
 [ADR-0029](../adr/0029-learn-from-answers-per-place.md)). The code is
 `core/reminders.py`; the debounce is `core/debounce.py`, the units and the
-windows of a time `core/units.py`.
+windows of a time `core/units.py`, the situations over time
+`core/situations.py` ([situations.md](situations.md)).
 
 ```mermaid
 sequenceDiagram
@@ -31,7 +33,7 @@ sequenceDiagram
         M-->>R: ModelError
         R->>R: the evaluation is recorded as failed, never as "no alert"
     end
-    R->>R: ring the reminders with only a time, which are never judged
+    R->>R: ring the reminders without a remainder, which are never judged
     R-->>U: on_alerts(AlertsView)
     W->>R: take_records()
     R-->>W: evaluations, cache entries, alerts, when contexts left
@@ -40,7 +42,10 @@ sequenceDiagram
 
 While a context stays stable, the same steps run again, from the cache, for
 the reminders whose snooze ends or whose time starts or ends: "quando apro
-Claude dopo le 23", with Claude in front since 22:30, rings at 23:00.
+Claude dopo le 23", with Claude in front since 22:30, rings at 23:00. So they
+do when a change of a situation counts, 5 s after it came, for the reminders
+on that situation, and when a duration of their situations is reached: "quando
+sono a casa e apro Steam", with Steam in front, rings when the user is home.
 
 ## The outcome of a judged reminder
 
@@ -51,19 +56,24 @@ comes. The first outcome that applies is recorded with the evaluation:
 1. **below threshold**: d is under the reminder's threshold, and the user did
    not say Remind here in this exact context;
 2. **outside time**: true, but its time does not hold now;
-3. **silenced**: Not here is what counts in this exact context;
-4. **snoozed**: its snooze with a time has not ended;
-5. **same occasion**: it has rung already in its unit, and no snooze has ended
+3. **outside situation**: true and within its time, but a situation of it does
+   not hold, an end has not come or a duration is not reached
+   ([situations.md](situations.md#when-a-reminder-rings));
+4. **silenced**: Not here is what counts in this exact context;
+5. **snoozed**: its snooze with a time has not ended;
+6. **same occasion**: it has rung already in its unit, and no snooze has ended
    since ([lifecycles.md](lifecycles.md));
-6. **alert**.
+7. **alert**.
 
 `held_back`, the once-an-hour rule of version 0.1, stays only in its rows. A
-reminder with only a time rings in any stable context while its time holds,
-unless silenced there, snoozed or rung in its instance: it has no evaluation
-and no d, and rings while the engine is down.
+reminder without a remainder, with only a time or situations, rings in any
+stable context while its time and its situations hold, unless silenced there,
+snoozed or rung in its unit: it has no evaluation and no d, and rings while
+the engine is down.
 
 An alert records when it became due: the arrival of its context, the start of
-its time or the end of its snooze, whichever came last
+its time, when its situations made it due (the start of a stretch, an end, a
+duration reached) or the end of its snooze, whichever came last
 ([ADR-0022](../adr/0022-acceptance-thresholds-v0-2.md)).
 
 ## A threshold per reminder
@@ -92,13 +102,18 @@ there.
 
 ## Driving `Reminders`
 
-- **Worker thread.** One event at a time: `observe()` for every observation;
-  `poll()` when the clock reaches `deadline`, the earliest of the debounce, the
-  snooze ends and, while a context is stable, the next start or end of each
-  reminder's time; the user's commands. Between events it waits on its queue
-  until `deadline`. Every call handles the deadlines already due first, so a
-  late `poll()` loses nothing. When the app closes, the worker observes "no
-  context", so the context in front leaves with it.
+- **Worker thread.** One event at a time: `observe()` for every observation,
+  of the window in front or of a situation; `poll()` when the clock reaches
+  `deadline`, the earliest of the debounce, a change of a situation that
+  counts, the snooze ends and, while a context is stable, the next start or end
+  of each reminder's time or a duration of its situations reached; the user's
+  commands. Between events it waits on its queue until `deadline`. Every call
+  handles the deadlines already due first, so a late `poll()` loses nothing,
+  and a change of a situation before a context that becomes stable at the same
+  moment. When the app closes, the worker observes "no context", so the context
+  in front leaves with it. The capture of the situations, and their end with
+  the app (each observed as not read), come with
+  [#147](https://github.com/devfrx/jiffin/issues/147).
 - **The engine's sleep.** After every event the worker reads `need` and
   passes it to the engine's supervisor
   ([ADR-0027](../adr/0027-light-sleep-of-the-engine.md),
@@ -109,9 +124,11 @@ there.
 - **Store.** After every event, `take_records()` returns what changed, in
   saving order: reminders (with their current revision), deletions, answers
   per place and their withdrawals, cache entries, evaluations, when a stable
-  context left, alerts. Until migration 0003 the store keeps only the places
-  whose answer is Not here, in `silence`: Remind here, the withdrawals and
-  `requested` do not survive a restart.
+  context left, the stretches of the situations that ended, alerts. Until
+  migration 0003 the store keeps only the places whose answer is Not here, in
+  `silence`: Remind here, the withdrawals and `requested` do not survive a
+  restart; nor do a revision's situations, the stretches, and the candidates
+  outside their situation, which the outcomes of 0002 cannot hold.
   `Store.save()` keeps them in one transaction: records with an id replace the
   previous record with that id, a cache entry replaces the one with the same
   context, revision and engine build, and when a context left goes on the

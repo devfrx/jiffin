@@ -1,0 +1,143 @@
+# The words of the situations, in Italian (ADR-0026, ADR-0028): what core's grammar reads in a
+# condition besides its time ("quando finisco la call", "a casa", "da più di 20 minuti"). The
+# rules stay code: which words go together and in which order. A word here is read whole, in
+# lower case; a space between two words stands for any space. The names of the call apps are
+# names, not Italian: they live in core, with their executables and their sites.
+# jiffin.lang.situations reads this file once, at the start, and a key missing or one too many
+# stops the start and the tests.
+
+# What the grammar reads.
+[read]
+# Words that open a condition, left alone once its situations are read: "quando sono in call",
+# "ogni volta che finisco una call".
+openers = [
+    "quando", "se", "mentre", "appena", "non appena", "finché", "finche", "ogni volta che",
+    "tutte le volte che", "dopo che",
+]
+# A word before a situation that changes it: "quando non sono in call", "vicino a casa".
+modifiers_before = ["non", "prima", "vicino", "lontano", "fuori", "verso", "quasi"]
+# A word after a situation that changes it, unless a time, a duration or another situation
+# starts there: "a casa di Mario", "la call con Mario", "la call delle 15", "in carica il PC".
+modifiers_after = [
+    "di", "del", "dello", "della", "dei", "degli", "delle", "da", "dal", "dallo", "dalla", "dai",
+    "dagli", "dalle", "con", "col", "su", "sul", "sullo", "sulla", "per", "a", "al", "allo",
+    "alla", "ai", "agli", "alle", "in", "nel", "nello", "nella", "il", "lo", "la", "i", "gli",
+    "le", "l'", "un", "uno", "una", "che", "sua", "suo", "tua", "tuo", "loro", "vostra",
+    "vostro",
+]
+# Words of a situation that, outside one understood, make the situations not understood: a
+# call, headphones, the battery, the charger and the lid; the end of a thing the judge checks
+# ("quando chiudo Figma", "quando finisco di lavorare", "quando smetto di guardare YouTube");
+# a duration that does not say how long ("da un po'"), or not in minutes or hours ("da più di
+# 2 giorni").
+leftover = [
+    "call", "chiamata", "chiamate", "videochiamata", "videochiamate", "videocall", "cuffie",
+    "cuffia", "cuffiette", "auricolari", "auricolare", "batteria", "caricatore", "coperchio",
+    "monitor esterno", "schermo esterno", "secondo monitor", "secondo schermo", "wifi", "wi-fi",
+    "chiudo", "finisco", "smetto", "termino", "concludo", "stacco", "esco", "da un po'",
+    "da poco", "da tanto", "da molto", "da parecchio", "da più di", "da piu di", "da almeno",
+    "da oltre",
+]
+# Before a duration, which says since when: "da più di 20 minuti", "da almeno mezz'ora", "da
+# un'ora".
+lasting = ["da più di", "da piu di", "da almeno", "da oltre", "da"]
+# After a duration, words that make it not say since when, or say of what: "da più di un'ora
+# al giorno", "da un'ora prima", "da 2 ore di lavoro".
+after_lasting = [
+    "al giorno", "alla settimana", "a settimana", "al mese", "all'anno", "al dì", "a sera",
+    "in tutto", "in totale", "fa", "prima", "dopo", "di", "del", "dello", "della", "dei",
+    "degli", "delle",
+]
+
+# A call: an app captures from a microphone. {call} stands for one of its words.
+[read.call]
+words = ["call", "chiamata", "videochiamata", "videocall"]
+# Before the name of a call app: "in call su Zoom", "la chiamata di WhatsApp".
+before_app = ["su", "di", "con"]
+# It holds: "in call", "durante la chiamata", "quando inizio una call".
+holds = [
+    "in {call}", "in una {call}", "durante la {call}", "durante una {call}",
+    "all'inizio della {call}", "all'inizio di una {call}", "inizio la {call}",
+    "inizio una {call}", "comincio la {call}", "comincio una {call}", "avvio la {call}",
+    "avvio una {call}", "faccio la {call}", "faccio una {call}",
+]
+# Before what holds: "sono in call", "entro in call".
+holds_verbs = ["sono", "entro", "rientro", "torno", "resto", "sto"]
+# It ends: "quando finisco la call", "dopo la videochiamata".
+ends = [
+    "dopo la {call}", "dopo una {call}", "alla fine della {call}", "alla fine di una {call}",
+    "finisco la {call}", "finisco una {call}", "chiudo la {call}", "chiudo una {call}",
+    "termino la {call}", "termino una {call}", "concludo la {call}", "concludo una {call}",
+    "finisce la {call}", "finisce una {call}", "termina la {call}", "esco dalla {call}",
+    "esco da una {call}",
+]
+
+# Away from the PC: no key or mouse for 3 minutes, the PC locked or asleep.
+[read.away]
+# It holds, always with its verb: "quando sono via", "se sono via da più di 10 minuti".
+holds = [
+    "sono via", "resto via", "sto via", "sono via dal pc", "sono via dal computer",
+    "sono lontano dal pc", "sono lontano dal computer",
+]
+# It ends: "quando torno", "quando torno al PC".
+ends = [
+    "torno", "rientro", "torno al pc", "torno al computer", "torno alla scrivania",
+    "ritorno al pc", "ritorno al computer", "rientro al pc", "al mio ritorno",
+]
+
+# The power: on battery, or plugged in.
+[read.power]
+battery = ["a batteria", "senza caricatore", "senza il caricatore"]
+battery_verbs = ["sono", "vado", "passo", "resto", "sto"]
+plugged = [
+    "in carica", "sotto carica", "alla corrente", "con il caricatore", "col caricatore",
+    "attacco il caricatore", "collego il caricatore", "metto il caricatore",
+]
+plugged_verbs = ["sono", "resto", "sto", "metto"]
+# Plugged in ends: "quando stacco il caricatore".
+unplug = ["stacco il caricatore", "tolgo il caricatore", "scollego il caricatore"]
+
+# An external display. {display} stands for one of its words.
+[read.display]
+words = [
+    "il monitor esterno", "il monitor", "lo schermo esterno", "lo schermo", "il secondo monitor",
+    "il secondo schermo",
+]
+# It is connected: "con il monitor esterno", "quando collego lo schermo".
+connected = [
+    "con il monitor esterno", "col monitor esterno", "con lo schermo esterno",
+    "con un monitor esterno", "con uno schermo esterno", "con il secondo monitor",
+    "con il secondo schermo", "collego {display}", "attacco {display}",
+]
+# It is not: "senza il monitor esterno".
+disconnected = [
+    "senza monitor esterno", "senza il monitor esterno", "senza schermo esterno",
+    "senza lo schermo esterno", "senza secondo schermo", "senza il secondo schermo",
+]
+# It ends: "quando stacco lo schermo".
+disconnect = ["stacco {display}", "scollego {display}", "tolgo {display}"]
+
+# Headphones, or a headset. {headphones} stands for one of their words.
+[read.headphones]
+words = ["le cuffie", "le cuffiette", "gli auricolari", "la cuffia"]
+# They are on: "con le cuffie", "quando metto le cuffie".
+on = [
+    "con {headphones}", "in cuffia", "ho {headphones}", "metto {headphones}",
+    "indosso {headphones}", "collego {headphones}", "attacco {headphones}",
+]
+# They are not: "senza cuffie".
+off = ["senza cuffie", "senza le cuffie", "senza auricolari", "senza gli auricolari"]
+# They come off: "quando tolgo le cuffie".
+take_off = ["tolgo {headphones}", "stacco {headphones}", "scollego {headphones}", "levo {headphones}"]
+
+# The network: one the owner called home or office, or none.
+[read.network]
+home = ["a casa", "a casa mia", "da casa"]
+office = ["in ufficio", "dall'ufficio"]
+offline = ["senza rete", "senza internet", "senza connessione", "offline"]
+# Before them: "quando sono a casa", "quando arrivo in ufficio".
+verbs = ["sono", "arrivo", "torno", "rientro", "resto", "sto"]
+# They end: "quando esco di casa", "quando torna la rete".
+leave_home = ["esco di casa", "esco da casa", "lascio casa"]
+leave_office = ["esco dall'ufficio", "lascio l'ufficio"]
+online = ["torna la rete", "torna internet", "torna la connessione"]

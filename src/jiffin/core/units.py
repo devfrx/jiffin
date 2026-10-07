@@ -1,9 +1,10 @@
-"""When a reminder may ring, and its units (ADR-0021).
+"""When a reminder may ring, and its units (ADR-0021, ADR-0028).
 
 A reminder rings at most once per unit: the instance of its time, or the occasion, which
-`reminders` follows from the contexts. Each instance of a time (`schedule.instances`) gets a
-window, how long it may ring from its start, which depends on the kind of time and on "Ogni
-volta". Times are wall-clock times, as in `schedule`.
+`reminders` follows from the contexts; with situations, also a stretch of them or an end, which
+it follows from the observations. Each instance of a time (`schedule.instances`) gets a window,
+how long it may ring from its start, which depends on the kind of time and on "Ogni volta".
+Times are wall-clock times, as in `schedule`.
 """
 
 from collections.abc import Iterator
@@ -37,11 +38,12 @@ class Window:
 
 
 def by_instance(revision: Revision) -> bool:
-    """Whether the reminder rings once per instance of its time rather than once per occasion:
-    with only a time, a moment or a frequency, and with a date when it is not perennial, since
-    that rings once, however many occasions the day brings."""
+    """Whether the reminder rings once per instance of its time rather than once per occasion, per
+    stretch of its situations or per end (ADR-0028): with only a time, a moment or a frequency,
+    and with a date when it is not perennial, since that rings once, however many occasions the
+    day brings."""
     schedule = revision.schedule
-    if not revision.remainder:
+    if not revision.remainder and not revision.situations:
         return True
     if schedule is None:
         return False

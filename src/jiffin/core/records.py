@@ -7,6 +7,7 @@ from enum import StrEnum
 from jiffin.core.context import Context
 from jiffin.core.model import EngineBuild
 from jiffin.core.schedule import Schedule
+from jiffin.core.situations import SituationStretch, Term
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,8 +22,9 @@ class Revision:
     action: str
     """The "Ricordami di" box: "esportare le icone"."""
     remainder: str
-    """The condition without its time words, which the engine rewrites (ADR-0020): the whole
-    condition when it has no time; empty for a reminder with only a time, never judged."""
+    """The condition without the words of its time and of its situations, which the engine
+    rewrites (ADR-0020, ADR-0028): the whole condition when it has neither; empty for a reminder
+    with only a time or situations, never judged."""
     statement: str | None = None
     """The remainder as one English statement, once the engine has written it (ADR-0008)."""
     statement_build: EngineBuild | None = None
@@ -35,6 +37,9 @@ class Revision:
     """ "Ogni volta": Done means "done this time", and the reminder waits for its next unit."""
     created_at: int | None = None
     """When the revision was made; unknown for the later revisions of version 0.1."""
+    situations: tuple[Term, ...] = ()
+    """The situations of the condition (ADR-0028): none without, or when they are not
+    understood. `store` keeps them from migration 0003 (#150)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +117,9 @@ class Outcome(StrEnum):
     BELOW_THRESHOLD = "below_threshold"
     OUTSIDE_TIME = "outside_time"
     """True in the context, but out of its time."""
+    OUTSIDE_SITUATION = "outside_situation"
+    """True in the context and within its time, but its situation does not hold: absent, an end
+    not come yet, a duration not reached (ADR-0028)."""
     SILENCED = "silenced"
     SNOOZED = "snoozed"
     SAME_OCCASION = "same_occasion"
@@ -207,7 +215,16 @@ class Alert:
     `store` keeps it from migration 0003 (#150)."""
 
 
-Record = Reminder | ReminderDeleted | ContextAnswer | CacheEntry | Evaluation | Left | Alert
+Record = (
+    Reminder
+    | ReminderDeleted
+    | ContextAnswer
+    | CacheEntry
+    | Evaluation
+    | Left
+    | SituationStretch
+    | Alert
+)
 
 
 class SleepReason(StrEnum):

@@ -1,8 +1,9 @@
-"""What the time words of a condition mean, and `read`, the only way in (ADR-0020).
+"""What the time words of a condition mean, and `read`, the only way in (ADR-0020, ADR-0028).
 
-`grammar` finds the time words and labels them; here the labels become a `Schedule` in real
-dates, counted from when the condition is written, with every meaning decided on the 0.2 map in
-one place. The remainder is the condition without its time words: what the engine rewrites.
+`grammar` finds the words of the time and of the situations and labels them; here the labels of
+the time become a `Schedule` in real dates, counted from when the condition is written, with
+every meaning decided on the 0.2 map in one place, and those of the situations its terms. The
+remainder is the condition without those words: what the engine rewrites.
 """
 
 import re
@@ -29,13 +30,17 @@ from jiffin.core.grammar import (
     NextWeek,
     Part,
     PeriodLabel,
+    SituationLabels,
     ThisWeek,
     Unclear,
     Until,
     WeekdayEveryWeeks,
     WeekdaysOnce,
+    alternatives,
     labels,
     phrases,
+    situation_labels,
+    situation_phrases,
 )
 from jiffin.core.schedule import (
     DAY_STARTS_AT,
@@ -56,6 +61,8 @@ from jiffin.core.schedule import (
     instances,
     jiffin_day,
 )
+from jiffin.core.situations import Term
+from jiffin.lang.situations import SITUATIONS
 from jiffin.lang.time import TIME
 
 PARTS = {
@@ -72,20 +79,33 @@ CONNECTORS = frozenset(TIME.read.remainder.connectors)
 """Words a removed time leaves hanging: "quando apro Steam, ma non nel weekend"."""
 LEADS = frozenset(TIME.read.remainder.leads)
 """Prepositions that lead into a removed time, and go with it: "nel pomeriggio di domani". After
-a time they stay: "domani a casa"."""
+a time they stay: "domani a Milano"."""
 EMPTY_BRACKETS = re.compile(r"\(\s*\)|\[\s*\]")
 """"quando apro Outlook (lunedì dopo le 14)" leaves "()"."""
+LEFT_ALONE = (
+    *SITUATIONS.read.openers,
+    *SITUATIONS.read.call.holds_verbs,
+    *SITUATIONS.read.power.battery_verbs,
+    *SITUATIONS.read.power.plugged_verbs,
+    *SITUATIONS.read.network.verbs,
+)
+"""What the situations may leave of a condition that has nothing else: "quando" of "quando sono
+in call", "quando sono" of "quando sono da più di un'ora in call"."""
+OPENERS_ONLY = re.compile(
+    rf"(?:(?:{alternatives(set(LEFT_ALONE))})(?![\w'])[\s,;]*)*", re.IGNORECASE
+)
 
 
 @dataclass(frozen=True, slots=True)
 class Reading:
-    """What the time of a condition means."""
+    """What the time and the situations of a condition mean."""
 
     schedule: Schedule | None
     """None when the condition has no time, or one not understood."""
     remainder: str
-    """The condition without its time words, and without the connectors they leave hanging;
-    the whole condition, byte for byte, when it has no time or one not understood."""
+    """The condition without the words of its time and of its situations, and without the
+    connectors they leave hanging; the whole condition, byte for byte, when it has neither, or a
+    time not understood."""
     unclear: tuple[tuple[int, int], ...] = ()
     """Where the words not understood are, as [start, end) offsets, to name them."""
     past: bool = False
@@ -93,35 +113,54 @@ class Reading:
     recurring: bool = False
     """Words that tick "Ogni volta" by themselves: "ogni…", or a recurrence of the month or of
     the year (#92)."""
+    situations: tuple[Term, ...] = ()
+    """The situations of the condition (ADR-0028); none when they are not understood, and with a
+    time not understood."""
 
 
 def read(condition: str, written_at: datetime) -> Reading:
-    """The time of `condition`, written at the local time `written_at` (only its wall clock
-    counts). A pure function: the creation window calls it at every key."""
+    """The time and the situations of `condition`, written at the local time `written_at` (only
+    its wall clock counts). A pure function: the creation window calls it at every key.
+
+    Situations not understood leave the condition as it reads without them, its time included: a
+    reminder works without its situations (ADR-0028). A time not understood leaves it whole."""
     written_at = written_at.replace(tzinfo=None, second=0, microsecond=0)
-    found = labels(condition)
-    # Without a time, or with one not understood, the condition stays byte for byte: the
-    # statement the engine writes from it stays today's (ADR-0008).
-    if found.unclear:
-        return Reading(None, condition, found.unclear, recurring=found.recurring)
-    if not found.spans:
-        return Reading(None, condition, recurring=found.recurring)
+    found = situation_phrases(condition)
+    time = labels(condition, [(start, end) for start, end, _ in found])
+    situations = situation_labels(condition, found, time.spans)
+    spans = (*time.spans, *situations.spans)
+    remainder = _remainder(condition, spans, situated=True) if situations.terms else None
+    if situations.terms and situations.lasting and not remainder:  # how long, but of nothing
+        situations = SituationLabels(situations.spans, situations.lasting)
+    if situations.unclear:
+        time = labels(condition)
+        spans, remainder = time.spans, None
+    unclear = phrases(condition, (*time.unclear, *situations.unclear))
+    # Without a time or situations, or with a time not understood, the condition stays byte for
+    # byte: the statement the engine writes from it stays today's (ADR-0008).
+    if time.unclear or not spans:
+        return Reading(None, condition, unclear, recurring=time.recurring)
     try:
-        schedule = _schedule(found, written_at)
+        schedule = _schedule(time, written_at) if time.spans else None
     except (Unclear, ValueError):  # ValueError: a date that does not exist, "il 31 aprile"
-        unclear = phrases(condition, found.spans)
-        return Reading(None, condition, unclear, recurring=found.recurring)
+        unclear = phrases(condition, (*time.spans, *situations.unclear))
+        return Reading(None, condition, unclear, recurring=time.recurring)
     return Reading(
         schedule,
-        _remainder(condition, found.spans),
-        past=next(instances(schedule, written_at), None) is None,
-        recurring=found.recurring,
+        _remainder(condition, spans) if remainder is None else remainder,
+        unclear,
+        past=schedule is not None and next(instances(schedule, written_at), None) is None,
+        recurring=time.recurring,
+        situations=situations.terms,
     )
 
 
-def _remainder(condition: str, spans: tuple[tuple[int, int], ...]) -> str:
+def _remainder(
+    condition: str, spans: tuple[tuple[int, int], ...], *, situated: bool = False
+) -> str:
     """The condition without the spans, and without what they leave hanging: connectors,
-    commas, empty brackets, a preposition that led into a time."""
+    commas, empty brackets, a preposition that led into a time; and, `situated`, the words that
+    open a condition when nothing else is left of it."""
     pieces = []
     cursor = 0
     for start, end in sorted(spans):
@@ -129,7 +168,10 @@ def _remainder(condition: str, spans: tuple[tuple[int, int], ...]) -> str:
         cursor = end
     pieces.append(_trim(condition[cursor:], CONNECTORS))
     joined = EMPTY_BRACKETS.sub(" ", " ".join(piece for piece in pieces if piece))
-    return _trim(" ".join(joined.split()), CONNECTORS)
+    remainder = _trim(" ".join(joined.split()), CONNECTORS)
+    if situated and OPENERS_ONLY.fullmatch(remainder.replace("’", "'")):
+        return ""
+    return remainder
 
 
 def _trim(piece: str, last_words: frozenset[str]) -> str:
