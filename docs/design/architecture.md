@@ -153,8 +153,10 @@ sequenceDiagram
 The Italian the app shows lives in the files of `src/jiffin/lang/it/`, not in
 the code ([ADR-0026](../adr/0026-italian-in-language-files.md)): `texts.toml`
 holds the texts of the interface, one key per text, named after the code's
-names, and `time.toml` the words of a time, which `core` reads in a condition
-and `ui/words.py` writes back ([time.md](time.md#the-lexicon)); `harness.toml`
+names, `time.toml` the words of a time, which `core` reads in a condition
+and `ui/words.py` writes back ([time.md](time.md#the-lexicon)), and
+`situations.toml` the words of the situations, which `core` reads beside the
+time ([situations.md](situations.md#the-lexicon)); `harness.toml`
 holds the texts of the harness's pages, which the harness alone reads
 ([harness.md](harness.md#the-pages)). `lang` is a part of its own, without Qt,
 that imports nothing else from the package; every other part may import it,
@@ -162,11 +164,13 @@ that imports nothing else from the package; every other part may import it,
 
 - **Read once, at import.** Each language file has a module that reads it into
   frozen dataclasses: `jiffin.lang.texts` reads `texts.toml` into `TEXTS`,
-  `jiffin.lang.time` reads `time.toml` into `TIME`, `jiffin.lang.harness`
-  reads `harness.toml` into `HARNESS`, and a file that cannot be read, a key
-  missing or one too many raise `CatalogError`, which stops the tests and the
-  start. `jiffin.lang.texts` also writes numbers, sizes and lists
-  as the language writes them: "2.600.224.416", "2,4 GB", "Chrome e Brave".
+  `jiffin.lang.time` reads `time.toml` into `TIME`,
+  `jiffin.lang.situations` reads `situations.toml` into `SITUATIONS`,
+  `jiffin.lang.harness` reads `harness.toml` into `HARNESS`, and a file that
+  cannot be read, a key missing or one too many raise `CatalogError`, which
+  stops the tests and the start. `jiffin.lang.texts` also writes numbers,
+  sizes and lists as the language writes them: "2.600.224.416", "2,4 GB",
+  "Chrome e Brave".
 - **Python** reads a text by its key, `TEXTS.alert.done`, and fills its
   placeholders, `TEXTS.app.cannot_start.format(log=…)`.
 - **QML** reads every text through `Texts.qml`, a typed facade over the

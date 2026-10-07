@@ -31,12 +31,17 @@ stateDiagram-v2
 
 - **The unit.** A reminder rings at most once per unit (`units.by_instance`):
   the **instance of its time** for a reminder with only a time, with a moment
-  or a frequency, and with a one-off date, which rings once; the **occasion**
-  for the others, which have a remainder the judge checks. An occasion starts
-  with a true stretch, a stable context judged true or answered Remind here,
-  not answered Not here, while its time holds, that begins at least the return
+  or a frequency, and with a one-off date, which rings once; with situations
+  ([situations.md](situations.md#when-a-reminder-rings)), **each end** for a
+  reminder with an end, and **each stretch of its situations**, within its
+  time, for one without a remainder; the **occasion** for the others, which
+  have a remainder the judge checks. An occasion starts with a true stretch, a
+  stable context judged true or answered Remind here, not answered Not here,
+  while its time and its situations hold, that begins at least the return
   pause after the last one ended: 2 minutes unless the settings say otherwise.
-  An alert asked with Remind here starts a stretch at its time.
+  An alert asked with Remind here starts a stretch at its time. A duration of
+  the thing ("da più di 20 minuti") rings in its occasion once it has lasted
+  that long.
 - **The windows** (`units.windows`): how long an instance may ring from its
   start.
 
@@ -47,6 +52,7 @@ stateDiagram-v2
   | with a date | forever, until it has rung | until the instance ends; a moment until 04:00 |
   | a frequency | the windows of its days and hours; the unit is the period | the same |
   | within a period of dates | never after the period | the same |
+  | an end of a situation, within the window of its time | until the next end | until 04:00 |
 
   A moment already past when the condition was written has no window: the
   time counts from when it was written, and Edit keeps that while the
@@ -59,8 +65,9 @@ stateDiagram-v2
   under its threshold, while its time, Snooze, the occasion and Done still
   hold; if the context is still in front it rings at once, as asked, in any
   state of Active; otherwise the yes holds from the next time there. On a
-  reminder with only a time it just rings. Remind here near the cut lowers the
-  reminder's threshold ([pipeline.md](pipeline.md#a-threshold-per-reminder)).
+  reminder without a remainder it just rings. Remind here near the cut
+  lowers the reminder's threshold
+  ([pipeline.md](pipeline.md#a-threshold-per-reminder)).
   A place can be forgotten, one at a time or all of them (`withdraw`,
   `withdraw_all`): as if never answered there, and the threshold is computed
   again.
@@ -77,15 +84,18 @@ stateDiagram-v2
   **Delete** removes the reminder and everything about it.
 - **After a restart** each reminder goes on from its last alert that counts and
   from its snooze, so the instances of a time stay exact; occasions start
-  afresh. The places answered Not here come back; until migration 0003 the
-  store keeps neither Remind here nor the withdrawals.
+  afresh, and so do the stretches of the situations, from their state read at
+  start. The places answered Not here come back; until migration 0003 the
+  store keeps neither Remind here, nor the withdrawals, nor a revision's
+  situations.
 - **A pause from the tray**
   ([ADR-0024](../adr/0024-hold-and-hide-alerts.md)), "Sospendi per un'ora" or
   "Sospendi fino a domani", is away for every reminder: the context in front
   leaves when it starts, and nothing is judged and nothing rings until it ends
   or Resume. Then what is in front comes back as after any absence: occasions
-  start again, a late instance rings, due from the return, and a snooze that
-  ended meanwhile rings at the first chance. Its end is kept with the
+  start again, a late instance or an end that came meanwhile rings, due from
+  the return, and a snooze that ended meanwhile rings at the first chance. The
+  situations are read and recorded all along. Its end is kept with the
   settings, so it goes on after a restart. Alerts already on screen stay.
 
 ## Answers
@@ -128,7 +138,8 @@ stateDiagram-v2
 - The tray list keeps one unseen alert per reminder, the newest, on top, newest
   first: when a reminder rings again, its old one leaves unanswered, and does
   not come back after a restart.
-- An alert of a reminder with only a time has no evaluation and no d.
+- An alert of a reminder without a remainder, with only a time or situations,
+  has no evaluation and no d.
 - An alert asked with Remind here is `requested`: it has no evaluation, so it
   is never the judge's; its d is the one the cache holds there, and it was due
   when asked.

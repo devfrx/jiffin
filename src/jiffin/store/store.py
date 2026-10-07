@@ -33,6 +33,7 @@ from jiffin.core.records import (
     Snapshot,
     Snooze,
 )
+from jiffin.core.situations import SituationStretch
 from jiffin.store import schedules
 from jiffin.store.database import open_database
 
@@ -126,6 +127,8 @@ class Store:
                         self._save_evaluation(record)
                     case Left():
                         self._save_left(record)
+                    case SituationStretch():
+                        pass  # until migration 0003 gives them their table, `situation` (#150)
                     case Alert():
                         self._save_alert(record)
                     case _:
@@ -349,12 +352,15 @@ class Store:
                 evaluation.return_pause,
             ),
         )
+        # Until migration 0003 adds `outside_situation` to the outcomes of `candidate` (#150),
+        # a reminder outside its situation leaves no row: its d is in the cache.
         self._db.executemany(
             """INSERT INTO candidate (evaluation, revision, d, from_cache, outcome)
             VALUES (?, ?, ?, ?, ?)""",
             [
                 (evaluation.id, c.revision_id, c.d, int(c.from_cache), c.outcome.value)
                 for c in evaluation.candidates
+                if c.outcome is not Outcome.OUTSIDE_SITUATION
             ],
         )
 

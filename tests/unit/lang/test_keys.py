@@ -17,11 +17,17 @@ from pathlib import Path
 
 from jiffin.lang import Plural
 from jiffin.lang.harness import HARNESS
+from jiffin.lang.situations import SITUATIONS
 from jiffin.lang.texts import TEXTS
 from jiffin.lang.time import TIME
 
 SOURCE = Path(__file__).resolve().parents[3] / "src" / "jiffin"
-ROOTS: Mapping[str, object] = {"TEXTS": TEXTS, "TIME": TIME, "HARNESS": HARNESS}
+ROOTS: Mapping[str, object] = {
+    "TEXTS": TEXTS,
+    "TIME": TIME,
+    "HARNESS": HARNESS,
+    "SITUATIONS": SITUATIONS,
+}
 QML_KEY = re.compile(r'Catalog\.text\("([^"]+)"\)')
 PAGE_KEY = re.compile(r"\bt\.([\w.]+)")
 PAGE_FORMAT = re.compile(r"\bt\.([\w.]+)\.format\(([^)]*)\)")

@@ -1,4 +1,5 @@
-"""Jiffin's own Italian time grammar: it finds the time words of a condition and labels them.
+"""Jiffin's own Italian grammar of a condition: it finds the words of its time and of its
+situations, and labels them.
 
 Technique A of #80 (ADR-0020). The vocabulary is closed, and a phrasing it does not know is never
 guessed: time words left over after the match, or a word beside a match that changes it ("verso
@@ -7,16 +8,35 @@ Names are not time: quoted names, words with a digit or a dot inside, capitalize
 the first, the number after a name ("Windows 11"), a number that counts something ("alle 20
 pagine"). The labels say what the words say; `meanings` knows what they mean.
 
-The words are the lexicon of `jiffin.lang.time` (ADR-0026); the rules that read them are here:
-the patterns, in order, and what each match says.
+The situations are read first, with the same technique (ADR-0028), and set aside: their words are
+no time, and their durations ("da più di 20 minuti") are no count of hours left over.
+
+The words are the lexicons of `jiffin.lang.time` and `jiffin.lang.situations` (ADR-0026); the
+rules that read them are here: the patterns, in order, and what each match says.
 """
 
 import re
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
 from jiffin.core.schedule import MonthDay, MonthWeekday, Unit, YearDay
+from jiffin.core.situations import (
+    BATTERY,
+    CALL_APPS,
+    HOME,
+    NO,
+    OFFICE,
+    OFFLINE,
+    PLUGGED,
+    YES,
+    Ends,
+    Holds,
+    Lasts,
+    Situation,
+    Term,
+)
+from jiffin.lang.situations import SITUATIONS
 from jiffin.lang.time import TIME, Fused
 
 
@@ -466,7 +486,8 @@ def date_words(match: re.Match[str]) -> DateWords:
 type Handler = Callable[[re.Match[str]], list[Piece] | None]
 
 
-def on_minutes(match: re.Match[str]) -> list[Piece]:
+def minutes_of(match: re.Match[str]) -> int:
+    """The minutes of a match of `SPAN_OF_MINUTES`."""
     if match["w"]:
         minutes = WORDS.durations[" ".join(match["w"].split())]
     else:
@@ -475,7 +496,11 @@ def on_minutes(match: re.Match[str]) -> list[Piece]:
         minutes += int(match["xm"])
     elif match["x"]:
         minutes += WORDS.added_minutes[" ".join(match["x"].split())]
-    return [InMinutes(minutes)]
+    return minutes
+
+
+def on_minutes(match: re.Match[str]) -> list[Piece]:
+    return [InMinutes(minutes_of(match))]
 
 
 def on_days_in(match: re.Match[str]) -> list[Piece]:
@@ -614,20 +639,20 @@ EVERY_UNIT_FORMS = (
 )
 """The units after "ogni": not one day, which is every day ("ogni giorno"), read further on."""
 ALL_UNIT_FORMS = tuple(UNIT_OF)
+SPAN_OF_MINUTES = (
+    rf"(?:(?P<n>{NUMBER})\s+"
+    rf"(?P<u>{alternatives((*HOUR_FORMS, *MINUTE_FORMS))})(?!\w)"
+    rf"|(?P<pair>{PAIR}){phrase(UNITS.hour.other)}(?!\w)"
+    rf"|(?P<w>{alternatives(WORDS.durations)}))"
+    rf"(?:\s+{AND}\s+(?P<x>{alternatives(WORDS.added_minutes)}"
+    rf"|(?P<xm>\d{{1,2}})\s+{phrase(UNITS.minute.other)}))?"
+)
+""""2 ore e mezza", "un'ora", "un paio d'ore": the minutes of "tra 2 ore", and how long a
+situation has lasted, "da più di 20 minuti"."""
 
 # Tried in order; a match may not overlap an earlier one.
 PATTERNS: list[tuple[str, Handler]] = [
-    (
-        (
-            rf"\b(?:{WITHIN})\s+(?:(?P<n>{NUMBER})\s+"
-            rf"(?P<u>{alternatives((*HOUR_FORMS, *MINUTE_FORMS))})(?!\w)"
-            rf"|(?P<pair>{PAIR}){phrase(UNITS.hour.other)}(?!\w)"
-            rf"|(?P<w>{alternatives(WORDS.durations)}))"
-            rf"(?:\s+{AND}\s+(?P<x>{alternatives(WORDS.added_minutes)}"
-            rf"|(?P<xm>\d{{1,2}})\s+{phrase(UNITS.minute.other)}))?"
-        ),
-        on_minutes,
-    ),
+    (rf"\b(?:{WITHIN})\s+{SPAN_OF_MINUTES}", on_minutes),
     (
         (
             rf"\b(?:{WITHIN})\s+(?:(?P<n>{NUMBER})\s+|(?P<pair>{PAIR}))"
@@ -903,8 +928,12 @@ def masked(condition: str) -> str:
     return "".join(chars)
 
 
-def labels(condition: str) -> Labels:
+def labels(condition: str, aside: Iterable[tuple[int, int]] = ()) -> Labels:
+    """What the time words of `condition` say. The spans `aside`, its situations (ADR-0028), are
+    no time: they are blanked out, as names are."""
     text = masked(condition)
+    for start, end in aside:
+        text = text[:start] + "\0" * (end - start) + text[end:]
     claimed: list[tuple[int, int]] = []
     pieces: list[Piece] = []
     for pattern, handle in COMPILED:
@@ -1044,3 +1073,244 @@ def _modifier_before(text: str, start: int) -> int | None:
 def _modifies(word: str) -> bool:
     """Whether a word before a time changes it, also behind an elided article: "l'ultimo"."""
     return word.rpartition("'")[2] in MODIFIERS_BEFORE
+
+
+# The situations (ADR-0028)
+#
+# A closed list of phrases, each with the verb that may lead into it ("sono in call", "esco di
+# casa"). What is left over, a word beside a phrase that changes it, two of a kind, an end with a
+# duration: not understood. Names are no situations, but those of the call apps are.
+
+
+@dataclass(frozen=True, slots=True)
+class SituationLabels:
+    """What the situation words of a condition say."""
+
+    spans: tuple[tuple[int, int], ...] = ()
+    """Where they are, as [start, end) offsets of the condition."""
+    unclear: tuple[tuple[int, int], ...] = ()
+    """Where the words not understood are. When there are any, the situations are unclear."""
+    terms: tuple[Term, ...] = ()
+    """In the order written."""
+    lasting: tuple[tuple[int, int], ...] = ()
+    """Where the durations of the thing the judge checks are: with no thing, not understood."""
+
+
+type Phrase = tuple[int, int, Term]
+"""A situation phrase found: where it is, and what it says. A duration found alone is a `Lasts`
+of no situation until it goes with one."""
+type SituationHandler = Callable[[re.Match[str]], Term | None]
+
+SITUATION_WORDS = SITUATIONS.read
+APPS = {name: key for key, app in CALL_APPS.items() for name in app.names}
+"""The call apps by the names a condition may give them."""
+KEPT = frozenset({"pc", "wi-fi", *(word for name in APPS for word in name.split())})
+"""Words a condition may capitalize that are not names: "su Zoom", "al PC"."""
+PLACEHOLDER = re.compile(r"\{(\w+)\}")
+
+
+def templates(forms: Iterable[str], **parts: str) -> str:
+    """Forms as one alternation, the longest first, a placeholder standing for its part: "in
+    {call}" is "in call", "in chiamata"…"""
+
+    def one(form: str) -> str:
+        pieces = PLACEHOLDER.split(form)
+        return r"\s+".join(
+            parts[piece] if index % 2 else phrase(piece.strip())
+            for index, piece in enumerate(pieces)
+            if index % 2 or piece.strip()
+        )
+
+    return "|".join(one(form) for form in sorted(forms, key=len, reverse=True))
+
+
+def led(verbs: Iterable[str], forms: str) -> str:
+    """Forms with a verb that may lead into them, and goes with them: "sono in call"."""
+    return rf"(?:(?:{alternatives(verbs)})\s+)?(?:{forms})"
+
+
+def said(term: Term) -> SituationHandler:
+    def handle(match: re.Match[str]) -> Term:
+        return term
+
+    return handle
+
+
+def on_call(form: type[Holds] | type[Ends]) -> SituationHandler:
+    def handle(match: re.Match[str]) -> Term:
+        app = match["app"]
+        return form(Situation.CALL, None if app is None else APPS[" ".join(app.split())])
+
+    return handle
+
+
+def on_lasting(match: re.Match[str]) -> Term | None:
+    minutes = minutes_of(match)
+    return Lasts(minutes) if minutes > 0 else None
+
+
+CALL = SITUATION_WORDS.call
+CALL_WORD = rf"(?:{alternatives(CALL.words)})"
+ON_APP = rf"(?:\s+(?:{alternatives(CALL.before_app)})\s+(?P<app>{alternatives(APPS)})(?![\w']))?"
+""""su Zoom", "di WhatsApp", after a call."""
+AWAY = SITUATION_WORDS.away
+POWER = SITUATION_WORDS.power
+DISPLAY = SITUATION_WORDS.display
+HEADPHONES = SITUATION_WORDS.headphones
+NETWORK = SITUATION_WORDS.network
+DISPLAY_WORD = rf"(?:{alternatives(DISPLAY.words)})"
+HEADPHONES_WORD = rf"(?:{alternatives(HEADPHONES.words)})"
+
+# Tried in order; a match may not overlap an earlier one: "torno a casa" before "torno".
+SITUATION_PATTERNS: list[tuple[str, SituationHandler]] = [
+    (rf"(?:{alternatives(SITUATION_WORDS.lasting)})\s+{SPAN_OF_MINUTES}", on_lasting),
+    (led(NETWORK.verbs, alternatives(NETWORK.home)), said(Holds(Situation.NETWORK, HOME))),
+    (led(NETWORK.verbs, alternatives(NETWORK.office)), said(Holds(Situation.NETWORK, OFFICE))),
+    (led(NETWORK.verbs, alternatives(NETWORK.offline)), said(Holds(Situation.NETWORK, OFFLINE))),
+    (alternatives(NETWORK.leave_home), said(Ends(Situation.NETWORK, HOME))),
+    (alternatives(NETWORK.leave_office), said(Ends(Situation.NETWORK, OFFICE))),
+    (alternatives(NETWORK.online), said(Ends(Situation.NETWORK, OFFLINE))),
+    (led(CALL.holds_verbs, templates(CALL.holds, call=CALL_WORD)) + ON_APP, on_call(Holds)),
+    (rf"(?:{templates(CALL.ends, call=CALL_WORD)}){ON_APP}", on_call(Ends)),
+    (
+        templates(HEADPHONES.on, headphones=HEADPHONES_WORD),
+        said(Holds(Situation.HEADPHONES, YES)),
+    ),
+    (alternatives(HEADPHONES.off), said(Holds(Situation.HEADPHONES, NO))),
+    (
+        templates(HEADPHONES.take_off, headphones=HEADPHONES_WORD),
+        said(Ends(Situation.HEADPHONES, YES)),
+    ),
+    (templates(DISPLAY.connected, display=DISPLAY_WORD), said(Holds(Situation.DISPLAY, YES))),
+    (alternatives(DISPLAY.disconnected), said(Holds(Situation.DISPLAY, NO))),
+    (templates(DISPLAY.disconnect, display=DISPLAY_WORD), said(Ends(Situation.DISPLAY, YES))),
+    (led(POWER.battery_verbs, alternatives(POWER.battery)), said(Holds(Situation.POWER, BATTERY))),
+    (led(POWER.plugged_verbs, alternatives(POWER.plugged)), said(Holds(Situation.POWER, PLUGGED))),
+    (alternatives(POWER.unplug), said(Ends(Situation.POWER, PLUGGED))),
+    (alternatives(AWAY.holds), said(Holds(Situation.AWAY, YES))),
+    (alternatives(AWAY.ends), said(Ends(Situation.AWAY, YES))),
+]
+SITUATION_COMPILED = [
+    (re.compile(rf"(?<![\w'])(?:{pattern})(?![\w'])"), handle)
+    for pattern, handle in SITUATION_PATTERNS
+]
+SITUATION_LEFTOVER = re.compile(rf"(?<![\w'])(?:{alternatives(SITUATION_WORDS.leftover)})(?![\w'])")
+SITUATION_BEFORE = frozenset(SITUATION_WORDS.modifiers_before)
+SITUATION_AFTER = frozenset(SITUATION_WORDS.modifiers_after)
+AFTER_LASTING = re.compile(rf"\s+(?:{alternatives(SITUATION_WORDS.after_lasting)})(?![\w'])")
+
+
+def situation_text(condition: str) -> str:
+    """The condition in lower case, its names blanked out as `masked` does, but for the names of
+    the call apps; the offsets do not change."""
+    chars = list(condition.replace("’", "'"))
+    for found in QUOTED.finditer(condition):
+        chars[found.start() : found.end()] = "\0" * (found.end() - found.start())
+    for index, token in enumerate(re.finditer(r"\S+", condition)):
+        word = token.group().strip(',;:.!?«»"“”()[]')
+        if word.lower() in KEPT:
+            continue
+        inside = NAME_INSIDE.search(word) is not None and NOT_NAMES.fullmatch(word.lower()) is None
+        if inside or (index > 0 and word[:1].isupper()):
+            chars[token.start() : token.end()] = "\0" * (token.end() - token.start())
+    return "".join(c.lower() if len(c.lower()) == 1 else c for c in chars)
+
+
+def situation_phrases(condition: str) -> tuple[Phrase, ...]:
+    """The situation phrases of a condition, in the order written."""
+    text = situation_text(condition)
+    found: list[Phrase] = []
+    for pattern, handle in SITUATION_COMPILED:
+        for match in pattern.finditer(text):
+            start, end = match.span()
+            if start == end or any(start < e and s < end for s, e, _ in found):
+                continue
+            term = handle(match)
+            if term is not None:
+                found.append((start, end, term))
+    return tuple(sorted(found, key=lambda phrase: phrase[0]))
+
+
+def situation_labels(
+    condition: str, found: Sequence[Phrase], times: Sequence[tuple[int, int]]
+) -> SituationLabels:
+    """What the phrases found say, beside the time words at `times`: a duration goes with the
+    situation right before it, else right after it ("sono da più di un'ora in call"), else with
+    the thing the judge checks."""
+    text = situation_text(condition)
+    spans = tuple((start, end) for start, end, _ in found)
+    terms, lasting, disagree = _terms(text, found)
+    rest = list(text)
+    for start, end in (*spans, *times):
+        rest[start:end] = " " * (end - start)
+    regions = [match.span() for match in SITUATION_LEFTOVER.finditer("".join(rest))]
+    regions += disagree
+    starts = {start for start, _ in (*spans, *times)}
+    # A duration of the thing the judge checks goes with the thing's words, whatever they are.
+    for start, end in phrases(text, [span for span in spans if span not in lasting]):
+        before = WORD_BEFORE.search(text, 0, start)
+        if before is not None and before[1] in SITUATION_BEFORE:
+            regions.append((before.start(1), end))
+        after = WORD_AFTER.match(text, end)
+        if after is not None and after.start(1) not in starts and _changes(after[1]):
+            # The word it brings goes with it, a name too: "in call con Mario".
+            following = WORD_AFTER.match(condition.replace("’", "'"), after.end(1))
+            regions.append((start, after.end(1) if following is None else following.end(1)))
+    for start, end, term in found:
+        per = AFTER_LASTING.match(text, end) if isinstance(term, Lasts) else None
+        if per is not None:  # "da più di un'ora al giorno" does not say since when
+            regions.append((start, per.end()))
+    unclear = phrases(text, regions)
+    return SituationLabels(spans, unclear, () if unclear else terms, lasting)
+
+
+def _changes(word: str) -> bool:
+    """Whether a word after a situation changes it, also an elided article: "l'altra"."""
+    head, apostrophe, _ = word.partition("'")
+    return (head + apostrophe) in SITUATION_AFTER
+
+
+def _terms(
+    text: str, found: Sequence[Phrase]
+) -> tuple[tuple[Term, ...], tuple[tuple[int, int], ...], list[tuple[int, int]]]:
+    """The terms, with where the durations of the thing are, and where the phrases disagree:
+    two of a kind, two ends, an end with a duration."""
+    terms: list[Term | None] = [term for _, _, term in found]
+    durations: list[tuple[int, int]] = []
+    disagree: list[tuple[int, int]] = []
+
+    def beside(index: int) -> int | None:
+        """The situation right before the duration at `index`, else the one right after it."""
+        for other in (index - 1, index + 1):
+            if not 0 <= other < len(found) or isinstance(found[other][2], Lasts):
+                continue
+            first, second = sorted((index, other))
+            if not text[found[first][1] : found[second][0]].strip():
+                return other
+        return None
+
+    for index, (start, end, term) in enumerate(found):
+        if not isinstance(term, Lasts):
+            continue
+        other = beside(index)
+        if other is None:
+            durations.append((start, end))
+            continue
+        situation = terms[other]
+        if isinstance(situation, Holds):
+            terms[other] = Lasts(term.minutes, situation.situation, situation.value)
+            terms[index] = None
+        else:  # an end, or a situation with a duration already
+            disagree += [(start, end), (found[other][0], found[other][1])]
+    kept = [term for term in terms if term is not None]
+    kinds = [term.situation for term in kept if term.situation is not None]
+    ends = [term for term in kept if isinstance(term, Ends)]
+    things = [term for term in kept if isinstance(term, Lasts) and term.situation is None]
+    if (
+        len(set(kinds)) < len(kinds)
+        or len(ends) > 1
+        or (ends and any(isinstance(term, Lasts) for term in kept))
+        or len(things) > 1
+    ):
+        disagree += [(start, end) for start, end, _ in found]
+    return tuple(kept), tuple(durations), disagree

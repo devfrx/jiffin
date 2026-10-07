@@ -7,15 +7,19 @@ the alerts and the reminders through two callbacks, and hands the records to sav
 calls `take_records`.
 
 A reminder rings at most once per unit (`units`): the instance of its time, or the occasion. An
-occasion starts with a true stretch, a stable context judged true while its time holds, that
-begins at least the return pause after the previous one ended.
+occasion starts with a true stretch, a stable context judged true while its time and its
+situations hold, that begins at least the return pause after the previous one ended.
+
+The situations (ADR-0028) come from observations of their own, which count once they have lasted
+5 s (`situations`). A reminder rings while they hold, as it does while its time holds; without a
+remainder it is never judged, and its unit is each stretch of its situations, or each end.
 
 What the user says of a reminder in a place, an exact context, counts there until its text
 changes: Not here keeps it quiet there, Remind here makes it true there, and Remind here near
 the cut lowers its threshold (ADR-0029).
 
 A pause from the tray is away until it ends (ADR-0024): nothing is in front for the reminders,
-whatever the capture sees, and its end is a return.
+whatever the capture sees, and its end is a return. The situations are followed meanwhile.
 """
 
 import itertools
@@ -48,6 +52,14 @@ from jiffin.core.records import (
     Snooze,
 )
 from jiffin.core.schedule import jiffin_day
+from jiffin.core.situations import (
+    Ends,
+    Holds,
+    Lasts,
+    Situation,
+    SituationObservation,
+    Situations,
+)
 from jiffin.core.units import Times, by_instance
 
 THRESHOLD = 0.97
@@ -177,6 +189,19 @@ class _Time:
 _ALWAYS = _Time(None, None, None)
 
 
+def _thing_minutes(revision: Revision) -> int | None:
+    """How long the thing the judge checks must have lasted: "quando sono su YouTube da più di 20
+    minuti" (ADR-0028); None without such a duration."""
+    return next(
+        (
+            term.minutes
+            for term in revision.situations
+            if isinstance(term, Lasts) and term.situation is None
+        ),
+        None,
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class _Said:
     """The answer that counts in a place, with the reminder's d there and the build of that d,
@@ -246,6 +271,11 @@ class Reminders:
         self._stretches: dict[int, _Stretches] = {}
         self._times: dict[int, Times] = {}
         """The windows of the revisions with a time, by revision."""
+        self._situations = Situations()
+        """Read again from the capture's observations: after a restart a situation's stretch
+        starts from its state read at start (ADR-0028)."""
+        for reminder in saved.reminders:
+            self._situations.follow(reminder.revision.situations)
         self._snooze_deadlines = {
             reminder.id: reminder.snoozed_until
             for reminder in saved.reminders
@@ -289,13 +319,13 @@ class Reminders:
 
     @property
     def deadline(self) -> int | None:
-        """When `poll` has something to do: a context becomes stable, a snooze or the pause ends,
-        or the time of a reminder starts or ends while a context is stable."""
+        """When `poll` has something to do: a context becomes stable, a change of a situation
+        counts, a snooze or the pause ends; or, while a context is stable, the time of a reminder
+        starts or ends, or a duration of its situations is reached."""
         deadlines = [*self._snooze_deadlines.values(), *self._edges.values()]
-        if self._debounce.deadline is not None:
-            deadlines.append(self._debounce.deadline)
-        if self._paused_until is not None:
-            deadlines.append(self._paused_until)
+        for deadline in (self._debounce.deadline, self._situations.deadline, self._paused_until):
+            if deadline is not None:
+                deadlines.append(deadline)
         return min(deadlines, default=None)
 
     @property
@@ -317,11 +347,18 @@ class Reminders:
         )
         return Need.SOON if missing else Need.NOT_NOW
 
-    def observe(self, observation: Observation) -> None:
+    def observe(self, observation: Observation | SituationObservation) -> None:
+        """What the capture saw: the window in front, or a situation (ADR-0028)."""
         self._catch_up(observation.at)
-        self._seen = observation.context
-        if self._paused_until is None:
-            self._in_front(observation)
+        if isinstance(observation, SituationObservation):
+            self._situations.observe(observation)
+            if observation.values is None:  # not read any more: it does not hold, at once
+                self._changed([observation.situation], observation.at)
+            self._records.extend(self._situations.take_records())
+        else:
+            self._seen = observation.context
+            if self._paused_until is None:
+                self._in_front(observation)
         self._publish()
 
     def poll(self) -> None:
@@ -384,6 +421,7 @@ class Reminders:
             written_at=now,
             perennial=perennial,
             created_at=now,
+            situations=reading.situations,
         )
         self._save(Reminder(reminder_id, now, revision))
         self._write_statement(reminder_id)
@@ -424,6 +462,7 @@ class Reminders:
                 statement_build=old.statement_build if same else None,
                 schedule=reading.schedule,
                 written_at=now,
+                situations=reading.situations,
             )
         self._close(reminder_id, now)
         self._save(replace(reminder, revision=revision))
@@ -565,10 +604,7 @@ class Reminders:
         ordered = [reminder for _, reminder in judged] + unjudged + on_time
         return HereView(
             place,
-            tuple(
-                HereReminder(r, self._quiet(r, place, self._time(r.revision, now), now))
-                for r in ordered
-            ),
+            tuple(HereReminder(r, self._quiet(r, place, self._span(r, now), now)) for r in ordered),
         )
 
     # Judging
@@ -578,6 +614,11 @@ class Reminders:
         while (deadline := self.deadline) is not None and deadline <= until:
             if deadline == self._paused_until:
                 self._end_pause(deadline)
+                continue
+            # Before a context that becomes stable at the same moment: it is judged with them.
+            if deadline == self._situations.deadline:
+                self._changed(self._situations.poll(deadline), deadline)
+                self._records.extend(self._situations.take_records())
                 continue
             if deadline == self._debounce.deadline:
                 request = self._debounce.poll(deadline)
@@ -603,6 +644,20 @@ class Reminders:
             if stable is not None:
                 self._evaluate(stable.context, stable.context_since, due)
                 self._plan(due, after=max(deadline, self._clock.now()))
+
+    def _changed(self, situations: list[Situation], at: int) -> None:
+        """A change of situations is a deadline (ADR-0028): while a context is stable, it is
+        judged again from the cache for the reminders on them, which ring if they may."""
+        stable = self._debounce.stable
+        if stable is None or not situations:
+            return
+        due = [
+            reminder.id
+            for reminder in self._reminders.values()
+            if any(term.situation in situations for term in reminder.revision.situations)
+        ]
+        self._evaluate(stable.context, stable.context_since, due)
+        self._plan(due, after=max(at, self._clock.now()))
 
     def _in_front(self, observation: Observation) -> None:
         """The context in front for the reminders: the capture's, or nothing while paused."""
@@ -630,9 +685,9 @@ class Reminders:
     def _evaluate(
         self, context: Context, context_since: int, reminder_ids: Iterable[int] | None
     ) -> None:
-        """In a stable context, judge the reminders with a remainder and ring those with only a
-        time: all of them when the context has just become stable, or those whose snooze or time
-        has just ended or started."""
+        """In a stable context, judge the reminders with a remainder and ring those without:
+        all of them when the context has just become stable, or those whose snooze, time or
+        situations have just changed."""
         self._write_missing_statements()
         now = self._clock.now()
         active = [
@@ -646,7 +701,7 @@ class Reminders:
             self._judge(context, context_since, judged)
         for reminder in active:
             if not reminder.revision.remainder:
-                self._ring_on_time(reminder, context, context_since)
+                self._ring_unjudged(reminder, context, context_since)
             if reminder.snoozed_until is not None and reminder.snoozed_until <= now:
                 # Its snooze is over, and it has now been checked against the current context.
                 self._snooze_deadlines.pop(reminder.id, None)
@@ -702,17 +757,19 @@ class Reminders:
             revision_id = reminder.revision.id
             d = scores[revision_id]
             self._records.append(CacheEntry(context, revision_id, build, d, now))
-            span = self._time(reminder.revision, now)
+            span = self._span(reminder, now)
             here = self._here(reminder.id, context)
             true = here is Here.YES or d >= self._threshold_of(reminder.id, build)
-            if true and span is not None and here is not Here.NO:
+            if true and isinstance(span, _Time) and here is not Here.NO:
                 start = context_since if span.start is None else max(context_since, span.start)
                 self._open(reminder.id, start, span.end)
+            elif span is Outcome.OUTSIDE_SITUATION:
+                self._close(reminder.id, self._stopped(reminder, now))
             else:
                 self._close(reminder.id, now)
             outcome = self._outcome(reminder, context, true, span, now)
             candidates.append(Candidate(revision_id, d, revision_id not in fresh, outcome))
-            if outcome is Outcome.ALERT and span is not None:
+            if outcome is Outcome.ALERT and isinstance(span, _Time):
                 alerts.append((reminder, d, self._due(reminder, span, context_since, now)))
         return build, tuple(candidates), alerts
 
@@ -739,7 +796,7 @@ class Reminders:
         return scores, set(missing)
 
     def _outcome(
-        self, reminder: Reminder, context: Context, true: bool, span: _Time | None, now: int
+        self, reminder: Reminder, context: Context, true: bool, span: _Time | Outcome, now: int
     ) -> Outcome:
         """`true`: at or above its threshold, or Remind here was said there (ADR-0029)."""
         if not true:
@@ -748,12 +805,16 @@ class Reminders:
         return Outcome.ALERT if quiet is None else quiet
 
     def _quiet(
-        self, reminder: Reminder, context: Context, span: _Time | None, now: int
+        self, reminder: Reminder, context: Context, span: _Time | Outcome, now: int
     ) -> Outcome | None:
-        """What keeps the reminder quiet in the context but the judge, in the order of ADR-0021;
-        None when nothing does."""
-        if span is None:
-            return Outcome.OUTSIDE_TIME
+        """What keeps the reminder quiet in the context but the judge, in the order of ADR-0021
+        and ADR-0028; None when nothing does."""
+        if isinstance(span, Outcome):
+            return span
+        if _thing_minutes(reminder.revision) is not None:
+            reached = self._thing_reached(reminder)
+            if reached is None or reached > now:
+                return Outcome.OUTSIDE_SITUATION
         if self._here(reminder.id, context) is Here.NO:
             return Outcome.SILENCED
         if self._snoozed(reminder, now):
@@ -762,11 +823,12 @@ class Reminders:
             return Outcome.SAME_OCCASION
         return None
 
-    def _ring_on_time(self, reminder: Reminder, context: Context, context_since: int) -> None:
-        """A reminder with only a time rings in any stable context: the user is there."""
+    def _ring_unjudged(self, reminder: Reminder, context: Context, context_since: int) -> None:
+        """A reminder without a remainder, with only a time or situations, rings in any stable
+        context: the user is there."""
         now = self._clock.now()
-        span = self._time(reminder.revision, now)
-        if span is None or self._quiet(reminder, context, span, now) is not None:
+        span = self._span(reminder, now)
+        if not isinstance(span, _Time) or self._quiet(reminder, context, span, now) is not None:
             return
         self._alert(
             reminder, None, context, None, now, self._due(reminder, span, context_since, now)
@@ -778,8 +840,8 @@ class Reminders:
         rings no second alert in the same occasion (ADR-0021); it ends at once unless the
         context is the stable one, since the card that asks is one of Jiffin's windows."""
         now = self._clock.now()
-        span = self._time(reminder.revision, now)
-        if span is not None and reminder.revision.remainder:
+        span = self._span(reminder, now)
+        if isinstance(span, _Time) and reminder.revision.remainder:
             self._open(reminder.id, now, span.end)
             stable = self._debounce.stable
             if stable is None or stable.context != context:
@@ -863,13 +925,96 @@ class Reminders:
         """The window the revision's time is in at `now`; None out of its time."""
         times = self._times_of(revision)
         if times is None:
-            # Without a time it may always ring; without a remainder either, never.
-            return _ALWAYS if revision.remainder else None
+            # Without a time it may always ring; without a remainder or situations either, never.
+            return _ALWAYS if revision.remainder or revision.situations else None
         window = times.at(self._clock.local(now))
         if window is None:
             return None
         end = None if window.end is None else self._instant(window.end)
         return _Time(self._instant(window.start), end, self._instant(window.unit))
+
+    def _span(self, reminder: Reminder, now: int) -> _Time | Outcome:
+        """When the reminder may ring now: the window of its time, from when its situations hold
+        together, with the start of its unit (ADR-0028); else what keeps it out, `OUTSIDE_TIME`
+        or `OUTSIDE_SITUATION`. A duration of the thing the judge checks counts in `_quiet`, once
+        its occasion is known."""
+        revision = reminder.revision
+        span = self._time(revision, now)
+        if span is None:
+            return Outcome.OUTSIDE_TIME
+        starts: list[int] = []
+        end: int | None = None
+        for term in revision.situations:
+            match term:
+                case Ends():
+                    end = self._end(reminder, term, span, now)
+                    if end is None:
+                        return Outcome.OUTSIDE_SITUATION
+                    starts.append(end)
+                case Lasts(minutes, situation, value) if situation is not None:
+                    since = self._situations.since(situation, value)
+                    if since is None or since + minutes * MINUTE_MS > now:
+                        return Outcome.OUTSIDE_SITUATION
+                    starts.append(since + minutes * MINUTE_MS)
+                case Lasts():
+                    pass
+                case Holds(situation, value):
+                    since = self._situations.since(situation, value)
+                    if since is None:
+                        return Outcome.OUTSIDE_SITUATION
+                    starts.append(since)
+        if not starts:
+            return span
+        start = max(starts) if span.start is None else max(span.start, *starts)
+        if by_instance(revision):
+            unit = span.unit
+        elif end is not None:  # each end
+            unit = end
+        elif not revision.remainder:  # each stretch of the situations, within its time
+            unit = start
+        else:  # the occasion
+            unit = None
+        return _Time(start, span.end, unit)
+
+    def _end(self, reminder: Reminder, term: Ends, span: _Time, now: int) -> int | None:
+        """The end the reminder may ring for now, as a moment (ADR-0028): the last one, after the
+        condition was written and within the window of its time under way. One-off, it waits
+        until the next end, so it is never lost; with "Ogni volta", until 04:00 of its Jiffin
+        day."""
+        ended = self._situations.ended(term.situation, term.value)
+        written_at = reminder.revision.written_at
+        if ended is None or (written_at is not None and ended < written_at):
+            return None
+        if span.start is not None and ended < span.start:
+            return None
+        day = jiffin_day(self._clock.local(ended))
+        if reminder.revision.perennial and day != jiffin_day(self._clock.local(now)):
+            return None
+        return ended
+
+    def _thing_reached(self, reminder: Reminder) -> int | None:
+        """When the thing the judge checks will have lasted as long as the condition wants, from
+        the start of the occasion under way (ADR-0028); None while no true stretch is under
+        way, or without such a duration."""
+        minutes = _thing_minutes(reminder.revision)
+        stretches = self._stretches.get(reminder.id)
+        if minutes is None or stretches is None or stretches.since is None:
+            return None
+        if stretches.occasion is None:
+            return None
+        return stretches.occasion + minutes * MINUTE_MS
+
+    def _stopped(self, reminder: Reminder, now: int) -> int:
+        """When the situations of the reminder stopped holding: its true stretch ends then, not
+        when the change counted, 5 s later."""
+        ends = [
+            ended
+            for term in reminder.revision.situations
+            if not isinstance(term, Ends) and term.situation is not None
+            if (ended := self._situations.ended(term.situation, term.value)) is not None
+            and ended <= now
+        ]
+        return max(ends, default=now)
 
     def _times_of(self, revision: Revision) -> Times | None:
         if revision.schedule is None or revision.written_at is None:
@@ -883,30 +1028,53 @@ class Reminders:
 
     def _plan(self, reminder_ids: Iterable[int] | None = None, after: int | None = None) -> None:
         """While a context is stable, when the time of the given reminders, or of all of them,
-        next starts or ends after now is a deadline: the context is judged again for them then."""
+        next starts or ends after now is a deadline, and so is a duration of their situations
+        reached: the context is judged again for them then."""
         if self._debounce.stable is None:
             self._edges = {}
             return
         if reminder_ids is None:
             self._edges = {}
             reminder_ids = list(self._reminders)
-        now = self._clock.local(self._clock.now() if after is None else after)
+        now = self._clock.now() if after is None else after
         for reminder_id in reminder_ids:
             self._edges.pop(reminder_id, None)
             reminder = self._reminders.get(reminder_id)
-            times = None if reminder is None else self._times_of(reminder.revision)
-            if reminder is None or reminder.completed_at is not None or times is None:
+            if reminder is None or reminder.completed_at is not None:
                 continue
-            change = times.next_change(now)
+            times = self._times_of(reminder.revision)
+            change = None if times is None else times.next_change(self._clock.local(now))
+            changes = [*self._reached(reminder, now)]
             if change is not None:
-                self._edges[reminder_id] = self._instant(change)
+                changes.append(self._instant(change))
+            if changes:
+                self._edges[reminder_id] = min(changes)
+
+    def _reached(self, reminder: Reminder, now: int) -> list[int]:
+        """When the durations of the reminder's situations, and of its thing, will be reached
+        after `now` (ADR-0028)."""
+        found = []
+        for term in reminder.revision.situations:
+            if isinstance(term, Lasts):
+                if term.situation is None:
+                    reached = self._thing_reached(reminder)
+                else:
+                    since = self._situations.since(term.situation, term.value)
+                    reached = None if since is None else since + term.minutes * MINUTE_MS
+                if reached is not None and reached > now:
+                    found.append(reached)
+        return found
 
     def _rang(self, reminder: Reminder, span: _Time, now: int) -> bool:
-        """It has rung in its unit, and no snooze with a time has ended since."""
+        """It has rung in its unit, and no snooze with a time has ended since. The unit is the
+        occasion, unless `span` gives where it starts: an instance of its time, a stretch of its
+        situations or an end (ADR-0028)."""
         last = self._last_counted(reminder.id)
         if last is None or self._returning(reminder, now):
             return False
-        if by_instance(reminder.revision):
+        revision = reminder.revision
+        ends = any(isinstance(term, Ends) for term in revision.situations)
+        if by_instance(revision) or ends or not revision.remainder:
             return span.unit is None or last >= span.unit
         stretches = self._stretches.get(reminder.id)
         return (
@@ -925,9 +1093,13 @@ class Reminders:
         return reminder.snoozed_until is not None and now < reminder.snoozed_until
 
     def _due(self, reminder: Reminder, span: _Time, context_since: int, now: int) -> int:
-        """When the alert became due: the arrival of its context, the start of its time or the end
-        of its snooze, whichever came last (ADR-0022)."""
+        """When the alert became due: the arrival of its context, the start of its time, when its
+        situations made it due (the start of a stretch, an end, a duration reached) or the end of
+        its snooze, whichever came last (ADR-0022, ADR-0028)."""
         due = context_since if span.start is None else max(context_since, span.start)
+        reached = self._thing_reached(reminder)
+        if reached is not None:
+            due = max(due, reached)
         if reminder.snoozed_until is not None and self._returning(reminder, now):
             due = max(due, reminder.snoozed_until)
         return due
@@ -948,11 +1120,13 @@ class Reminders:
         stretches.since, stretches.until = start, until
 
     def _close(self, reminder_id: int, at: int) -> None:
-        """The true stretch under way, if any, ends at `at`, or when its window ended."""
+        """The true stretch under way, if any, ends at `at`, or when its window ended; never
+        before it began."""
         stretches = self._stretches.get(reminder_id)
         if stretches is None or stretches.since is None:
             return
-        stretches.ended = at if stretches.until is None else min(at, stretches.until)
+        ended = at if stretches.until is None else min(at, stretches.until)
+        stretches.ended = max(ended, stretches.since)
         stretches.since = stretches.until = None
 
     # Helpers
@@ -960,6 +1134,7 @@ class Reminders:
     def _save(self, reminder: Reminder) -> None:
         self._reminders[reminder.id] = reminder
         self._records.append(reminder)
+        self._situations.follow(reminder.revision.situations)
         self._reminders_changed = True
 
     def _write_statement(self, reminder_id: int) -> None:

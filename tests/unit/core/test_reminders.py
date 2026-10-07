@@ -43,6 +43,14 @@ from jiffin.core.reminders import (
     tomorrow,
 )
 from jiffin.core.schedule import OnDate, Schedule, Slot
+from jiffin.core.situations import (
+    CHANGE_MS,
+    HOME,
+    OFFICE,
+    Situation,
+    SituationObservation,
+    SituationStretch,
+)
 
 START = 1_790_000_000_000  # 2026-09-21, in UTC milliseconds
 BUILD = EngineBuild(1, "0.1.0", "b11081", "79de5cb8", judge_prompt=1, rewrite_prompt=2)
@@ -143,6 +151,11 @@ class Scene:
         """Bring a context to the foreground and stay there."""
         self.reminders.observe(Observation(self.clock.now(), context))
         self.wait(milliseconds)
+
+    def situation(self, situation: Situation, *values: str) -> None:
+        """The capture observes the values of a situation now (ADR-0028)."""
+        observation = SituationObservation(self.clock.now(), situation, frozenset(values))
+        self.reminders.observe(observation)
 
     def wait(self, milliseconds: int) -> None:
         self.clock.advance(milliseconds)
@@ -1639,3 +1652,368 @@ def test_the_tray_list_learns_the_build_in_use_when_the_model_is_ready() -> None
     scene.model.down = False
     scene.reminders.model_ready()
     assert scene.listed[1].attentive
+
+
+# The situations (ADR-0028)
+
+CALL = Situation.CALL
+NETWORK = Situation.NETWORK
+ZOOM = "zoom.exe"
+STEAM = Context("steam.exe", "Steam", None)
+YOUTUBE = Context("vivaldi.exe", "Musica - YouTube", "youtube.com")
+
+
+def test_a_situation_without_a_remainder_rings_once_per_stretch_and_is_never_judged() -> None:
+    scene = Scene()
+    scene.create("quando sono in call", "spegnere la musica")
+    scene.stay(FIGMA)
+    scene.situation(CALL, ZOOM)
+    scene.wait(CHANGE_MS - 1)
+    assert scene.view.visible == ()
+    scene.wait(1)
+    alert = scene.alert()
+    assert (alert.evaluation_id, alert.d) == (None, None)
+    # Due when the call came: the 5 s count in the delay, as a context's do.
+    assert (alert.due_at, alert.created_at) == (START + DEBOUNCE_MS, START + 2 * DEBOUNCE_MS)
+    assert (scene.model.calls, scene.model.rewritten) == ([], [])
+    scene.reminders.vanished(alert.id)
+    scene.stay(BANK, HOUR_MS)
+    assert len(scene.rang()) == 1
+    scene.situation(CALL)
+    scene.wait(MINUTE_MS)
+    scene.situation(CALL, ZOOM)
+    scene.wait(CHANGE_MS)
+    assert len(scene.rang()) == 2
+
+
+def test_a_situation_with_a_remainder_rings_once_per_occasion_when_it_holds_too() -> None:
+    scene = Scene()
+    scene.create("quando sono a casa e apro Steam", "aggiornare i giochi")
+    scene.model.says(STEAM, "quando apro Steam")
+    scene.stay(STEAM)
+    # Judged outside its situation too: the score is in the cache when the situation comes.
+    assert scene.outcomes() == [Outcome.OUTSIDE_SITUATION]
+    scene.situation(NETWORK, HOME)
+    scene.wait(CHANGE_MS)
+    assert scene.outcomes() == [Outcome.ALERT]
+    assert len(scene.model.calls) == 1  # the change is judged again from the cache
+    assert scene.alert().due_at == START + DEBOUNCE_MS
+    scene.reminders.vanished(scene.alert().id)
+    scene.stay(BANK, MINUTE_MS)
+    scene.stay(STEAM)
+    assert scene.outcomes() == [Outcome.SAME_OCCASION]
+    scene.situation(NETWORK)  # a network without a label
+    scene.wait(CHANGE_MS)
+    assert scene.outcomes() == [Outcome.OUTSIDE_SITUATION]
+    scene.wait(RETURN_PAUSE_MS)
+    scene.situation(NETWORK, HOME)
+    scene.wait(CHANGE_MS)
+    assert scene.outcomes() == [Outcome.ALERT]
+
+
+def test_a_true_stretch_ends_when_its_situation_left_not_when_the_change_counted() -> None:
+    scene = Scene(return_pause=10_000)
+    scene.create("quando sono a casa e apro Steam", "aggiornare i giochi")
+    scene.model.says(STEAM, "quando apro Steam")
+    scene.situation(NETWORK, HOME)
+    scene.stay(STEAM)
+    scene.reminders.vanished(scene.alert().id)
+    scene.situation(NETWORK)
+    scene.wait(12_000)  # away from home 12 s: more than the pause, 7 s once the change counted
+    scene.situation(NETWORK, HOME)
+    scene.wait(CHANGE_MS)
+    assert scene.outcomes() == [Outcome.ALERT]
+
+
+def test_an_end_without_a_remainder_rings_once_it_counts_due_from_the_end() -> None:
+    scene = Scene()
+    scene.create("quando finisco la call", "scrivere il resoconto")
+    scene.situation(CALL, ZOOM)
+    scene.stay(FIGMA, HOUR_MS)
+    assert scene.view.visible == ()
+    scene.situation(CALL)
+    end = scene.clock.now()
+    scene.wait(CHANGE_MS)
+    assert (scene.alert().due_at, scene.alert().created_at) == (end, end + CHANGE_MS)
+    assert scene.model.calls == []
+
+
+def test_a_one_off_end_is_never_lost_and_rings_once() -> None:
+    scene = Scene()
+    scene.create("quando finisco la call", "scrivere il resoconto")
+    scene.situation(CALL, ZOOM)
+    scene.stay(None, HOUR_MS)
+    scene.situation(CALL)
+    scene.wait(2 * HOUR_MS)
+    assert scene.view.visible == ()
+    scene.stay(FIGMA)
+    assert scene.alert().due_at == START + 3 * HOUR_MS  # when the user came back
+    scene.reminders.vanished(scene.alert().id)
+    scene.stay(BANK, HOUR_MS)
+    assert len(scene.rang()) == 1
+
+
+def test_each_end_is_a_unit_of_its_own() -> None:
+    scene = Scene()
+    scene.create("quando finisco la call", "scrivere il resoconto")
+    scene.situation(CALL, ZOOM)
+    scene.stay(FIGMA, HOUR_MS)
+    scene.situation(CALL)
+    scene.wait(CHANGE_MS)
+    scene.reminders.vanished(scene.alert().id)
+    scene.situation(CALL, ZOOM)
+    scene.wait(HOUR_MS)
+    scene.situation(CALL)
+    scene.wait(CHANGE_MS)
+    assert len(scene.rang()) == 2
+
+
+def test_an_end_before_the_reminder_was_written_does_not_count() -> None:
+    scene = Scene()
+    during = scene.create("quando sono in call", "spegnere la musica")  # calls followed already
+    scene.situation(CALL, ZOOM)
+    scene.stay(FIGMA, HOUR_MS)
+    scene.situation(CALL)
+    scene.wait(CHANGE_MS)
+    scene.create("quando finisco la call", "scrivere il resoconto")
+    scene.stay(BANK)
+    assert [alert.reminder_id for alert in scene.rang()] == [during.id]
+
+
+def test_a_situation_and_a_context_that_come_together_are_judged_once() -> None:
+    scene = Scene()
+    scene.create("quando sono a casa e apro Steam", "aggiornare i giochi")
+    scene.model.says(STEAM, "quando apro Steam")
+    scene.situation(NETWORK, HOME)
+    scene.stay(STEAM)
+    outcomes = [evaluation.candidates[0].outcome for evaluation in scene.saved(Evaluation)]
+    assert outcomes == [Outcome.ALERT]
+
+
+@pytest.mark.parametrize(("back", "rings"), [(at(3, 3, 59), True), (at(3, 4), False)])
+def test_ogni_volta_an_end_may_ring_until_four(back: int, rings: bool) -> None:
+    scene = Scene(start=at(2, 22))
+    scene.create("ogni volta che finisco una call", "scrivere il resoconto", perennial=True)
+    scene.situation(CALL, ZOOM)
+    scene.stay(None, HOUR_MS)
+    scene.situation(CALL)
+    scene.stay(None, back - scene.clock.now())
+    scene.stay(FIGMA)
+    assert len(scene.rang()) == int(rings)
+
+
+def test_an_end_with_a_remainder_rings_at_the_first_occasion_after_it() -> None:
+    scene = Scene()
+    scene.create("quando finisco la call e apro Outlook", "mandare il verbale")
+    scene.model.says(OUTLOOK, "quando apro Outlook")
+    scene.situation(CALL, ZOOM)
+    scene.stay(OUTLOOK)
+    assert scene.outcomes() == [Outcome.OUTSIDE_SITUATION]
+    scene.stay(TEAMS, HOUR_MS)
+    scene.situation(CALL)
+    scene.wait(CHANGE_MS)
+    assert scene.outcomes() == [Outcome.BELOW_THRESHOLD]
+    scene.stay(OUTLOOK)
+    assert scene.outcomes() == [Outcome.ALERT]
+    scene.reminders.vanished(scene.alert().id)
+    scene.stay(BANK, HOUR_MS)
+    scene.stay(OUTLOOK)
+    assert scene.outcomes() == [Outcome.SAME_OCCASION]
+
+
+def test_an_end_with_its_remainder_in_front_rings_at_once() -> None:
+    scene = Scene()
+    scene.create("quando finisco la call e apro Outlook", "mandare il verbale")
+    scene.model.says(OUTLOOK, "quando apro Outlook")
+    scene.situation(CALL, ZOOM)
+    scene.stay(OUTLOOK, HOUR_MS)
+    scene.situation(CALL)
+    end = scene.clock.now()
+    scene.wait(CHANGE_MS)
+    assert scene.outcomes() == [Outcome.ALERT]
+    assert scene.alert().due_at == end
+
+
+def test_a_duration_of_a_situation_rings_once_it_is_reached() -> None:
+    scene = Scene()
+    scene.create("quando sono in call da più di un'ora", "fare una pausa")
+    scene.situation(CALL, ZOOM)
+    scene.stay(FIGMA)
+    assert scene.reminders.deadline == START + HOUR_MS
+    scene.until(START + HOUR_MS - 1)
+    assert scene.view.visible == ()
+    scene.wait(1)
+    assert (scene.alert().due_at, scene.alert().created_at) == (START + HOUR_MS, START + HOUR_MS)
+    scene.reminders.vanished(scene.alert().id)
+    scene.stay(BANK, HOUR_MS)
+    assert len(scene.rang()) == 1
+
+
+def test_a_duration_of_the_thing_counts_from_the_start_of_its_occasion() -> None:
+    scene = Scene()
+    scene.create("quando sono su YouTube da più di 20 minuti", "fare una pausa")
+    scene.model.says(YOUTUBE, "quando sono su YouTube")
+    scene.stay(YOUTUBE, 10 * MINUTE_MS)
+    assert scene.outcomes() == [Outcome.OUTSIDE_SITUATION]
+    scene.stay(BANK, MINUTE_MS)  # shorter than the return pause: the same occasion
+    scene.stay(YOUTUBE)
+    assert scene.outcomes() == [Outcome.OUTSIDE_SITUATION]
+    assert scene.reminders.deadline == START + 20 * MINUTE_MS
+    scene.until(START + 20 * MINUTE_MS)
+    assert scene.outcomes() == [Outcome.ALERT]
+    assert scene.alert().due_at == START + 20 * MINUTE_MS
+    assert len(scene.model.calls) == 2  # YouTube and the bank, once each: then the cache
+
+
+def test_an_absence_longer_than_the_return_pause_starts_the_duration_again() -> None:
+    scene = Scene()
+    scene.create("quando sono su YouTube da più di 20 minuti", "fare una pausa")
+    scene.model.says(YOUTUBE, "quando sono su YouTube")
+    scene.stay(YOUTUBE, 15 * MINUTE_MS)
+    scene.stay(BANK, RETURN_PAUSE_MS)
+    scene.stay(YOUTUBE, 10 * MINUTE_MS)
+    assert scene.view.visible == ()
+    scene.wait(10 * MINUTE_MS)
+    assert scene.alert().due_at == START + 37 * MINUTE_MS
+
+
+def test_an_end_counts_only_within_its_time() -> None:
+    scene = Scene(start=at(2, 17))
+    scene.create("quando finisco la call stasera", "scrivere il resoconto")
+    scene.situation(CALL, ZOOM)
+    scene.stay(FIGMA, 10 * MINUTE_MS)
+    scene.situation(CALL)
+    scene.until(at(2, 18, 30))
+    assert scene.view.visible == ()
+    scene.situation(CALL, ZOOM)
+    scene.wait(HOUR_MS)
+    scene.situation(CALL)
+    end = scene.clock.now()
+    scene.wait(CHANGE_MS)
+    assert scene.alert().due_at == end
+
+
+def test_a_situation_without_a_remainder_rings_once_per_stretch_within_its_time() -> None:
+    scene = Scene(start=at(2, 17))
+    scene.create("quando sono a casa la sera", "annaffiare le piante")
+    scene.situation(NETWORK, HOME)
+    scene.stay(FIGMA)
+    assert scene.view.visible == ()
+    scene.until(at(2, 18))
+    assert scene.alert().due_at == at(2, 18)
+    scene.reminders.vanished(scene.alert().id)
+    scene.until(at(3, 18))
+    assert [alert.due_at for alert in scene.rang()] == [at(2, 18), at(3, 18)]
+
+
+def test_a_moment_with_a_situation_rings_once_per_instance() -> None:
+    scene = Scene(start=at(2, 14))
+    scene.create("alle 15 se sono in ufficio", "chiamare Mario")
+    scene.stay(FIGMA, HOUR_MS + MINUTE_MS)
+    assert scene.view.visible == ()
+    scene.situation(NETWORK, OFFICE)
+    scene.wait(CHANGE_MS)
+    assert scene.alert().due_at == at(2, 15, 1)
+    scene.reminders.vanished(scene.alert().id)
+    scene.situation(NETWORK)
+    scene.wait(HOUR_MS)
+    scene.situation(NETWORK, OFFICE)
+    scene.wait(CHANGE_MS)
+    assert len(scene.rang()) == 1
+
+
+def test_not_here_on_a_situation_without_a_remainder_rings_it_elsewhere() -> None:
+    scene = Scene()
+    scene.create("quando sono in call", "spegnere la musica")
+    scene.situation(CALL, ZOOM)
+    scene.stay(FIGMA)
+    scene.reminders.not_here(scene.alert().id)
+    scene.stay(BANK)
+    assert scene.alert().context == BANK
+    scene.reminders.vanished(scene.alert().id)
+    scene.stay(FIGMA, HOUR_MS)
+    assert len(scene.rang()) == 2
+
+
+def test_a_change_that_lasts_less_than_5_s_does_not_count() -> None:
+    scene = Scene()
+    scene.create("quando finisco la call", "scrivere il resoconto")
+    scene.situation(CALL, ZOOM)
+    scene.stay(FIGMA, MINUTE_MS)
+    scene.situation(CALL)  # the microphone stops for 2 s
+    scene.wait(2_000)
+    scene.situation(CALL, ZOOM)
+    scene.wait(HOUR_MS)
+    assert scene.view.visible == ()
+    assert scene.saved(SituationStretch) == []
+
+
+def test_each_stretch_of_a_situation_is_recorded_once_it_ended() -> None:
+    scene = Scene()
+    scene.situation(CALL, ZOOM)
+    scene.stay(FIGMA, HOUR_MS)
+    scene.situation(CALL, ZOOM, "discord.exe")
+    scene.wait(MINUTE_MS)
+    scene.situation(CALL)
+    end = scene.clock.now()
+    scene.wait(CHANGE_MS)
+    assert scene.saved(SituationStretch) == [
+        SituationStretch(CALL, "discord.exe", START + HOUR_MS, end),
+        SituationStretch(CALL, ZOOM, START, end),
+    ]
+
+
+def test_a_situation_not_read_any_more_ends_its_stretch_but_did_not_end() -> None:
+    scene = Scene()
+    scene.create("quando finisco la call", "scrivere il resoconto")
+    scene.situation(CALL, ZOOM)
+    scene.stay(FIGMA, HOUR_MS)
+    scene.reminders.observe(SituationObservation(scene.clock.now(), CALL, None))
+    scene.wait(HOUR_MS)
+    assert scene.view.visible == ()
+    assert scene.saved(SituationStretch) == [SituationStretch(CALL, ZOOM, START, START + HOUR_MS)]
+
+
+def test_an_end_during_the_pause_waits_and_the_situations_are_still_read() -> None:
+    scene = Scene()
+    scene.create("quando finisco la call", "scrivere il resoconto")
+    scene.situation(CALL, ZOOM)
+    scene.stay(FIGMA)
+    end = scene.reminders.pause(Pause.HOUR)
+    scene.wait(10 * MINUTE_MS)
+    scene.situation(CALL)
+    scene.wait(CHANGE_MS)
+    assert scene.view.visible == ()
+    assert len(scene.saved(SituationStretch)) == 1
+    scene.until(end + DEBOUNCE_MS)
+    assert scene.alert().due_at == end  # due when the user is back, as after being away
+
+
+def test_after_a_restart_a_situation_lasts_from_the_state_read_at_start() -> None:
+    reminder = Scene().create("quando sono in call da più di un'ora", "fare una pausa")
+    restart = START + DAY_MS
+    saved = Snapshot(reminders=(reminder,), last_ids=LastIds(reminder=1, revision=1))
+    scene = Scene(start=restart, saved=saved)
+    scene.situation(CALL, ZOOM)  # a call in progress, read at start: it loses its minutes
+    scene.stay(FIGMA)
+    assert scene.reminders.deadline == restart + HOUR_MS
+    scene.until(restart + HOUR_MS)
+    assert scene.alert().due_at == restart + HOUR_MS
+
+
+def test_remind_here_rings_a_reminder_outside_its_situation_and_the_card_says_why() -> None:
+    scene = Scene()
+    reminder = scene.create("quando sono a casa e apro Steam", "aggiornare i giochi")
+    scene.model.says(STEAM, "quando apro Steam")
+    scene.stay(STEAM)
+    [shown] = scene.reminders.here().reminders
+    assert shown.quiet is Outcome.OUTSIDE_SITUATION
+    scene.reminders.remind_here(reminder.id, STEAM)
+    assert scene.alert().requested
+
+
+def test_reminders_without_a_remainder_need_no_model() -> None:
+    scene = Scene()
+    scene.create("quando finisco la call", "scrivere il resoconto")
+    scene.reminders.observe(Observation(START, FIGMA))
+    assert scene.need() is Need.NOT_NOW

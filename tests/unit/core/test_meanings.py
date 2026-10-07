@@ -53,6 +53,20 @@ from jiffin.core.schedule import (
     frequency_period,
     instances,
 )
+from jiffin.core.situations import (
+    BATTERY,
+    HOME,
+    NO,
+    OFFICE,
+    OFFLINE,
+    PLUGGED,
+    YES,
+    Ends,
+    Holds,
+    Lasts,
+    Situation,
+    Term,
+)
 
 FIXTURES = Path(__file__).parents[2] / "fixtures" / "time"
 FRIDAY = datetime.fromisoformat("2026-10-02T10:00")
@@ -200,7 +214,6 @@ def test_a_time_not_understood_names_its_words_wherever_they_are() -> None:
         ("ogni 0 giorni", ["ogni 0 giorni"]),
         ("per 0 giorni", ["per 0 giorni"]),
         # A count is named whole, not from its last digit.
-        ("quando gioco da 20 minuti", ["da 20 minuti"]),
         ("da 45 minuti", ["da 45 minuti"]),
         ("dopo 12 ore", ["dopo 12 ore"]),
         ("dopo 10h", ["dopo 10h"]),
@@ -210,7 +223,6 @@ def test_a_time_not_understood_names_its_words_wherever_they_are() -> None:
         # One hour or one minute is a count like the others.
         ("da 1 ora", ["da 1 ora"]),
         ("dopo 1 minuto", ["dopo 1 minuto"]),
-        ("quando gioco da 1 ora", ["da 1 ora"]),
     ],
 )
 def test_words_that_do_not_make_a_decided_time_are_not_understood(
@@ -269,8 +281,8 @@ def test_more_forms_of_the_decided_meanings(condition: str, expected: Schedule) 
         ("e quando apro Excel la sera", "quando apro Excel"),
         ("nel pomeriggio di domani", ""),
         ("quando apro il report di domani", "quando apro il report"),
-        ("domani a casa", "a casa"),
-        ("a casa la sera", "a casa"),
+        ("domani a Milano", "a Milano"),
+        ("a Milano la sera", "a Milano"),
         ("il treno delle 7:40, prima delle 9", "il treno delle 7:40"),
         ("quando apro Outlook  (lunedì)  e  Teams", "quando apro Outlook e Teams"),
     ],
@@ -507,7 +519,7 @@ def test_ogni_ticks_the_box_even_when_the_time_is_not_understood() -> None:
     "condition",
     [
         "  quando apro  Excel, ma non per lavoro ",
-        "quando supero il 50% della batteria",
+        "quando supero il 50% del budget",
         # A known limit: a time word capitalized after the first word is a name.
         "quando apro Excel Lunedì",
     ],
@@ -540,3 +552,212 @@ def test_reading_takes_under_a_millisecond() -> None:
         read(condition, written)
         took.append(clock.perf_counter_ns() - start)
     assert statistics.median(took) < 1_000_000
+
+
+# The situations of ADR-0028
+
+CALL = Situation.CALL
+
+
+@pytest.mark.parametrize(
+    ("condition", "situations", "remainder"),
+    [
+        # The forms, and the examples of the ADR's table of situations.
+        ("quando sono in call", (Holds(CALL),), ""),
+        ("quando entro in call", (Holds(CALL),), ""),
+        ("in call", (Holds(CALL),), ""),
+        ("durante la chiamata", (Holds(CALL),), ""),
+        ("quando finisco la call", (Ends(CALL),), ""),
+        ("dopo la chiamata", (Ends(CALL),), ""),
+        ("dopo la videochiamata", (Ends(CALL),), ""),
+        ("in call su Zoom da più di un'ora", (Lasts(60, CALL, "zoom"),), ""),
+        ("in call da più di un'ora", (Lasts(60, CALL),), ""),
+        ("quando sono su Meet in videochiamata", (Holds(CALL),), "quando sono su Meet"),
+        ("durante una chiamata di WhatsApp", (Holds(CALL, "whatsapp"),), ""),
+        ("in call su Google Meet", (Holds(CALL, "meet"),), ""),
+        ("quando torno al PC", (Ends(Situation.AWAY, YES),), ""),
+        ("quando torno", (Ends(Situation.AWAY, YES),), ""),
+        ("se sono via da più di 10 minuti", (Lasts(10, Situation.AWAY, YES),), ""),
+        ("a batteria", (Holds(Situation.POWER, BATTERY),), ""),
+        ("quando stacco il caricatore", (Ends(Situation.POWER, PLUGGED),), ""),
+        ("in carica", (Holds(Situation.POWER, PLUGGED),), ""),
+        ("con il monitor esterno", (Holds(Situation.DISPLAY, YES),), ""),
+        ("quando collego lo schermo", (Holds(Situation.DISPLAY, YES),), ""),
+        ("con le cuffie", (Holds(Situation.HEADPHONES, YES),), ""),
+        ("quando metto le cuffie", (Holds(Situation.HEADPHONES, YES),), ""),
+        ("quando tolgo le cuffie", (Ends(Situation.HEADPHONES, YES),), ""),
+        ("senza cuffie", (Holds(Situation.HEADPHONES, NO),), ""),
+        ("a casa", (Holds(Situation.NETWORK, HOME),), ""),
+        ("in ufficio", (Holds(Situation.NETWORK, OFFICE),), ""),
+        ("quando esco di casa", (Ends(Situation.NETWORK, HOME),), ""),
+        ("senza rete", (Holds(Situation.NETWORK, OFFLINE),), ""),
+        ("quando torno a casa", (Holds(Situation.NETWORK, HOME),), ""),
+        # With the thing the judge checks: its words are the remainder.
+        ("quando sono su YouTube da più di 20 minuti", (Lasts(20),), "quando sono su YouTube"),
+        ("quando guardo Netflix da almeno mezz'ora", (Lasts(30),), "quando guardo Netflix"),
+        ("quando gioco da 20 minuti", (Lasts(20),), "quando gioco"),
+        ("quando gioco da 1 ora", (Lasts(60),), "quando gioco"),
+        ("quando sono a casa e apro Steam", (Holds(Situation.NETWORK, HOME),), "quando apro Steam"),
+        ("quando finisco la call e apro Outlook", (Ends(CALL),), "quando apro Outlook"),
+        ("quando lavoro da casa", (Holds(Situation.NETWORK, HOME),), "quando lavoro"),
+        ("quando apro Outlook dopo la call", (Ends(CALL),), "quando apro Outlook"),
+        # A duration goes with the situation right before it, else right after it.
+        ("quando sono da più di un'ora in call", (Lasts(60, CALL),), ""),
+        (
+            "in call da più di un'ora con le cuffie",
+            (Lasts(60, CALL), Holds(Situation.HEADPHONES, YES)),
+            "",
+        ),
+        ("quando sono in call con le cuffie", (Holds(CALL), Holds(Situation.HEADPHONES, YES)), ""),
+        ("ogni volta che finisco una call", (Ends(CALL),), ""),
+    ],
+)
+def test_a_situation_of_the_adr_is_read(
+    condition: str, situations: tuple[Term, ...], remainder: str
+) -> None:
+    reading = read(condition, FRIDAY)
+    assert (reading.situations, reading.remainder, reading.unclear) == (situations, remainder, ())
+    assert reading.schedule is None
+
+
+@pytest.mark.parametrize(
+    ("condition", "unclear"),
+    [
+        # The end of a thing the judge checks (the owner's choice).
+        ("quando chiudo Figma", ["chiudo"]),
+        ("quando finisco di lavorare", ["finisco"]),
+        ("quando smetto di guardare YouTube", ["smetto"]),
+        # Durations that do not say since when.
+        ("quando gioco per 20 minuti", ["per 20 minuti"]),
+        ("dopo 20 minuti", ["dopo 20 minuti"]),
+        ("quando sono su YouTube da un po'", ["da un po'"]),
+        ("quando gioco più di un'ora al giorno", ["un'ora"]),
+        ("quando sono su YouTube da più di un'ora al giorno", ["da più di un'ora al giorno"]),
+        ("quando esco da un'ora prima", ["esco da un'ora prima"]),
+        ("quando gioco da 2 ore di lavoro", ["da 2 ore di"]),
+        (
+            "quando sono in call da più di 2 ore a settimana",
+            ["sono in call da più di 2 ore a settimana"],
+        ),
+        # The battery's level, the lid, who the user talks with.
+        ("quando supero il 50% della batteria", ["batteria"]),
+        ("quando chiudo il coperchio", ["chiudo", "coperchio"]),
+        ("quando sono in call con Mario", ["sono in call con Mario"]),
+        ("quando finisco la call delle 15", ["finisco la call delle 15"]),
+        # Two of a kind, two ends, an end with a duration.
+        ("quando sono a casa in ufficio", ["sono a casa in ufficio"]),
+        ("quando finisco la call e tolgo le cuffie", ["finisco la call", "tolgo le cuffie"]),
+        ("quando finisco la call da più di un'ora", ["finisco la call da più di un'ora"]),
+        (
+            "quando finisco la call e gioco da più di 20 minuti",
+            ["finisco la call", "da più di 20 minuti"],
+        ),
+        # A duration of nothing, or of no time.
+        ("da più di 20 minuti", ["da più di 20 minuti"]),
+        ("da almeno mezz'ora", ["da almeno mezz'ora"]),
+        ("quando gioco da 0 minuti", ["da 0 minuti"]),
+        # Not understood, the situations leave the time as it reads without them: a count left.
+        ("quando ho una call a casa da più di 20 minuti", ["call", "20 minuti"]),
+        # A word beside a situation that changes it.
+        ("quando non sono in call", ["non sono in call"]),
+        ("quando sono vicino a casa", ["vicino a casa"]),
+        ("a casa di Mario", ["a casa di Mario"]),
+        ("quando torno da pranzo", ["torno da pranzo"]),
+        ("quando metto in carica il PC", ["metto in carica il PC"]),
+        ("in call su YouTube", ["in call su YouTube"]),
+        # Situation words outside a phrase understood.
+        ("quando ho una call", ["call"]),
+        ("quando il Wi-Fi è lento", ["Wi-Fi"]),
+        ("quando esco", ["esco"]),
+        ("quando sono su YouTube da più di 2 giorni", ["da più di"]),
+        ("quando sono a casa da più di 2 giorni", ["sono a casa da più di"]),
+    ],
+)
+def test_a_situation_not_understood_is_named_and_leaves_the_condition_whole(
+    condition: str, unclear: list[str]
+) -> None:
+    reading = read(condition, FRIDAY)
+    assert (reading.situations, reading.remainder) == ((), condition)
+    assert words(reading, condition) == unclear
+
+
+def test_situations_not_understood_leave_the_time_as_it_reads_without_them() -> None:
+    reading = read("domani quando chiudo Figma", FRIDAY)
+    assert reading.schedule == Schedule(OnDate(date(2026, 10, 3)))
+    assert (reading.remainder, reading.situations) == ("quando chiudo Figma", ())
+    assert words(reading, "domani quando chiudo Figma") == ["chiudo"]
+
+
+def test_a_time_not_understood_leaves_the_condition_whole_without_its_situations() -> None:
+    condition = "verso sera quando sono a casa"
+    reading = read(condition, FRIDAY)
+    assert reading == Reading(None, condition, reading.unclear)
+    assert words(reading, condition) == ["verso sera"]
+
+
+@pytest.mark.parametrize(
+    ("condition", "schedule", "situations", "remainder"),
+    [
+        (
+            "quando finisco la call stasera",
+            Schedule(OnDate(date(2026, 10, 2)), Slot(time(18), time(23))),
+            (Ends(CALL),),
+            "",
+        ),
+        (
+            "quando sono a casa la sera",
+            Schedule(hours=Slot(time(18), time(23))),
+            (Holds(Situation.NETWORK, HOME),),
+            "",
+        ),
+        (
+            "quando sono a casa di sera e apro Steam",
+            Schedule(hours=Slot(time(18), time(23))),
+            (Holds(Situation.NETWORK, HOME),),
+            "quando apro Steam",
+        ),
+        (
+            "alle 15 se sono in ufficio",
+            Schedule(hours=Moment(time(15))),
+            (Holds(Situation.NETWORK, OFFICE),),
+            "",
+        ),
+        (
+            "quando sono a casa, ma non nel weekend",
+            Schedule(Weekdays(frozenset(range(5)))),
+            (Holds(Situation.NETWORK, HOME),),
+            "",
+        ),
+    ],
+)
+def test_a_time_and_situations_are_read_together(
+    condition: str, schedule: Schedule, situations: tuple[Term, ...], remainder: str
+) -> None:
+    reading = read(condition, FRIDAY)
+    assert (reading.schedule, reading.situations, reading.remainder) == (
+        schedule,
+        situations,
+        remainder,
+    )
+
+
+@pytest.mark.parametrize(
+    "condition",
+    [
+        # Work is no office: a label never changes what a phrase means.
+        "quando sono al lavoro",
+        # What plays stays with the judge, which sees the window.
+        "quando ascolto musica",
+        "quando guardo un video",
+        "quando sento un podcast",
+        # Names are no situations, nor a word of another phrase.
+        "quando vado a Casa Rossi",
+        "quando cerco via email",
+    ],
+)
+def test_words_that_are_no_situation_go_to_the_judge_as_before(condition: str) -> None:
+    assert read(condition, FRIDAY) == Reading(None, condition)
+
+
+def test_ogni_volta_che_finisco_una_call_ticks_ogni_volta() -> None:
+    assert read("ogni volta che finisco una call", FRIDAY).recurring

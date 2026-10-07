@@ -306,7 +306,7 @@ by_time = "delle"
 # Words a removed time leaves hanging: "quando apro Steam, ma non nel weekend".
 connectors = ["e", "ed", "ma", "o", "oppure"]
 # Prepositions that lead into a removed time and go with it: "nel pomeriggio di domani". After
-# a time they stay: "domani a casa".
+# a time they stay: "domani a Milano".
 leads = [
     "di", "del", "della", "dei", "delle", "a", "al", "alla", "ai", "alle", "da", "dal", "dalla",
     "in", "nel", "nella", "per", "su", "sul", "tra", "fra",

@@ -29,6 +29,7 @@ from jiffin.core.records import (
     Snooze,
 )
 from jiffin.core.schedule import Moment, OnDate, Period, Schedule, Slot, Weekdays
+from jiffin.core.situations import Holds, Situation, SituationStretch
 from jiffin.store.store import RETENTION_MS, Store
 
 NOW = 1_790_000_000_000
@@ -215,6 +216,19 @@ def test_remind_here_and_a_withdrawal_take_a_silence_away(store: Store) -> None:
     assert store.load().silences == ()
     store.save([said(1, BANK)])
     assert store.load().silences == (Silence(1, BANK),)
+
+
+def test_until_migration_0003_the_situations_leave_no_rows(store: Store, path: Path) -> None:
+    """#150 gives them their column, their table and their outcome: until then a save with them
+    does not fail, and a reminder comes back without its situations."""
+    figma = reminder(1)
+    situated = replace(figma, revision=replace(figma.revision, situations=(Holds(Situation.CALL),)))
+    outside = Candidate(figma.revision.id, 2.5, False, Outcome.OUTSIDE_SITUATION)
+    judged = replace(evaluation(1, NOW, FIGMA, figma), candidates=(outside,))
+    stretch = SituationStretch(Situation.CALL, "zoom.exe", NOW - DAY, NOW)
+    store.save([situated, judged, stretch])
+    assert (count(path, "evaluation"), count(path, "candidate")) == (1, 0)
+    assert store.load().reminders == (figma,)
 
 
 def test_an_answer_that_takes_no_silence_away_adds_no_context(store: Store, path: Path) -> None:
