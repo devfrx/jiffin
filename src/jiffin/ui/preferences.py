@@ -22,6 +22,7 @@ from jiffin.core.reminders import (
     RETURN_PAUSE_MS,
     SHORTEST_RETURN_PAUSE_MS,
 )
+from jiffin.ui import catalog  # noqa: F401  # Catalog, which Texts.qml reads
 from jiffin.ui.glass import Glass
 from jiffin.ui.look import Look, Material
 from jiffin.ui.places import Places

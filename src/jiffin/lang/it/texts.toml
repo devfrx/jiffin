@@ -1,0 +1,191 @@
+# The texts of the interface, in Italian (ADR-0026). One key per text, named after the code's
+# names; jiffin.lang.texts reads them once, at the start, and a key missing or one too many stops
+# the start and the tests. A name in braces is a placeholder the code fills, "{minutes}". A text
+# with a form for each count has `one`, for 1, and `other`, for any other count.
+
+# How numbers, sizes and lists are written: "2.600.224.416", "2,4 GB", "Chrome e Brave".
+[format]
+thousands = "."
+decimal = ","
+gigabytes = "{size} GB"
+comma = ", "
+conjunction = " e "
+quoted = "«{text}»"
+# Between the parts of one line: "Periodo finito il 20 ottobre · Taciuto in 2 posti".
+parts = " · "
+
+[app]
+name = "Jiffin"
+# Windows' own message box, when the app cannot start; {log} is the log's path.
+cannot_start = "Jiffin non è riuscito a partire.\n\nIl motivo è scritto nel log:\n{log}"
+
+# The commands of more than one window.
+[command]
+close = "Chiudi"
+cancel = "Annulla"
+retry = "Riprova"
+retrying = "Riprovo…"
+
+# The alert, and Snooze's menu (#83).
+[alert]
+title = "Promemoria"
+done = "Fatto"
+snooze = "Rimanda"
+not_here = "Non qui"
+
+[snooze]
+next_time = "Alla prossima volta"
+quarter_hour = "Tra 15 minuti"
+hour = "Tra un'ora"
+tomorrow = "Domani"
+
+# The creation window.
+[creation]
+new = "Nuovo promemoria"
+edit = "Modifica promemoria"
+condition = "Quando"
+condition_hint = "Descrivi dove sei o quando: un'app, un sito, un orario."
+condition_example = "quando lavoro al progetto Rossi"
+action = "Ricordami di"
+action_example = "aggiornare il changelog"
+perennial = "Ogni volta"
+perennial_hint = "Suona ogni volta che succede, e non si completa mai."
+save = "Salva"
+# The sentence the two boxes make (#12), "ogni volta" for a perennial reminder (#84): the
+# condition, or `no_condition` while it is empty, and the action. The full stop comes with the
+# action: Italian puts none after an ellipsis.
+no_condition = "Quando …"
+preview = "{condition}, ti ricordo di {action}."
+preview_no_action = "{condition}, ti ricordo di …"
+preview_perennial = "{condition}, ti ricordo ogni volta di {action}."
+preview_perennial_no_action = "{condition}, ti ricordo ogni volta di …"
+# Under "Quando", for the words of a time not understood (#90), each quoted: "«verso sera» e «a
+# dicembre»". The reminder still saves, without its time.
+not_understood = "Non capisco {words}: suona a qualsiasi ora."
+# Under the sentence, while a time already over keeps Save off (#84): "Oggi alle 09:00".
+past = "{when} è già passato. Per salvare, scrivi un giorno o un'ora che deve ancora venire."
+
+# The settings window.
+[settings]
+title = "Impostazioni"
+return_pause = "Pausa di ritorno"
+return_pause_hint = "Se torni a una cosa dopo almeno questo tempo, i suoi promemoria suonano di nuovo. Da 10 secondi in su."
+unit = "Unità"
+# The return pause's units.
+seconds = "secondi"
+minutes = "minuti"
+material = "Materiale"
+material_hint = "Per gli avvisi, l'elenco e le altre finestre di Jiffin."
+solid = "Gli effetti di trasparenza di Windows sono spenti: le finestre sono piene."
+
+# The materials (ADR-0010): each one's name, and what it looks like.
+[material.acrylic]
+name = "Acrilico"
+description = "Vetro chiaro: dietro si vede sfocato."
+
+[material.menu_acrylic]
+name = "Acrilico dei menu"
+description = "Quasi pieno, come i menu di Windows. Predefinito."
+
+[material.mica]
+name = "Mica"
+description = "Come le Impostazioni di Windows: prende il colore dello sfondo."
+
+[material.mica_alt]
+name = "Mica Alt"
+description = "Più scuro, con più colore dello sfondo."
+
+# The buttons of a number box.
+[number_box]
+increase = "Aumenta"
+decrease = "Diminuisci"
+
+# The first run (ADR-0015).
+[first_run]
+welcome = "Benvenuto in Jiffin"
+is_ready = "Jiffin è pronto"
+only_here = "Jiffin lavora solo su questo PC: niente esce da qui."
+step_download = "Scarico il modello"
+step_check = "Controllo il file"
+step_ready = "Pronto"
+# Under the download's bar: the sizes as Windows' Explorer shows them, then the minutes left.
+progress = "{done} di {total}"
+progress_minutes = "{done} di {total} · circa {minutes} min"
+progress_under_minute = "{done} di {total} · meno di un minuto"
+progress_stopped = "{done} di {total} · fermo"
+meanwhile = "Intanto puoi già scrivere i promemoria: premi Win+Maiusc+N."
+meanwhile_tray = "Intanto puoi già scrivere i promemoria: Nuovo, nell'elenco dell'icona di Jiffin."
+ready_shortcut = "Premi Win+Maiusc+N, da qualsiasi app, per un nuovo promemoria."
+shortcut_taken = "Win+Maiusc+N è già di un'altra app: un nuovo promemoria si scrive da Nuovo, nell'elenco."
+ready_tray = "L'icona di Jiffin nella barra apre l'elenco. Windows la mette sotto ^: trascinala sulla barra per vederla sempre."
+start = "Inizia"
+details = "Dettagli"
+by_hand = "Mettilo a mano"
+by_hand_offline = "Senza rete? Mettilo a mano"
+by_hand_fetch = "1. Scarica il file da questo indirizzo, anche da un altro PC:"
+by_hand_place = "2. Mettilo nella cartella dei modelli, con il nome {name}:"
+# The size in bytes, with its thousands: "2.600.224.416".
+by_hand_check = "3. Premi Riprova: lo controllo. Deve pesare {size} byte, con sha256 {sha256}."
+copy_address = "Copia l'indirizzo"
+open_folder = "Apri la cartella"
+
+# What a problem with the model file means, by FirstRun.Stage.
+[model_file]
+network = "Il download si è fermato: controlla la connessione. Riprova riprende da dove era rimasto."
+# {size}: what is missing, in tenths of a gigabyte rounded up, so that freeing it is enough.
+space = "Il disco è pieno: libera altri {size}, poi riprova."
+disk = "Non riesco a scrivere nella cartella dei modelli, o a leggerla. Controlla il disco, poi riprova."
+mismatch = "Il file del modello non è quello giusto. Se l'hai messo tu, sostituiscilo o eliminalo; poi premi Riprova."
+
+# The tray icon's menu.
+[tray]
+quit = "Esci"
+pause_hour = "Sospendi per un'ora"
+pause_tomorrow = "Sospendi fino a domani"
+resume = "Riprendi"
+paused = "In pausa"
+
+# The tray list.
+[tray_list]
+title = "Promemoria"
+new = "Nuovo"
+unseen = "Non visti"
+active = "Attivi"
+no_reminders = "Nessun promemoria attivo."
+edit = "Modifica"
+complete = "Completa"
+delete = "Elimina"
+delete_question = "Eliminare il promemoria per sempre?"
+change = "Cambia"
+# While the model downloads; {progress} is the line under the first run's bar.
+downloading = "Scarico il modello: {progress}. Finché non è pronto, i promemoria non avvisano."
+# At the top while Jiffin is paused (ADR-0024).
+paused_until = "In pausa fino alle {at}."
+paused_until_tomorrow = "In pausa fino a domani alle {at}."
+# The browsers whose address cannot be read, by their names: "Chrome e Brave".
+unreadable = "{browsers}: non riesco a leggere l'indirizzo. Uso solo app e titolo."
+# Under an active reminder, when useful, joined by `format.parts`: its period over (#91), "il 20
+# ottobre", its snooze, and the places Not here silenced it in.
+period_over = "Periodo finito {on}"
+returns_in = "Rimandato: torna tra {minutes} min"
+returns_at = "Rimandato: torna alle {at}"
+returns_tomorrow_at = "Rimandato: torna domani alle {at}"
+silenced = { one = "Taciuto in {count} posto", other = "Taciuto in {count} posti" }
+# At the bottom (#84): the return pause, in minutes when it is whole minutes, as the settings
+# show it, else in seconds.
+returns_after_minutes = "Gli avvisi tornano se riprendi una cosa dopo almeno {minutes} min."
+returns_after_seconds = "Gli avvisi tornano se riprendi una cosa dopo almeno {seconds} s."
+
+# What the tray list says of the engine's trouble, by TrayList.Engine; WORKING says nothing.
+[engine]
+restarting = "Il modello si è fermato: lo sto riavviando."
+failures = "Il modello si è fermato quattro volte in un'ora. Finché non riparte, i promemoria non avvisano."
+model = "Il modello non si carica. Finché non riparte, i promemoria non avvisano."
+gpu_memory = "La scheda video non ha abbastanza memoria per il modello. Chiudi un'app che la usa, poi riprova."
+mismatch = "Il modello è di un'altra versione di Jiffin: reinstalla l'app."
+
+# The browsers' names, by app.
+[browser]
+"vivaldi.exe" = "Vivaldi"
+"chrome.exe" = "Chrome"
+"brave.exe" = "Brave"

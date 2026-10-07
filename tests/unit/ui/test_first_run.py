@@ -11,6 +11,7 @@ from PySide6.QtTest import QTest
 from pytestqt.qtbot import QtBot
 
 from jiffin.core.clock import SimulatedClock
+from jiffin.lang.texts import TEXTS
 from jiffin.ui import win32
 from jiffin.ui.first_run import FirstRun, ModelFile, ModelState
 from jiffin.ui.glass import Glass
@@ -221,7 +222,7 @@ def test_the_steps_go_from_the_download_to_the_check_to_ready(screen: Screen) ->
             "sulla barra per vederla sempre."
         ),
     ]
-    screen.click("Inizia")
+    screen.click(TEXTS.first_run.start)
     assert not screen.window.isVisible()
 
 
@@ -265,7 +266,7 @@ def test_the_window_drags_from_any_empty_point_but_not_from_its_controls(
     screen.opened()
     window = screen.window
     assert drags(window, QPoint(8, window.height() - 8))
-    for control in (screen.x(), screen.button("Chiudi")):
+    for control in (screen.x(), screen.button(TEXTS.command.close)):
         middle = QPointF(control.width() / 2, control.height() / 2)
         assert not drags(window, control.mapToScene(middle).toPoint())
 
@@ -285,7 +286,7 @@ def test_the_window_opens_again_where_it_was_left_and_stays_there_as_it_grows(
     screen.show(Stage.NETWORK, SIZE // 3)
     # Qt says the window grew from its window-system queue, where it would move a centred one.
     with qtbot.waitSignal(screen.window.heightChanged):
-        screen.click("Senza rete? Mettilo a mano")
+        screen.click(TEXTS.first_run.by_hand_offline)
     assert screen.window.framePosition() == QPoint(30, 40)
 
 
@@ -333,12 +334,12 @@ def test_a_problem_with_the_download_opens_the_window_with_riprova(
     assert lines[: len(WAIT) + 3] == [*WAIT, "1", "Scarico il modello", detail]
     assert message in lines
     assert MEANWHILE not in lines
-    screen.click("Riprova")
+    screen.click(TEXTS.command.retry)
     assert screen.fetches == 1
-    assert not screen.button("Riprovo…").isEnabled()
+    assert not screen.button(TEXTS.command.retrying).isEnabled()
     screen.show(Stage.DOWNLOADING, GIB)
     assert message not in screen.lines()
-    assert screen.button("Chiudi").isEnabled()
+    assert screen.button(TEXTS.command.close).isEnabled()
 
 
 def test_a_wrong_file_stops_the_check(screen: Screen) -> None:
@@ -350,7 +351,7 @@ def test_a_wrong_file_stops_the_check(screen: Screen) -> None:
         "eliminalo; poi premi Riprova."
     )
     assert screen.lines() == [*WAIT, "Scarico il modello", *STEPS_AFTER_DOWNLOAD, message]
-    screen.button("Mettilo a mano")
+    screen.button(TEXTS.first_run.by_hand)
 
 
 def test_a_disk_problem_in_the_check_stops_the_check(screen: Screen) -> None:
@@ -386,11 +387,11 @@ def test_by_hand_says_where_to_get_the_file_and_where_to_put_it(
         (f"3. Premi Riprova: lo controllo. Deve pesare 2.600.224.416 byte, con sha256 {SHA256}."),
     ]
     assert steps[0] not in screen.lines()
-    screen.click("Senza rete? Mettilo a mano")
+    screen.click(TEXTS.first_run.by_hand_offline)
     assert screen.lines()[-len(steps) :] == steps
-    screen.click("Copia l'indirizzo")
+    screen.click(TEXTS.first_run.copy_address)
     assert QGuiApplication.clipboard().text() == URL
-    screen.click("Apri la cartella")
+    screen.click(TEXTS.first_run.open_folder)
     assert screen.folder.is_dir()
     assert opened == [QUrl.fromLocalFile(str(screen.folder))]
     # Opened again, the window starts with the steps closed.

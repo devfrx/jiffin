@@ -37,6 +37,7 @@ from jiffin.core.records import Alert, Revision, Snooze
 from jiffin.core.reminders import MINUTE_MS, ActiveReminder, RemindersView
 from jiffin.core.schedule import jiffin_day
 from jiffin.core.units import ended, next_occasion
+from jiffin.ui import catalog  # noqa: F401  # Catalog, which Texts.qml reads
 from jiffin.ui.first_run import FirstRun
 from jiffin.ui.glass import Glass
 from jiffin.ui.preferences import Preferences

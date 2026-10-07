@@ -106,7 +106,7 @@ class Download:
             self._timer.start()
 
     def fetch(self) -> None:
-        print("Riprova, sul modello", flush=True)
+        print("retry, on the model", flush=True)
         # A moment, as the real check of the network or the disk takes.
         QTimer.singleShot(1000, self._timer.start)
 
@@ -159,19 +159,19 @@ class Preview:
         self._show_reminders()
 
     def done(self, alert_id: int) -> None:
-        self._answered(alert_id, "Fatto")
+        self._answered(alert_id, "done")
 
     def not_here(self, alert_id: int) -> None:
-        self._answered(alert_id, "Non qui")
+        self._answered(alert_id, "not here")
 
     def snooze(self, alert_id: int, snooze: Snooze) -> None:
-        self._answered(alert_id, f"Rimanda, {snooze.name.lower()}")
+        self._answered(alert_id, f"snooze, {snooze.name.lower()}")
 
     def close(self, alert_id: int) -> None:
-        self._answered(alert_id, "chiuso con la X")
+        self._answered(alert_id, "closed with the X")
 
     def vanished(self, alert_id: int) -> None:
-        print(f"avviso {alert_id}: sparito dopo 10 s", flush=True)
+        print(f"alert {alert_id}: vanished after 10 s", flush=True)
         now = self._clock.now()
         for alert in self._visible:
             if alert.id == alert_id:
@@ -189,8 +189,8 @@ class Preview:
         QTimer.singleShot(0, self._show_alerts)
 
     def create(self, condition: str, action: str, perennial: bool) -> None:
-        every = ", ogni volta" if perennial else ""
-        print(f"nuovo promemoria: {condition!r}, {action!r}{every}", flush=True)
+        every = ", perennial" if perennial else ""
+        print(f"new reminder: {condition!r}, {action!r}{every}", flush=True)
         reminder_id = next(self._ids)
         revision = self._revision(reminder_id, condition, action, perennial)
         reminder = Reminder(reminder_id, self._clock.now(), revision)
@@ -198,8 +198,8 @@ class Preview:
         QTimer.singleShot(0, self._show_reminders)
 
     def edit(self, reminder_id: int, condition: str, action: str, perennial: bool) -> None:
-        every = ", ogni volta" if perennial else ""
-        print(f"promemoria {reminder_id} modificato: {condition!r}, {action!r}{every}", flush=True)
+        every = ", perennial" if perennial else ""
+        print(f"reminder {reminder_id} edited: {condition!r}, {action!r}{every}", flush=True)
         active = self._reminders.get(reminder_id)
         if active is not None:
             old = active.reminder.revision
@@ -213,17 +213,17 @@ class Preview:
         QTimer.singleShot(0, self._show_reminders)
 
     def complete(self, reminder_id: int) -> None:
-        print(f"promemoria {reminder_id} completato", flush=True)
+        print(f"reminder {reminder_id} completed", flush=True)
         self._reminders.pop(reminder_id, None)
         QTimer.singleShot(0, self._show_reminders)
 
     def delete(self, reminder_id: int) -> None:
-        print(f"promemoria {reminder_id} eliminato", flush=True)
+        print(f"reminder {reminder_id} deleted", flush=True)
         self._reminders.pop(reminder_id, None)
         QTimer.singleShot(0, self._show_reminders)
 
     def restart_engine(self) -> None:
-        print("Riprova", flush=True)
+        print("retry, on the engine", flush=True)
         assert self.interface is not None
         self.interface.show_engine(TrayList.Engine.WORKING)
 
@@ -232,23 +232,23 @@ class Preview:
             self._download.fetch()
 
     def keep_material(self, material: Material) -> None:
-        print(f"materiale {material.value}", flush=True)
+        print(f"material {material.value}", flush=True)
 
     def keep_places(self, places: Mapping[str, tuple[int, int]]) -> None:
         where = ", ".join(f"{name} {x},{y}" for name, (x, y) in places.items())
-        print(f"posizioni {where}", flush=True)
+        print(f"places {where}", flush=True)
 
     def keep_return_pause(self, seconds: int) -> None:
-        print(f"pausa di ritorno {seconds} s", flush=True)
+        print(f"return pause {seconds} s", flush=True)
 
     def pause(self, pause: Pause) -> None:
         now = self._clock.now()
         self._paused_until = now + HOUR_MS if pause is Pause.HOUR else tomorrow(self._clock, now)
-        print(f"in pausa fino a {self._clock.local(self._paused_until):%d/%m %H:%M}", flush=True)
+        print(f"paused until {self._clock.local(self._paused_until):%d/%m %H:%M}", flush=True)
         QTimer.singleShot(0, self._show_reminders)
 
     def resume(self) -> None:
-        print("Riprendi", flush=True)
+        print("resume", flush=True)
         self._paused_until = None
         QTimer.singleShot(0, self._show_reminders)
 
@@ -276,7 +276,7 @@ class Preview:
         )
 
     def _answered(self, alert_id: int, what: str) -> None:
-        print(f"avviso {alert_id}: {what}", flush=True)
+        print(f"alert {alert_id}: {what}", flush=True)
         self._visible = [alert for alert in self._visible if alert.id != alert_id]
         self._unseen = [alert for alert in self._unseen if alert.id != alert_id]
         QTimer.singleShot(0, self._show_alerts)
@@ -345,7 +345,7 @@ def main() -> None:
     interface = Interface(app, preview, preview, MODEL)
     interface.look.material = Material(args.material)
     if not interface.hotkey.registered:
-        print("Win+Maiusc+N è già usata da un'altra app", flush=True)
+        print("Win+Shift+N is taken by another app", flush=True)
     preview.start(interface)
     download.begin(interface)
     interface.show_unreadable(frozenset(args.unreadable))

@@ -15,6 +15,7 @@ from jiffin.core.clock import SimulatedClock
 from jiffin.core.meanings import read
 from jiffin.core.records import Revision
 from jiffin.core.reminders import HOUR_MS
+from jiffin.lang.texts import TEXTS
 from jiffin.ui import win32
 from jiffin.ui.creation import Creation
 from jiffin.ui.glass import Glass
@@ -29,7 +30,7 @@ DARK = Settings(
     taskbar_dark=True,
     taskbar_accent="#4cc2ff",
 )
-WHEN, WHAT, EVERY_TIME = "Quando", "Ricordami di", "Ogni volta"
+WHEN, WHAT, EVERY_TIME = TEXTS.creation.condition, TEXTS.creation.action, TEXTS.creation.perennial
 """The two boxes and the check box, as a screen reader names them."""
 HINT = "Descrivi dove sei o quando: un'app, un sito, un orario."
 CLOCK = ""
@@ -247,7 +248,7 @@ def test_the_shortcut_opens_a_blank_reminder_centred_with_the_focus(screen: Scre
     assert screen.shows("Nuovo promemoria")
     assert (screen.text(WHEN), screen.text(WHAT)) == ("", "")
     assert screen.focused() == WHEN
-    assert not screen.button("Salva").isEnabled()
+    assert not screen.button(TEXTS.creation.save).isEnabled()
 
 
 def test_the_window_is_a_card_on_the_alerts_glass(
@@ -280,7 +281,7 @@ def test_salva_sends_the_two_boxes_with_their_spaces_tidied(screen: Screen) -> N
     screen.press(Qt.Key.Key_Tab)
     assert screen.focused() == WHAT
     screen.type("esportare  le icone")
-    screen.click("Salva")
+    screen.click(TEXTS.creation.save)
     assert screen.changes.made == [("create", "quando apro Figma", "esportare le icone", False)]
     assert not screen.window.isVisible()
 
@@ -310,13 +311,13 @@ def test_a_box_never_breaks_a_line(screen: Screen) -> None:
 def test_salva_waits_for_both_boxes(screen: Screen) -> None:
     screen.new()
     screen.type("quando apro Figma")
-    assert not screen.button("Salva").isEnabled()
+    assert not screen.button(TEXTS.creation.save).isEnabled()
     screen.creation.save()
     screen.press(Qt.Key.Key_Tab)
     screen.type("   ")
-    assert not screen.button("Salva").isEnabled()
+    assert not screen.button(TEXTS.creation.save).isEnabled()
     screen.type("x")
-    assert screen.button("Salva").isEnabled()
+    assert screen.button(TEXTS.creation.save).isEnabled()
     assert screen.changes.made == []
 
 
@@ -337,7 +338,7 @@ def test_an_empty_box_shows_an_example(screen: Screen) -> None:
     assert screen.examples() == {"aggiornare il changelog"}
 
 
-@pytest.mark.parametrize("close", ["Annulla", "Esc", "Chiudi"])
+@pytest.mark.parametrize("close", [TEXTS.command.cancel, "Esc", TEXTS.command.close])
 def test_annulla_esc_and_the_x_close_without_saving(screen: Screen, close: str) -> None:
     screen.new()
     screen.type("quando apro Figma")
@@ -355,9 +356,9 @@ def test_the_x_sits_on_the_titles_line_12_px_from_the_edge_and_tab_passes_it_by(
     screen: Screen,
 ) -> None:
     screen.new()
-    x = screen.button("Chiudi")
+    x = screen.button(TEXTS.command.close)
     title = screen._item(
-        lambda item: item.inherits("QQuickText") and item.property("text") == "Nuovo promemoria"
+        lambda item: item.inherits("QQuickText") and item.property("text") == TEXTS.creation.new
     )
     corner = x.mapToScene(QPointF(0, 0))
     assert corner.x() + x.width() == screen.window.width() - 12
@@ -365,7 +366,7 @@ def test_the_x_sits_on_the_titles_line_12_px_from_the_edge_and_tab_passes_it_by(
     screen.type("quando apro Figma")
     screen.press(Qt.Key.Key_Tab)
     screen.type("esportare le icone")
-    for name in (EVERY_TIME, "Annulla", "Salva", WHEN):
+    for name in (EVERY_TIME, TEXTS.command.cancel, TEXTS.creation.save, WHEN):
         screen.press(Qt.Key.Key_Tab)
         assert screen.focused() == name
 
@@ -376,11 +377,15 @@ def test_the_window_drags_from_any_empty_point_but_not_from_its_controls(
     screen.new()
     window = screen.window
     title = screen._item(
-        lambda item: item.inherits("QQuickText") and item.property("text") == "Nuovo promemoria"
+        lambda item: item.inherits("QQuickText") and item.property("text") == TEXTS.creation.new
     )
     assert drags(window, QPoint(8, window.height() - 8))
     assert drags(window, title.mapToScene(QPointF(4, title.height() / 2)).toPoint())
-    for control in (screen.button("Chiudi"), screen.button("Annulla"), screen.box(WHEN)):
+    for control in (
+        screen.button(TEXTS.command.close),
+        screen.button(TEXTS.command.cancel),
+        screen.box(WHEN),
+    ):
         middle = QPointF(control.width() / 2, control.height() / 2)
         assert not drags(window, control.mapToScene(middle).toPoint())
 
@@ -413,9 +418,9 @@ def test_tab_reaches_the_buttons_and_enter_clicks_them(screen: Screen) -> None:
     screen.press(Qt.Key.Key_Tab)
     assert screen.focused() == EVERY_TIME
     screen.press(Qt.Key.Key_Tab)
-    assert screen.focused() == "Annulla"
+    assert screen.focused() == TEXTS.command.cancel
     screen.press(Qt.Key.Key_Tab)
-    assert screen.focused() == "Salva"
+    assert screen.focused() == TEXTS.creation.save
     screen.press(Qt.Key.Key_Return)
     assert screen.changes.made == [("create", "quando apro Figma", "esportare le icone", False)]
 
@@ -429,7 +434,7 @@ def test_editing_shows_the_reminder_and_saves_its_new_text(screen: Screen) -> No
     screen.press(Qt.Key.Key_Tab)
     QTest.keyClick(screen.window, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
     screen.type("esportare i loghi")
-    screen.click("Salva")
+    screen.click(TEXTS.creation.save)
     assert screen.changes.made == [("edit", 7, "quando apro Figma", "esportare i loghi", False)]
 
 
@@ -504,7 +509,7 @@ def test_the_words_not_understood_are_named_and_the_reminder_still_saves(screen:
     assert screen.clock_colour() == CAUTION
     screen.press(Qt.Key.Key_Tab)
     screen.type("giocare")
-    screen.click("Salva")
+    screen.click(TEXTS.creation.save)
     assert screen.changes.made == [
         ("create", "quando apro Steam verso sera e a dicembre", "giocare", False)
     ]
@@ -518,13 +523,13 @@ def test_a_time_already_over_turns_salva_off_and_says_why(screen: Screen) -> Non
     assert screen.shows("Oggi, venerdì 2 ottobre, alle 09:00")
     assert screen.shows(f"Oggi alle 09:00 {PAST_WARNING}")
     assert screen.clock_colour() == CAUTION
-    assert not screen.button("Salva").isEnabled()
+    assert not screen.button(TEXTS.creation.save).isEnabled()
     screen.press(Qt.Key.Key_Return)
     assert screen.focused() == WHEN
     screen.creation.save()
     assert screen.changes.made == []
     screen.retype("oggi alle 11")
-    assert screen.button("Salva").isEnabled()
+    assert screen.button(TEXTS.creation.save).isEnabled()
     assert not screen.shows(f"Oggi alle 09:00 {PAST_WARNING}")
     assert screen.clock_colour() == SECONDARY
 
@@ -535,11 +540,11 @@ def test_a_time_that_passes_while_the_window_is_open_is_not_saved(screen: Screen
     screen.press(Qt.Key.Key_Tab)
     screen.type("chiamare Mario")
     screen.clock.advance(2 * HOUR_MS)
-    screen.click("Salva")
+    screen.click(TEXTS.creation.save)
     assert screen.changes.made == []
     assert screen.window.isVisible()
     assert screen.shows(f"Oggi alle 11:00 {PAST_WARNING}")
-    assert not screen.button("Salva").isEnabled()
+    assert not screen.button(TEXTS.creation.save).isEnabled()
 
 
 def test_ogni_volta_makes_the_reminder_perennial(screen: Screen) -> None:
@@ -554,7 +559,7 @@ def test_ogni_volta_makes_the_reminder_perennial(screen: Screen) -> None:
     screen.press(Qt.Key.Key_Space)
     assert screen.ticked() is True
     assert screen.sentence() == "Quando apro Teams, ti ricordo ogni volta di bere un caffe."
-    screen.click("Salva")
+    screen.click(TEXTS.creation.save)
     assert screen.changes.made == [("create", "quando apro Teams", "bere un caffe", True)]
 
 
@@ -634,7 +639,7 @@ def test_editing_opens_with_the_box_and_the_time_as_saved(screen: Screen) -> Non
     assert screen.shows("Oggi, venerdì 2 ottobre, alle 15:00")
     screen.press(Qt.Key.Key_Tab)
     screen.retype("chiamare Giulia")
-    screen.click("Salva")
+    screen.click(TEXTS.creation.save)
     assert screen.changes.made == [
         ("edit", 7, "quando apro Teams domani alle 15", "chiamare Giulia", True)
     ]
@@ -656,7 +661,7 @@ def test_a_saved_time_already_over_does_not_stop_an_edit(screen: Screen) -> None
     assert screen.shows("Oggi, venerdì 2 ottobre, alle 09:00")
     assert not screen.shows(f"Oggi alle 09:00 {PAST_WARNING}")
     assert screen.clock_colour() == SECONDARY
-    assert screen.button("Salva").isEnabled()
+    assert screen.button(TEXTS.creation.save).isEnabled()
 
 
 def test_editing_keeps_the_box_as_it_was_whatever_its_words(screen: Screen) -> None:

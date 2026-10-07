@@ -24,6 +24,7 @@ from jiffin.core.clock import Clock
 from jiffin.core.meanings import read
 from jiffin.core.records import Revision
 from jiffin.core.schedule import Schedule, jiffin_day
+from jiffin.ui import catalog  # noqa: F401  # Catalog, which Texts.qml reads
 from jiffin.ui.glass import Glass
 from jiffin.ui.places import Places
 from jiffin.ui.words import passed, sentence, tidy, when

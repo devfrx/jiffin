@@ -44,6 +44,8 @@ EXCLUDES = ["jiffin.harness", "mypy", "pydantic.mypy", "pydantic.v1.mypy"]
 app = Analysis(
     [str(ROOT / "src" / "jiffin" / "__main__.py")],
     datas=[
+        # Every file of the package that is not Python: the QML, the migrations and the language
+        # files (ADR-0026).
         *collect_data_files("jiffin", excludes=["harness/**"]),
         (str(SOURCE), "jiffin/app"),
     ],

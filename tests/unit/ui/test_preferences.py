@@ -10,6 +10,7 @@ from PySide6.QtQuick import QQuickItem, QQuickWindow
 from PySide6.QtTest import QTest
 from pytestqt.qtbot import QtBot
 
+from jiffin.lang.texts import TEXTS
 from jiffin.ui import win32
 from jiffin.ui.glass import Glass
 from jiffin.ui.look import Look, Material, Settings
@@ -25,8 +26,8 @@ DARK = Settings(
     taskbar_accent="#4cc2ff",
 )
 NAMES = ["Acrilico", "Acrilico dei menu", "Mica", "Mica Alt"]
-PAUSE = "Pausa di ritorno"
-UNIT = "Unità"
+PAUSE = TEXTS.settings.return_pause
+UNIT = TEXTS.settings.unit
 
 
 class Windows:
@@ -89,7 +90,7 @@ class Screen:
         (window,) = (
             w
             for w in QGuiApplication.topLevelWindows()
-            if qmlEngine(w) is self.engine and w.title() == "Impostazioni"
+            if qmlEngine(w) is self.engine and w.title() == TEXTS.settings.title
         )
         assert isinstance(window, QQuickWindow)
         self.window = window
@@ -195,7 +196,7 @@ def test_impostazioni_opens_the_window_centred_with_the_focus_on_the_pause(
     assert window.title() == "Impostazioni"
     assert screen.shows("Impostazioni")
     assert [accessible(choice, "name") for choice in screen.choices()] == NAMES
-    assert screen.checked() == ["Acrilico dei menu"]
+    assert screen.checked() == [TEXTS.material.menu_acrylic.name]
     assert screen.focused() == PAUSE
 
 
@@ -205,7 +206,7 @@ def test_the_return_pause_comes_before_the_material_with_what_it_does(screen: Sc
         "Se torni a una cosa dopo almeno questo tempo, i suoi promemoria suonano di nuovo. "
         "Da 10 secondi in su."
     )
-    assert screen.top(PAUSE) < screen.top(hint) < screen.top("Materiale")
+    assert screen.top(PAUSE) < screen.top(hint) < screen.top(TEXTS.settings.material)
     assert screen.pause() == ("2", "minuti")
 
 
@@ -240,29 +241,29 @@ def test_a_click_on_a_material_changes_the_glass_at_once_and_keeps_the_choice(
 ) -> None:
     screen.open()
     del dwm[:]
-    screen.click("Mica")
+    screen.click(TEXTS.material.mica.name)
     hwnd = int(screen.window.winId())
     assert screen.look.material is Material.MICA
     assert [call for call in dwm if call[1] == hwnd] == [
         ("set_backdrop", hwnd, True, win32.DWMSBT_MAINWINDOW),
         ("activate_frame", hwnd),
     ]
-    assert screen.checked() == ["Mica"]
+    assert screen.checked() == [TEXTS.material.mica.name]
     assert screen.kept == [Material.MICA]
     assert screen.window.isVisible()
 
 
 def test_the_material_in_use_keeps_its_check_and_is_not_kept_again(screen: Screen) -> None:
     screen.open()
-    screen.click("Acrilico dei menu")
-    assert screen.checked() == ["Acrilico dei menu"]
+    screen.click(TEXTS.material.menu_acrylic.name)
+    assert screen.checked() == [TEXTS.material.menu_acrylic.name]
     assert screen.kept == []
 
 
 def test_the_check_follows_the_material_set_at_the_start(screen: Screen) -> None:
     screen.look.material = Material.MICA_ALT
     screen.open()
-    assert screen.checked() == ["Mica Alt"]
+    assert screen.checked() == [TEXTS.material.mica_alt.name]
     assert screen.kept == []
 
 
@@ -276,17 +277,17 @@ def test_tab_moves_on_and_space_chooses(screen: Screen) -> None:
     assert order == [UNIT, *NAMES, PAUSE]
     for _ in range(4):
         screen.press(Qt.Key.Key_Tab)
-    assert screen.focused() == "Mica"
+    assert screen.focused() == TEXTS.material.mica.name
     screen.press(Qt.Key.Key_Space)
-    assert screen.checked() == ["Mica"]
+    assert screen.checked() == [TEXTS.material.mica.name]
     assert screen.kept == [Material.MICA]
 
 
-@pytest.mark.parametrize("close", ["Chiudi", "Esc"])
+@pytest.mark.parametrize("close", [TEXTS.command.close, "Esc"])
 def test_the_x_and_esc_close_the_window(screen: Screen, close: str) -> None:
     screen.open()
     # The X is the only Chiudi: no button at the bottom, as in Windows' Settings.
-    assert len(screen._items(lambda item: accessible(item, "name") == "Chiudi")) == 1
+    assert len(screen._items(lambda item: accessible(item, "name") == TEXTS.command.close)) == 1
     if close == "Esc":
         screen.press(Qt.Key.Key_Escape)
     else:
@@ -301,9 +302,9 @@ def test_the_window_drags_from_any_empty_point_but_not_from_its_controls(
     window = screen.window
     assert drags(window, QPoint(8, window.height() - 8))
     for control in (
-        screen._item(lambda item: accessible(item, "name") == "Chiudi"),
+        screen._item(lambda item: accessible(item, "name") == TEXTS.command.close),
         screen._item(lambda item: item.inherits("QQuickTextField")),
-        screen._item(lambda item: accessible(item, "name") == "Aumenta"),
+        screen._item(lambda item: accessible(item, "name") == TEXTS.number_box.increase),
         screen.unit(),
         *screen.choices(),
     ):
@@ -403,21 +404,21 @@ def test_in_seconds_the_pause_never_goes_under_10(screen: Screen) -> None:
 
 def test_the_arrows_step_the_pause_and_stop_at_the_ends_of_its_range(screen: Screen) -> None:
     screen.open()
-    screen.click("Aumenta")
+    screen.click(TEXTS.number_box.increase)
     assert (screen.pause(), screen.paused) == (("3", "minuti"), [180])
     screen.press(Qt.Key.Key_Up)
     screen.press(Qt.Key.Key_Down)
-    screen.click("Diminuisci")
+    screen.click(TEXTS.number_box.decrease)
     assert screen.paused == [180, 240, 180, 120]
     screen.type("120")
     screen.press(Qt.Key.Key_Return)
-    up = screen._item(lambda item: accessible(item, "name") == "Aumenta")
+    up = screen._item(lambda item: accessible(item, "name") == TEXTS.number_box.increase)
     assert not up.isEnabled()
     screen.press(Qt.Key.Key_Up)
     assert screen.paused[-1] == 7200
     screen.type("1")
     screen.press(Qt.Key.Key_Return)
-    down = screen._item(lambda item: accessible(item, "name") == "Diminuisci")
+    down = screen._item(lambda item: accessible(item, "name") == TEXTS.number_box.decrease)
     assert (up.isEnabled(), down.isEnabled()) == (True, False)
 
 
@@ -446,11 +447,11 @@ def test_another_unit_converts_the_pause_to_the_nearest_minute(screen: Screen) -
     screen.preferences.return_pause = 90
     screen.open()
     screen.click(UNIT)
-    screen.pick("minuti")
+    screen.pick(TEXTS.settings.minutes)
     assert not screen.units.isVisible()
     assert (screen.pause(), screen.paused) == (("2", "minuti"), [120])
     screen.click(UNIT)
-    screen.pick("secondi")
+    screen.pick(TEXTS.settings.seconds)
     # The same pause, in seconds: nothing new to keep.
     assert (screen.pause(), screen.paused) == (("120", "secondi"), [120])
 
@@ -459,7 +460,7 @@ def test_a_pause_under_a_minute_becomes_one_minute(screen: Screen) -> None:
     screen.preferences.return_pause = 20
     screen.open()
     screen.click(UNIT)
-    screen.pick("minuti")
+    screen.pick(TEXTS.settings.minutes)
     assert (screen.pause(), screen.paused) == (("1", "minuti"), [60])
 
 
@@ -500,9 +501,9 @@ def test_a_press_anywhere_else_closes_the_units_list_and_does_nothing_more(
 ) -> None:
     screen.open()
     screen.click(UNIT)
-    screen.click("Mica")
+    screen.click(TEXTS.material.mica.name)
     assert not screen.units.isVisible()
-    assert (screen.checked(), screen.kept) == (["Acrilico dei menu"], [])
+    assert (screen.checked(), screen.kept) == ([TEXTS.material.menu_acrylic.name], [])
     screen.click(UNIT)
     screen.click(UNIT)
     assert not screen.units.isVisible()
@@ -561,7 +562,7 @@ def test_the_unit_by_keyboard(screen: Screen) -> None:
     assert screen.units.isVisible()
     screen.press(Qt.Key.Key_Tab)
     assert not screen.units.isVisible()
-    assert screen.focused() == "Acrilico"
+    assert screen.focused() == TEXTS.material.acrylic.name
 
 
 def test_the_window_closes_with_its_units_list(screen: Screen) -> None:
