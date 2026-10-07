@@ -148,15 +148,17 @@ sequenceDiagram
 The Italian the app shows lives in the files of `src/jiffin/lang/it/`, not in
 the code ([ADR-0026](../adr/0026-italian-in-language-files.md)): `texts.toml`
 holds the texts of the interface, one key per text, named after the code's
-names. `lang` is a part of its own, without Qt, that imports nothing else from
-the package; every other part may import it.
+names, and `time.toml` the words of a time, which `core` reads in a condition
+and `ui/words.py` writes back ([time.md](time.md#the-lexicon)). `lang` is a
+part of its own, without Qt, that imports nothing else from the package; every
+other part may import it, `core` included.
 
 - **Read once, at import.** Each language file has a module that reads it into
-  frozen dataclasses: `jiffin.lang.texts` reads `texts.toml` into `TEXTS`, and
-  a file that cannot be read, a key missing or one too many raise
-  `CatalogError`, which stops the tests and the start. The same module writes
-  numbers, sizes and lists as the language writes them: "2.600.224.416",
-  "2,4 GB", "Chrome e Brave".
+  frozen dataclasses: `jiffin.lang.texts` reads `texts.toml` into `TEXTS`,
+  `jiffin.lang.time` reads `time.toml` into `TIME`, and a file that cannot be
+  read, a key missing or one too many raise `CatalogError`, which stops the
+  tests and the start. `jiffin.lang.texts` also writes numbers, sizes and lists
+  as the language writes them: "2.600.224.416", "2,4 GB", "Chrome e Brave".
 - **Python** reads a text by its key, `TEXTS.alert.done`, and fills its
   placeholders, `TEXTS.app.cannot_start.format(log=…)`.
 - **QML** reads every text through `Texts.qml`, a typed facade over the

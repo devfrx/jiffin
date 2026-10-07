@@ -56,23 +56,21 @@ from jiffin.core.schedule import (
     instances,
     jiffin_day,
 )
+from jiffin.lang.time import TIME
 
 PARTS = {
-    "mattina": Slot(time(6), time(12)),
-    "pomeriggio": Slot(time(12), time(18)),
-    "sera": Slot(time(18), time(23)),
-    "notte": Slot(time(23), time(6)),
+    Part.MORNING: Slot(time(6), time(12)),
+    Part.AFTERNOON: Slot(time(12), time(18)),
+    Part.EVENING: Slot(time(18), time(23)),
+    Part.NIGHT: Slot(time(23), time(6)),
 }
 """The parts of the day (#81)."""
-MOVED_FROM = {"pomeriggio": 1, "sera": 1, "notte": 6}
+MOVED_FROM = {Part.AFTERNOON: 1, Part.EVENING: 1, Part.NIGHT: 6}
 """The first hour that a part of the day moves by 12, up to 11: "alle 7 di sera" is 19:00,
 "alle 10 di notte" 22:00, "alle 2 di notte" 02:00."""
-CONNECTORS = {"e", "ed", "ma", "o", "oppure"}
+CONNECTORS = frozenset(TIME.read.remainder.connectors)
 """Words a removed time leaves hanging: "quando apro Steam, ma non nel weekend"."""
-LEADS = {
-    "di", "del", "della", "dei", "delle", "a", "al", "alla", "ai", "alle", "da", "dal", "dalla",
-    "in", "nel", "nella", "per", "su", "sul", "tra", "fra",
-}  # fmt: skip
+LEADS = frozenset(TIME.read.remainder.leads)
 """Prepositions that lead into a removed time, and go with it: "nel pomeriggio di domani". After
 a time they stay: "domani a casa"."""
 EMPTY_BRACKETS = re.compile(r"\(\s*\)|\[\s*\]")
@@ -134,7 +132,7 @@ def _remainder(condition: str, spans: tuple[tuple[int, int], ...]) -> str:
     return _trim(" ".join(joined.split()), CONNECTORS)
 
 
-def _trim(piece: str, last_words: set[str]) -> str:
+def _trim(piece: str, last_words: frozenset[str]) -> str:
     """Without commas and connectors at its sides, and without `last_words` at its end."""
     while True:
         piece = piece.strip()
@@ -196,8 +194,8 @@ def _hours(label: Part | ClockLabel | None) -> Hours | None:
     match label:
         case None:
             return None
-        case Part(name):
-            return PARTS[name]
+        case Part():
+            return PARTS[label]
         case At(clock, part):
             return Moment(_shift(clock, part))
         case After(clock, part):
@@ -287,12 +285,12 @@ def _one(days: frozenset[int]) -> int:
     return next(iter(days))
 
 
-def _shift(clock: Clock, part: str | None) -> time:
+def _shift(clock: Clock, part: Part | None) -> time:
     """The hour as on a 24-hour clock (#89), moved by the words of the day: "alle 3 del
     pomeriggio" is 15:00, "alle 11 di sera" 23:00."""
     hour = clock.hour
     if part in MOVED_FROM and MOVED_FROM[part] <= hour <= 11:
         hour += 12
-    elif part == "notte" and hour == 12:
+    elif part is Part.NIGHT and hour == 12:
         hour = 0
     return time(hour, clock.minute)

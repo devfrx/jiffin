@@ -5,6 +5,8 @@
 #91 and #92: hours with two digits; a date with its weekday, "Oggi", "Domani" or "Ieri" in front
 when it is one of them, and its year only when it is not the current one. Days count by the
 Jiffin day, as the meanings do, so hours before 04:00 are the night after their day, and say so.
+The words and phrases are the lexicon's (`jiffin.lang.time`, ADR-0026); which of them a time
+takes, and how they join, is written here.
 """
 
 from datetime import date, datetime, time
@@ -25,33 +27,30 @@ from jiffin.core.schedule import (
     Weekdays,
     YearDay,
 )
+from jiffin.lang.texts import TEXTS, listed
+from jiffin.lang.time import TIME
 
-WEEKDAYS = ("lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica")
-MONTHS = (
-    "gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno",
-    "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre",
-)  # fmt: skip
+WORDS = TIME.write
+WEEKDAYS = TIME.weekdays
+MONTHS = TIME.months
 SUNDAY = 6
 """The one weekday that is feminine: "la domenica", "la prima domenica"."""
 ORDINALS = {
-    1: ("primo", "prima"),
-    2: ("secondo", "seconda"),
-    3: ("terzo", "terza"),
-    4: ("quarto", "quarta"),
-    -1: ("ultimo", "ultima"),
+    1: TIME.ordinals.first,
+    2: TIME.ordinals.second,
+    3: TIME.ordinals.third,
+    4: TIME.ordinals.fourth,
+    -1: TIME.ordinals.last,
 }
-NUMBERS = {
-    2: "due", 3: "tre", 4: "quattro", 5: "cinque", 6: "sei", 7: "sette", 8: "otto", 9: "nove",
-    10: "dieci",
-}  # fmt: skip
-"""Counts up to ten in words, as they are written: "ogni due settimane", "ogni 15 giorni"."""
-UNITS = {
-    Unit.DAY: ("al giorno", "giorni"),
-    Unit.WEEK: ("alla settimana", "settimane"),
-    Unit.MONTH: ("al mese", "mesi"),
-    Unit.YEAR: ("all'anno", "anni"),
+ONCE = {
+    Unit.DAY: (WORDS.once.day, WORDS.once_every.day),
+    Unit.WEEK: (WORDS.once.week, WORDS.once_every.week),
+    Unit.MONTH: (WORDS.once.month, WORDS.once_every.month),
+    Unit.YEAR: (WORDS.once.year, WORDS.once_every.year),
 }
-NEAR = {-1: "ieri", 0: "oggi", 1: "domani"}
+"""How often, by unit: once in each, "una volta al mese", and once in a few, "una volta ogni
+due mesi"."""
+NEAR = {-1: WORDS.yesterday, 0: WORDS.today, 1: WORDS.tomorrow}
 
 
 def sentence(text: str) -> str:
@@ -92,7 +91,7 @@ def alert_line(remainder: str, schedule: Schedule | None, day: date | None, toda
     if schedule is None:
         return sentence(remainder)
     if remainder:
-        return f"{sentence(remainder)} · {_when(schedule, False, today)}"
+        return TEXTS.format.parts.join((sentence(remainder), _when(schedule, False, today)))
     return _on_day(schedule, day or today, today)
 
 
@@ -101,9 +100,9 @@ def appeared(remainder: str, at: datetime, today: date) -> str:
     when the alert appeared, "Quando apro Claude, ieri alle 23:12"; with only a time, only when
     it appeared, "Ieri alle 23:12". `at` is local, and its day counts on the calendar."""
     days = (today - at.date()).days
-    words = f"alle {at:%H:%M}"
+    words = WORDS.hours.moment.format(time=f"{at:%H:%M}")
     if days == 1:
-        words = f"ieri {words}"
+        words = f"{WORDS.yesterday} {words}"
     elif days > 1:
         words = f"{dated(at.date(), today)} {words}"
     return f"{sentence(remainder)}, {words}" if remainder else sentence(words)
@@ -112,8 +111,8 @@ def appeared(remainder: str, at: datetime, today: date) -> str:
 def dated(day: date, today: date) -> str:
     """A day in the middle of a line, with its article: "il 20 ottobre", "l'8 ottobre", "l'1
     ottobre"; its year only when it is not the current one."""
-    article = "l'" if day.day in (1, 8, 11) else "il "
-    return f"{article}{day.day} {MONTHS[day.month - 1]}{_year(day, today)}"
+    phrase = WORDS.days.dated_elided if day.day in (1, 8, 11) else WORDS.days.dated
+    return phrase.format(day=day.day, month=MONTHS[day.month - 1]) + _year(day, today)
 
 
 def _on_day(schedule: Schedule, day: date, today: date) -> str:
@@ -135,8 +134,8 @@ def _when(schedule: Schedule, perennial: bool, today: date) -> str:
                 line = _period(period, today)
                 return line if hours is None else f"{line}, {_hours(hours)}"
             if hours is None:
-                return "ogni giorno"
-            return f"ogni giorno {_hours(hours)}" if perennial else _hours(hours)
+                return WORDS.days.every_day
+            return f"{WORDS.days.every_day} {_hours(hours)}" if perennial else _hours(hours)
         case Weekdays(weekdays):
             line = _weekdays(weekdays, every=True)
             if hours is not None:
@@ -157,14 +156,14 @@ def _when(schedule: Schedule, perennial: bool, today: date) -> str:
 def _frequency(schedule: Schedule, frequency: Frequency, today: date) -> str:
     """ "Una volta ogni due settimane, il lunedì, dalle 18:00 alle 23:00, da oggi, venerdì 2
     ottobre": how often, then on which days and hours, then from when the periods count."""
-    each, many = UNITS[frequency.unit]
+    once, once_every = ONCE[frequency.unit]
     count = frequency.count
-    parts = [f"una volta {each}" if count == 1 else f"una volta ogni {_count(count)} {many}"]
+    parts = [once if count == 1 else once_every.format(count=_count(count))]
     if isinstance(schedule.days, Weekdays) and len(schedule.days.weekdays) < 7:
         parts.append(_weekdays(schedule.days.weekdays, every=False))
     if schedule.hours is not None:
         parts.append(_hours(schedule.hours))
-    parts.append(f"da {_date(frequency.first, today)}")
+    parts.append(WORDS.period.since.format(date=_date(frequency.first, today)))
     if schedule.period is not None:
         parts.append(_until(schedule.period, frequency.first, today))
     return ", ".join(parts)
@@ -173,16 +172,18 @@ def _frequency(schedule: Schedule, frequency: Frequency, today: date) -> str:
 def _hours(hours: Hours) -> str:
     match hours:
         case Moment(at) if at == time(0):
-            return "a mezzanotte"
+            return WORDS.hours.midnight
         case Moment(at):
-            return f"alle {at:%H:%M}{_night(at)}"
+            phrase = WORDS.hours.moment_night if _night(at) else WORDS.hours.moment
+            return phrase.format(time=f"{at:%H:%M}")
         case Slot(start, end):
-            return f"dalle {start:%H:%M} alle {end:%H:%M}{_night(start)}"
+            phrase = WORDS.hours.slot_night if _night(start) else WORDS.hours.slot
+            return phrase.format(start=f"{start:%H:%M}", end=f"{end:%H:%M}")
 
 
-def _night(start: time) -> str:
+def _night(start: time) -> bool:
     """Hours before 04:00 are the night after their day (#90): "alle 02:00 di notte"."""
-    return " di notte" if start < DAY_STARTS_AT else ""
+    return start < DAY_STARTS_AT
 
 
 def _weekdays(weekdays: frozenset[int], *, every: bool) -> str:
@@ -190,18 +191,23 @@ def _weekdays(weekdays: frozenset[int], *, every: bool) -> str:
     sabato". A single day is "il lunedì" after a frequency, which says how often."""
     days = sorted(weekdays)
     if len(days) == 7:
-        return "ogni giorno"
+        return WORDS.days.every_day
     if len(days) == 1:
-        return f"ogni {WEEKDAYS[days[0]]}" if every else _the(days[0])
+        return WORDS.days.every.format(weekday=WEEKDAYS[days[0]]) if every else _the(days[0])
     if len(days) == 6 or (len(days) == 5 and _run(weekdays) is None):
-        return "ogni giorno tranne " + _and([_the(d) for d in range(7) if d not in weekdays])
+        others = [_the(day) for day in range(7) if day not in weekdays]
+        return WORDS.days.every_day_but.format(days=listed(others))
     run = _run(weekdays)
     if run is not None and len(days) >= 3:
         first, last = run
-        start = "dalla" if first == SUNDAY else "dal"
-        end = "alla" if last == SUNDAY else "al"
-        return f"{start} {WEEKDAYS[first]} {end} {WEEKDAYS[last]}"
-    return _and([_the(day) for day in days])
+        if first == SUNDAY:
+            phrase = WORDS.days.run_from_feminine
+        elif last == SUNDAY:
+            phrase = WORDS.days.run_to_feminine
+        else:
+            phrase = WORDS.days.run
+        return phrase.format(first=WEEKDAYS[first], last=WEEKDAYS[last])
+    return listed([_the(day) for day in days])
 
 
 def _run(weekdays: frozenset[int]) -> tuple[int, int] | None:
@@ -216,40 +222,44 @@ def _run(weekdays: frozenset[int]) -> tuple[int, int] | None:
 
 
 def _the(weekday: int) -> str:
-    return f"{'la' if weekday == SUNDAY else 'il'} {WEEKDAYS[weekday]}"
-
-
-def _and(items: list[str]) -> str:
-    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " e " + items[-1]
+    phrase = WORDS.days.the_feminine if weekday == SUNDAY else WORDS.days.the
+    return phrase.format(weekday=WEEKDAYS[weekday])
 
 
 def _recurring(days: EveryNWeeks | MonthWeekday | MonthDay | YearDay, today: date) -> str:
+    recurring = WORDS.recurring
     match days:
         case EveryNWeeks(weekday, weeks, first):
-            one, other = ("una", "una") if weekday == SUNDAY else ("un", "uno")
-            name = WEEKDAYS[weekday]
+            feminine = weekday == SUNDAY
             if weeks == 2:
-                every = f"{one} {name} sì e {other} no"
+                phrase = recurring.alternate_feminine if feminine else recurring.alternate
             else:
-                every = f"{one} {name} ogni {_count(weeks)} settimane"
-            return f"{every}, da {_date(first, today)}"
+                phrase = recurring.every_weeks_feminine if feminine else recurring.every_weeks
+            every = phrase.format(weekday=WEEKDAYS[weekday], count=_count(weeks))
+            return f"{every}, {WORDS.period.since.format(date=_date(first, today))}"
         case MonthWeekday(weekday, nth):
             feminine = weekday == SUNDAY
-            article = "l'" if nth == -1 else "la " if feminine else "il "
-            return f"{article}{ORDINALS[nth][feminine]} {WEEKDAYS[weekday]} di ogni mese"
+            if nth == -1:
+                phrase = recurring.month_weekday_elided
+            else:
+                phrase = recurring.month_weekday_feminine if feminine else recurring.month_weekday
+            ordinal = ORDINALS[nth].feminine if feminine else ORDINALS[nth].masculine
+            return phrase.format(nth=ordinal, weekday=WEEKDAYS[weekday])
         case MonthDay(-1):
-            return "l'ultimo giorno di ogni mese"
+            return recurring.month_last_day
         case MonthDay(day):
-            return f"{_numbered(day)} di ogni mese"
+            return recurring.month_day.format(day=_numbered(day))
         case YearDay(month, day):
-            return f"{_numbered(day)} {MONTHS[month - 1]} di ogni anno"
+            return recurring.year_day.format(day=_numbered(day), month=MONTHS[month - 1])
 
 
 def _numbered(day: int) -> str:
     """A day of the month with its article: "il 15", "l'8", "l'11", "il primo"."""
+    recurring = WORDS.recurring
     if day == 1:
-        return "il primo"
-    return f"l'{day}" if day in (8, 11) else f"il {day}"
+        return recurring.first_of_month
+    phrase = recurring.numbered_elided if day in (8, 11) else recurring.numbered
+    return phrase.format(day=day)
 
 
 def _date(day: date, today: date) -> str:
@@ -273,16 +283,16 @@ def _period(period: Period, today: date) -> str:
     if period.first == period.last:
         return _date(period.first, today)
     if period.first == today:
-        return f"da oggi a {_plain(period.last, today)}"
-    return f"da {_range(period, today)}"
+        return WORDS.period.from_today.format(date=_plain(period.last, today))
+    return WORDS.period.since.format(date=_range(period, today))
 
 
 def _until(period: Period, since: date, today: date) -> str:
     """A period after the days, or after a frequency that starts with it at `since`: "fino a
     martedì 20 ottobre"; its start stays written once past (#92)."""
     if period.first == since:
-        return f"fino a {_plain(period.last, today)}"
-    return f"da {_range(period, today)}"
+        return WORDS.period.until.format(date=_plain(period.last, today))
+    return WORDS.period.since.format(date=_range(period, today))
 
 
 def _range(period: Period, today: date) -> str:
@@ -293,8 +303,9 @@ def _range(period: Period, today: date) -> str:
         start += f" {MONTHS[first.month - 1]}"
     if first.year != last.year:
         start += _year(first, today)
-    return f"{start} a {_plain(last, today)}"
+    return WORDS.period.range.format(first=start, last=_plain(last, today))
 
 
 def _count(count: int) -> str:
-    return NUMBERS.get(count, str(count))
+    """Up to ten in words, as they are written: "ogni due settimane", "ogni 15 giorni"."""
+    return WORDS.numbers.get(str(count), str(count))
