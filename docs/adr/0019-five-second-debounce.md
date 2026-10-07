@@ -1,6 +1,6 @@
 # ADR-0019: Evaluate a context after 5 s in the foreground
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR-0027](0027-light-sleep-of-the-engine.md) (the 5 s also hide the engine's reload) and [ADR-0028](0028-read-the-situations-in-core.md) (a change of situation counts after 5 s too)
 - **Date:** 2026-10-02
 - **Deciders:** devfrx
 - **Sources:** the owner's first use of the installed app ([#45](https://github.com/devfrx/jiffin/issues/45)), with the captured day of 2026-09-28 replayed by the harness; amends [ADR-0007](0007-single-stage-pipeline.md)

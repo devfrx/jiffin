@@ -1,6 +1,6 @@
 # ADR-0020: Read the time of a condition with our own grammar in `core`
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR-0026](0026-italian-in-language-files.md) (the lexicon is data in the language files, the rules stay code) and [ADR-0028](0028-read-the-situations-in-core.md) (the grammar reads the situations too)
 - **Date:** 2026-10-03
 - **Deciders:** devfrx
 - **Sources:** the [0.2 decision map](https://github.com/devfrx/jiffin/issues/75): tickets [#77](https://github.com/devfrx/jiffin/issues/77) (scope), [#79](https://github.com/devfrx/jiffin/issues/79) (research), [#80](https://github.com/devfrx/jiffin/issues/80) (measurement), [#81](https://github.com/devfrx/jiffin/issues/81), [#82](https://github.com/devfrx/jiffin/issues/82), [#89](https://github.com/devfrx/jiffin/issues/89), [#90](https://github.com/devfrx/jiffin/issues/90), [#91](https://github.com/devfrx/jiffin/issues/91) and [#92](https://github.com/devfrx/jiffin/issues/92) (meanings), [#84](https://github.com/devfrx/jiffin/issues/84) (how the time is shown), [#88](https://github.com/devfrx/jiffin/issues/88) (core design); amends [ADR-0008](0008-rewrite-conditions-english-statements.md)

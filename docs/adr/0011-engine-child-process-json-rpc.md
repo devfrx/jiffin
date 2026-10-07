@@ -1,6 +1,6 @@
 # ADR-0011: Run the model engine in a child process that speaks JSON-RPC on stdio
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR-0027](0027-light-sleep-of-the-engine.md) (the engine sleeps when not needed, and wakes inside the debounce)
 - **Date:** 2026-09-30
 - **Deciders:** devfrx
 - **Sources:** tickets [#16](https://github.com/devfrx/jiffin/issues/16) (stack) and [#27](https://github.com/devfrx/jiffin/issues/27) (code structure and protocol)

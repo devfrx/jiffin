@@ -1,6 +1,6 @@
 # ADR-0007: Judge every active reminder in one stage, without retrieval
 
-- **Status:** Accepted; amended by [ADR-0019](0019-five-second-debounce.md) (the debounce is 5 s)
+- **Status:** Accepted; amended by [ADR-0019](0019-five-second-debounce.md) (the debounce is 5 s) and [ADR-0029](0029-learn-from-answers-per-place.md) (a threshold per reminder, between T − 0.5 and T)
 - **Date:** 2026-09-29
 - **Deciders:** devfrx
 - **Sources:** tickets [#14](https://github.com/devfrx/jiffin/issues/14) (pipeline), [#13](https://github.com/devfrx/jiffin/issues/13), [#18](https://github.com/devfrx/jiffin/issues/18) and [#24](https://github.com/devfrx/jiffin/issues/24) (measurements), [#16](https://github.com/devfrx/jiffin/issues/16) (cost with 20 reminders)

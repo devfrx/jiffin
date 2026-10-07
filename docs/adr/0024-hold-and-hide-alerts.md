@@ -1,6 +1,6 @@
 # ADR-0024: Hold alerts while a window is in full screen or Jiffin is paused, and hide them from screen capture
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR-0027](0027-light-sleep-of-the-engine.md) (while nothing is in front, the engine sleeps)
 - **Date:** 2026-10-03
 - **Deciders:** devfrx
 - **Sources:** the [0.2 decision map](https://github.com/devfrx/jiffin/issues/75): tickets [#93](https://github.com/devfrx/jiffin/issues/93) (research) and [#94](https://github.com/devfrx/jiffin/issues/94) (decision); completes [ADR-0021](0021-one-alert-per-unit.md)

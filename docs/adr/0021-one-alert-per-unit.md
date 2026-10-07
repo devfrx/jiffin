@@ -1,6 +1,6 @@
 # ADR-0021: Ring a reminder once per occasion or per instance of its time, and keep perennial reminders
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR-0026](0026-italian-in-language-files.md) (the answers are stored in English), [ADR-0028](0028-read-the-situations-in-core.md) (the situations in the units), [ADR-0029](0029-learn-from-answers-per-place.md) (the answers per place, Remind here and requested alerts) and [ADR-0030](0030-undo-and-reopen.md) (Undo, and the way back from Completed)
 - **Date:** 2026-10-03
 - **Deciders:** devfrx
 - **Sources:** the [0.2 decision map](https://github.com/devfrx/jiffin/issues/75): tickets [#76](https://github.com/devfrx/jiffin/issues/76) (occasion and return pause), [#78](https://github.com/devfrx/jiffin/issues/78) (perennial reminders), [#83](https://github.com/devfrx/jiffin/issues/83) (the alert and Rimanda), [#84](https://github.com/devfrx/jiffin/issues/84) (tray list and settings), [#81](https://github.com/devfrx/jiffin/issues/81), [#82](https://github.com/devfrx/jiffin/issues/82), [#89](https://github.com/devfrx/jiffin/issues/89), [#91](https://github.com/devfrx/jiffin/issues/91) and [#92](https://github.com/devfrx/jiffin/issues/92) (time), [#86](https://github.com/devfrx/jiffin/issues/86) (alerts measured), [#88](https://github.com/devfrx/jiffin/issues/88) (core design); amends [ADR-0014](0014-feedback-data-retention.md) and [ADR-0017](0017-evaluation-harness-subpackage.md)

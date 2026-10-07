@@ -1,6 +1,6 @@
 # ADR-0003: Accept the first version on a real working day, against fixed thresholds
 
-- **Status:** Accepted; amended by [ADR-0022](0022-acceptance-thresholds-v0-2.md) (from 0.2, false alarms counted once per pair, target 10 and cap 20) and [ADR-0025](0025-kept-quiet-not-missed.md) (pairs kept quiet as already reminded are not missed)
+- **Status:** Accepted; amended by [ADR-0022](0022-acceptance-thresholds-v0-2.md) (from 0.2, false alarms counted once per pair, target 10 and cap 20), [ADR-0025](0025-kept-quiet-not-missed.md) (pairs kept quiet as already reminded are not missed), [ADR-0029](0029-learn-from-answers-per-place.md) (requested alerts are never the judge's) and [ADR-0031](0031-acceptance-thresholds-v0-3.md) (from 0.3, the VRAM of each process from Windows' performance counters)
 - **Date:** 2026-09-29
 - **Deciders:** devfrx
 - **Sources:** tickets [#9](https://github.com/devfrx/jiffin/issues/9) (thresholds) and [#18](https://github.com/devfrx/jiffin/issues/18) (estimate on a real day)

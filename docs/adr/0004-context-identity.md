@@ -1,6 +1,6 @@
 # ADR-0004: Define a context as app, window title and tab address
 
-- **Status:** Accepted; amended by [ADR-0018](0018-keep-exe-in-the-app-name.md) (the app keeps `.exe`)
+- **Status:** Accepted; amended by [ADR-0018](0018-keep-exe-in-the-app-name.md) (the app keeps `.exe`) and [ADR-0028](0028-read-the-situations-in-core.md) (a situation is not part of the context)
 - **Date:** 2026-09-29
 - **Deciders:** devfrx
 - **Sources:** tickets [#11](https://github.com/devfrx/jiffin/issues/11) (context), [#15](https://github.com/devfrx/jiffin/issues/15) (cache expiry) and [#17](https://github.com/devfrx/jiffin/issues/17) (tab address)
