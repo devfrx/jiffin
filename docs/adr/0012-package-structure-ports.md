@@ -1,6 +1,6 @@
 # ADR-0012: Structure the code as one package with eight parts and three ports
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR-0026](0026-italian-in-language-files.md) (a ninth part, `lang`, which every part may import) and [ADR-0028](0028-read-the-situations-in-core.md) (the context port also gives the situations)
 - **Date:** 2026-09-30
 - **Deciders:** devfrx
 - **Sources:** ticket [#27](https://github.com/devfrx/jiffin/issues/27) (code structure)

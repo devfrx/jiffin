@@ -1,6 +1,6 @@
 # ADR-0025: Leave the pairs kept quiet as already reminded out of the missed reminders
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR-0029](0029-learn-from-answers-per-place.md) (alerts for a yes or under a lowered threshold count as shown, apart)
 - **Date:** 2026-10-05
 - **Deciders:** devfrx
 - **Sources:** ticket [#104](https://github.com/devfrx/jiffin/issues/104) (the harness of 0.2), with the captured day of 2026-09-28 and the labels of [#86](https://github.com/devfrx/jiffin/issues/86); amends [ADR-0003](0003-acceptance-thresholds.md) and [ADR-0022](0022-acceptance-thresholds-v0-2.md)

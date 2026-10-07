@@ -1,6 +1,6 @@
 # ADR-0008: Rewrite conditions as English statements with the judge model
 
-- **Status:** Accepted; amended by [ADR-0020](0020-read-the-time-in-core.md) (the rewriting gets the condition without its time)
+- **Status:** Accepted; amended by [ADR-0020](0020-read-the-time-in-core.md) (the rewriting gets the condition without its time) and [ADR-0028](0028-read-the-situations-in-core.md) (nor its situations)
 - **Date:** 2026-09-29
 - **Deciders:** devfrx
 - **Sources:** tickets [#22](https://github.com/devfrx/jiffin/issues/22) (translated conditions with Laya), [#14](https://github.com/devfrx/jiffin/issues/14) (pipeline) and [#26](https://github.com/devfrx/jiffin/issues/26) (rewriting measured)

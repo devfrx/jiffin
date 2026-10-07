@@ -1,6 +1,6 @@
 # ADR-0002: License the code under Apache-2.0 and write the repository in English
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR-0026](0026-italian-in-language-files.md) (the app's Italian lives in language files, and a check keeps it there)
 - **Date:** 2026-09-29
 - **Deciders:** devfrx
 - **Sources:** ticket [#8](https://github.com/devfrx/jiffin/issues/8) (language and license)

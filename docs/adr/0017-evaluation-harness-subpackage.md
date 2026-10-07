@@ -1,6 +1,6 @@
 # ADR-0017: Ship the evaluation harness as a subpackage, outside the app bundle
 
-- **Status:** Accepted; amended by [ADR-0021](0021-one-alert-per-unit.md) (what the commands replay and report from 0.2; the statements page writes the time with `ui/words.py`)
+- **Status:** Accepted; amended by [ADR-0021](0021-one-alert-per-unit.md) (what the commands replay and report from 0.2; the statements page writes the time with `ui/words.py`), [ADR-0028](0028-read-the-situations-in-core.md) (the situations) and [ADR-0031](0031-acceptance-thresholds-v0-3.md) (the monitor on Windows' performance counters, and the counts of 0.3)
 - **Date:** 2026-09-30
 - **Deciders:** devfrx
 - **Sources:** ticket [#30](https://github.com/devfrx/jiffin/issues/30) (harness)

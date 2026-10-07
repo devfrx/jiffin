@@ -1,6 +1,6 @@
 # ADR-0013: Store data in one SQLite file with the standard sqlite3 module
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR-0027](0027-light-sleep-of-the-engine.md) (the engine's sleeps), [ADR-0028](0028-read-the-situations-in-core.md) (the situations) and [ADR-0029](0029-learn-from-answers-per-place.md) (the answers per place instead of the silences)
 - **Date:** 2026-09-30
 - **Deciders:** devfrx
 - **Sources:** tickets [#28](https://github.com/devfrx/jiffin/issues/28) (storage), [#15](https://github.com/devfrx/jiffin/issues/15) (what is saved) and [#30](https://github.com/devfrx/jiffin/issues/30) (`context_since`)

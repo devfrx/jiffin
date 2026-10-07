@@ -1,6 +1,6 @@
 # ADR-0001: Keep all data and inference on the user's machine
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR-0028](0028-read-the-situations-in-core.md) (Jiffin reads states, never texts)
 - **Date:** 2026-09-25
 - **Deciders:** devfrx
 - **Sources:** product premises of the [decision map](https://github.com/devfrx/jiffin/issues/1); tickets [#15](https://github.com/devfrx/jiffin/issues/15) (feedback data) and [#16](https://github.com/devfrx/jiffin/issues/16) (stack)
