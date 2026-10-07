@@ -14,6 +14,7 @@ from jiffin.harness import day as days
 from jiffin.harness import render
 from jiffin.harness.errors import HarnessError
 from jiffin.harness.labels import Labels
+from jiffin.lang.harness import HARNESS
 
 DELAY_P95_S = 30
 MISSED_SHARE = 0.20
@@ -24,16 +25,6 @@ VRAM_MIB = 4096
 RAM_MIB = 2_000_000_000 >> 20
 """2 GB of RAM for all the app's processes, in MiB."""
 CPU_PERCENT = 5.0
-
-_WHY = {
-    "below threshold": "sotto la soglia",
-    "same occasion": "stessa occasione",
-    "held back": "trattenuto (una volta all'ora)",
-    "out of time": "fuori orario",
-    "snoozed": "rimandato",
-    "silenced": "«Non qui»",
-    "waited": "in attesa di un posto, poi chiuso",
-}
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,7 +190,7 @@ def _unshown(pair: days.Unshown) -> dict[str, str | None]:
         "address": context.address,
         "condition": revision.condition,
         "action": revision.action,
-        "why": _WHY[pair.why],
+        "why": HARNESS.report.reasons[pair.why],
         "d": f"{pair.d:.2f}",
     }
 

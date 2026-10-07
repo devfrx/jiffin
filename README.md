@@ -1,8 +1,8 @@
 # Jiffin
 
 Contextual reminders for Windows 11. You write a reminder with a condition in
-plain Italian — *quando lavoro al progetto Rossi, ricordami di aggiornare il
-changelog* — and Jiffin shows it in an overlay when your current work (the
+plain Italian — *"quando lavoro al progetto Rossi, ricordami di aggiornare il
+changelog"* — and Jiffin shows it in an overlay when your current work (the
 active app, the window title, the address of the browser tab) makes the
 condition true. A local language model evaluates every condition on your
 machine; nothing leaves it.

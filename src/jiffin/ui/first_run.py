@@ -6,8 +6,8 @@ checks it; then the engine can start. The window opens by itself when the model 
 to wait or to act, for a download or a problem, and shows three steps: the download, the check,
 and ready, with how to start. The plain check at every start opens nothing. Once the user closes
 it, it stays closed for this run: the tray list shows the download and the problems, and its
-Dettagli opens the window again. Offline, the window says where to get the file and where to put
-it, and Riprova checks it as it checks a download. It opens at the centre of the screen, or where
+Details opens the window again. Offline, the window says where to get the file and where to put
+it, and Retry checks it as it checks a download. It opens at the centre of the screen, or where
 the user left it (ADR-0023).
 """
 
@@ -78,7 +78,7 @@ class FirstRun(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         READY = 2
         """Checked: the engine can start."""
         NETWORK = 3
-        """The download stopped: what arrived is kept, and Riprova resumes it."""
+        """The download stopped: what arrived is kept, and Retry resumes it."""
         SPACE = 4
         DISK = 5
         """The models folder or the file cannot be written or read."""
@@ -148,7 +148,7 @@ class FirstRun(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
             self._open()
 
     def open(self) -> None:
-        """Dettagli, in the tray list: the window again, even once closed."""
+        """Details, in the tray list: the window again, even once closed."""
         self._open()
 
     @property
@@ -186,7 +186,7 @@ class FirstRun(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
 
     @Property(bool, notify=changed)
     def retrying(self) -> bool:
-        """Riprova was pressed, and the app has not answered yet."""
+        """Retry was pressed, and the app has not answered yet."""
         return self._retrying
 
     # Floats: a QML int has 32 bits, and the model has 2.6 billion bytes.

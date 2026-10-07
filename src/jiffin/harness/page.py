@@ -10,12 +10,14 @@ import json
 import logging
 import secrets
 import webbrowser
+from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from importlib import resources
 from typing import cast
 from urllib.parse import SplitResult, parse_qs, urlsplit
 
+from jiffin.harness import render
 from jiffin.harness.labels import Labels
+from jiffin.lang.harness import HARNESS
 
 log = logging.getLogger(__name__)
 
@@ -122,8 +124,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._send(403, "Forbidden")
         route = target.path
         if route == "/":
-            page = resources.files("jiffin.harness") / "pages" / "label.html"
-            return self._send(200, page.read_text(encoding="utf-8"), "text/html; charset=utf-8")
+            page = render.text("label.html", texts=asdict(HARNESS.label))
+            return self._send(200, page, "text/html; charset=utf-8")
         if route == "/data":
             body = json.dumps(self._server.data(), ensure_ascii=False)
             return self._send(200, body, "application/json")

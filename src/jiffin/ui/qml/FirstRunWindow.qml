@@ -1,8 +1,8 @@
 // The first-run window (#43, ADR-0015): the model file on its way, in three steps, the download,
-// the check and ready; a problem with Riprova, and the file by hand when offline; at the end, how
+// the check and ready; a problem with Retry, and the file by hand when offline; at the end, how
 // to start. A card like the creation window, on the alerts' material, with an X on its title's
 // line (ADR-0010, ADR-0023). The owner chose the steps on screen. It takes the focus; Tab moves
-// on, and Esc, the X, Chiudi or Inizia closes it. It drags from any point no control takes.
+// on, and Esc, the X, Close or Start closes it. It drags from any point no control takes.
 pragma ComponentBehavior: Bound
 
 import QtQuick
@@ -22,7 +22,7 @@ Window {
     height: content.implicitHeight + 40
     color: "transparent"
     title: ready ? Texts.isReady : Texts.welcome
-    // No button in the taskbar, as Windows' own panels: Dettagli, in the tray list, brings it back.
+    // No button in the taskbar, as Windows' own panels: Details, in the tray list, brings it back.
     flags: Qt.Tool | Qt.FramelessWindowHint
 
     // As the alert: without glass, the surface is painted here; with material B, a veil goes
@@ -110,7 +110,7 @@ Window {
             }
         }
 
-        // A problem, with Riprova; offline or with the wrong file, the way to put it by hand.
+        // A problem, with Retry; offline or with the wrong file, the way to put it by hand.
         ColumnLayout {
             Layout.fillWidth: true
             visible: window.firstRun.problem

@@ -60,7 +60,7 @@ flowchart LR
 | interface | Qt, the QML windows, the tray icon, the shortcut, the relay | Qt's events, and the relay's slots |
 | worker | `core`, the one connection to the database, the supervisor and through it the engine process | its queue, and its deadlines |
 | context | the message loop, the WinEvent hooks, the window of Windows' notices and the COM apartment of the capture ([context](context.md)) | Windows |
-| model file | one call to `model_file.ensure` at a time ([first run](first-run.md)) | the start, Riprova, and a network problem tried again |
+| model file | one call to `model_file.ensure` at a time ([first run](first-run.md)) | the start, Retry, and a network problem tried again |
 | engine stdout, stderr | the engine's pipes ([engine](engine.md)) | the engine process |
 
 - **One owner.** Only the worker thread touches `core`, the store and the
@@ -106,7 +106,7 @@ sequenceDiagram
     M->>W: the file is checked
     W->>E: start the engine: initialize
     E-->>W: ready
-    Note over I,C: until Esci
+    Note over I,C: until Quit
     I->>W: close
     W->>C: close
     W->>E: shutdown, then its input closed
@@ -137,7 +137,7 @@ sequenceDiagram
   start or a restart, `core` writes the statements it missed and judges the
   stable context again; the cache spares what was judged already
   ([ADR-0011](../adr/0011-engine-child-process-json-rpc.md)).
-- **The model file's thread** is a daemon: a download cut short by Esci keeps
+- **The model file's thread** is a daemon: a download cut short by Quit keeps
   its part, and the next start resumes it.
 - **The log** is `logs\jiffin.log` in the data folder: ids and numbers only, a
   new file at 1 MiB, four old ones kept. Uncaught exceptions and Qt's own
@@ -149,15 +149,18 @@ The Italian the app shows lives in the files of `src/jiffin/lang/it/`, not in
 the code ([ADR-0026](../adr/0026-italian-in-language-files.md)): `texts.toml`
 holds the texts of the interface, one key per text, named after the code's
 names, and `time.toml` the words of a time, which `core` reads in a condition
-and `ui/words.py` writes back ([time.md](time.md#the-lexicon)). `lang` is a
-part of its own, without Qt, that imports nothing else from the package; every
-other part may import it, `core` included.
+and `ui/words.py` writes back ([time.md](time.md#the-lexicon)); `harness.toml`
+holds the texts of the harness's pages, which the harness alone reads
+([harness.md](harness.md#the-pages)). `lang` is a part of its own, without Qt,
+that imports nothing else from the package; every other part may import it,
+`core` included.
 
 - **Read once, at import.** Each language file has a module that reads it into
   frozen dataclasses: `jiffin.lang.texts` reads `texts.toml` into `TEXTS`,
-  `jiffin.lang.time` reads `time.toml` into `TIME`, and a file that cannot be
-  read, a key missing or one too many raise `CatalogError`, which stops the
-  tests and the start. `jiffin.lang.texts` also writes numbers, sizes and lists
+  `jiffin.lang.time` reads `time.toml` into `TIME`, `jiffin.lang.harness`
+  reads `harness.toml` into `HARNESS`, and a file that cannot be read, a key
+  missing or one too many raise `CatalogError`, which stops the tests and the
+  start. `jiffin.lang.texts` also writes numbers, sizes and lists
   as the language writes them: "2.600.224.416", "2,4 GB", "Chrome e Brave".
 - **Python** reads a text by its key, `TEXTS.alert.done`, and fills its
   placeholders, `TEXTS.app.cannot_start.format(log=…)`.
@@ -170,3 +173,14 @@ other part may import it, `core` included.
   form for each count has `one` and `other`, chosen by the Italian rule; and a
   sentence that changes with its case, such as "In pausa fino alle 15:30." and
   "In pausa fino a domani alle 15:30.", is two keys the code chooses between.
+- **Kept there by two checks.** The pre-commit hook `italian`,
+  `scripts/check_italian.py`, which `ci.yml` runs too, fails on an Italian word
+  outside the language files: a word with an accented vowel, or a word of the
+  files themselves but for a few that are English too. A word passes quoted, as
+  an example of what the user writes, and in a code span; the tests' literals,
+  the accepted ADRs, the CHANGELOG and the mockups are not read. The hook reads
+  every tracked file each time, since a word new in a language file can make an
+  old comment Italian. `tests/unit/lang/test_keys.py` reads the code against
+  the files: every key that QML, the pages and the Python ask for exists, every
+  key of the files is asked for, each text gets the placeholders it holds, and
+  each plural has its forms.

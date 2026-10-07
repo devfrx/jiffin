@@ -47,7 +47,7 @@ RETURN_PAUSE = "return_pause"
 """The setting that keeps the return pause, in seconds (ADR-0021)."""
 PAUSED_UNTIL = "paused_until"
 """The setting that keeps when the pause from the tray ends, in UTC milliseconds; null once
-Riprendi ends it (ADR-0024)."""
+Resume ends it (ADR-0024)."""
 
 type Command = Callable[[], object]
 """What it returns is dropped."""
@@ -179,7 +179,7 @@ class Worker:
         self._queue.put(self._supervisor.start)
 
     def restart_engine(self) -> None:
-        """Riprova, on the engine's trouble."""
+        """Retry, on the engine's trouble."""
         self._queue.put(self._supervisor.start)
 
     def keep_material(self, material: str) -> None:
@@ -200,12 +200,12 @@ class Worker:
         self._queue.put(keep)
 
     def pause(self, pause: Pause) -> None:
-        """Sospendi, from the tray: in force at once, and kept until it ends, through a restart
+        """Pause, from the tray: in force at once, and kept until it ends, through a restart
         (ADR-0024)."""
         self._queue.put(lambda: self._store.set_setting(PAUSED_UNTIL, self._core.pause(pause)))
 
     def resume(self) -> None:
-        """Riprendi, from the tray or its list."""
+        """Resume, from the tray or its list."""
 
         def resume() -> None:
             self._core.resume()

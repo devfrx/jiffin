@@ -1,7 +1,7 @@
 // A Fluent 2 combo box, drawn by us (ADR-0010), as WinUI's ComboBox
 // (ComboBox_themeresources.xaml, microsoft-ui-xaml at 8463f45162): 32 px high, the control fill
 // and edge of a standard button, the text 12 px in, ChevronDown (E70D) at 12 px, 14 px from the
-// right. Its list is a window of its own on the glass that never takes the focus, as Rimanda's
+// right. Its list is a window of its own on the glass that never takes the focus, as Snooze's
 // menu: as wide as the box, with the chosen item over the box; each item 32 px high in a slot of
 // 36, 5 px from the sides, rounded at 3 px, and the chosen one filled and marked by WinUI's pill.
 // Whoever holds the box shows the list, `list`, when it is clicked, and says it is `open`.

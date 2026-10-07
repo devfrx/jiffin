@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Giornata Jiffin {{ day }}</title>
+<title>{{ t.report.title.format(day=day) }}</title>
 <link rel="icon" href="data:,">
 <style>
 {% include "page.css" %}
@@ -11,12 +11,12 @@
 </head>
 <body>
 <main>
-  <h1>Giornata del {{ day }}</h1>
-  <p>{{ source }}. I numeri sono nel riassunto; qui ci sono i testi, per capirli.</p>
+  <h1>{{ t.report.heading.format(day=day) }}</h1>
+  <p>{{ t.report.intro.format(source=source) }}</p>
 
-  <h2>Avvisi mostrati ({{ alerts | length }})</h2>
+  <h2>{{ t.report.alerts.format(count=alerts | length) }}</h2>
   <table>
-    <thead><tr><th>Ora</th><th>Contesto</th><th>Promemoria</th><th>d</th><th>Etichetta</th><th>Risposta</th><th>Ritardo</th></tr></thead>
+    <thead><tr><th>{{ t.report.time }}</th><th>{{ t.report.context }}</th><th>{{ t.report.reminder }}</th><th>d</th><th>{{ t.report.label }}</th><th>{{ t.report.answer }}</th><th>{{ t.report.delay }}</th></tr></thead>
     <tbody>
     {% for alert in alerts %}
       <tr>
@@ -24,7 +24,7 @@
         <td>{{ alert.app }} · {{ alert.title }}{% if alert.address %}<div class="address">{{ alert.address }}</div>{% endif %}</td>
         <td>{{ alert.condition }} <span class="muted">→ {{ alert.action }}</span></td>
         <td class="number">{{ alert.d }}</td>
-        <td>{% if alert.time_only %}<span class="muted">solo orario</span>{% elif alert.label is none %}<span class="muted">—</span>{% elif alert.label %}<span class="yes">giusto</span>{% else %}<span class="no">falso allarme</span>{% endif %}</td>
+        <td>{% if alert.time_only %}<span class="muted">{{ t.report.time_only }}</span>{% elif alert.label is none %}<span class="muted">—</span>{% elif alert.label %}<span class="yes">{{ t.report.right }}</span>{% else %}<span class="no">{{ t.report.false_alarm }}</span>{% endif %}</td>
         <td class="muted">{{ alert.answer }}</td>
         <td class="number">{{ alert.delay }}</td>
       </tr>
@@ -34,7 +34,7 @@
 
   {% macro unshown(pairs) %}
   <table>
-    <thead><tr><th>Contesto</th><th>Promemoria</th><th>Perché</th><th>d più alto</th></tr></thead>
+    <thead><tr><th>{{ t.report.context }}</th><th>{{ t.report.reminder }}</th><th>{{ t.report.why }}</th><th>{{ t.report.highest_d }}</th></tr></thead>
     <tbody>
     {% for pair in pairs %}
       <tr>
@@ -48,12 +48,12 @@
   </table>
   {% endmacro %}
 
-  <h2>Promemoria persi ({{ missed | length }})</h2>
-  <p>Coppie pertinenti, giudicate almeno una volta nel loro orario, che non sono mai arrivate sullo schermo senza essere già state ricordate, con il motivo e il d più alto della giornata.</p>
+  <h2>{{ t.report.missed.format(count=missed | length) }}</h2>
+  <p>{{ t.report.missed_intro }}</p>
   {{ unshown(missed) }}
 
-  <h2>Taciuti perché già ricordati ({{ reminded | length }})</h2>
-  <p>Coppie pertinenti mai arrivate sullo schermo perché il promemoria era già suonato nella stessa occasione (nella stessa ora, in 0.1) o aveva già una risposta, Rimanda o «Non qui»: non contano come persi.</p>
+  <h2>{{ t.report.reminded.format(count=reminded | length) }}</h2>
+  <p>{{ t.report.reminded_intro }}</p>
   {{ unshown(reminded) }}
 </main>
 </body>

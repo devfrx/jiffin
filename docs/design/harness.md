@@ -132,7 +132,7 @@ numbers.
 | Delay, p50 and p95 | each alert on screen, those of reminders with only a time too: when it appeared, minus when it became due (in 0.1, when its context came to the foreground) |
 | Missed reminders | relevant pairs never on screen that day and not kept quiet as already reminded, over all relevant pairs ([ADR-0025](../adr/0025-kept-quiet-not-missed.md)); a pair is relevant when labelled true and judged at least once while its reminder's time held. Each with why, from the candidate that came closest then: waited for a place and never shown, or below the threshold |
 | Kept quiet as already reminded | relevant pairs never on screen because their reminder had rung in the same unit (same occasion, or held back by the once-an-hour rule of 0.1) or the user had answered it (snoozed, silenced): counted apart by why, not missed |
-| False alarms | pairs on screen labelled not relevant, each once however often it rang, since "Non qui" silences it ([ADR-0022](../adr/0022-acceptance-thresholds-v0-2.md)) |
+| False alarms | pairs on screen labelled not relevant, each once however often it rang, since Not here silences it ([ADR-0022](../adr/0022-acceptance-thresholds-v0-2.md)) |
 | Alerts of reminders with only a time | counted apart: they are right when the time is read right, which the statements page shows |
 | Evaluations per hour | the evaluations, over the time from the first context evaluated to the last evaluation; of them, those that asked the engine and those that failed |
 | VRAM, RAM, CPU, battery | the day's `monitor` rows, when there are any: VRAM and the RAM of app and engine at their peak, their CPU on average |
@@ -188,8 +188,8 @@ sequenceDiagram
   engine down: the summary counts them.
 - **The owner**: an alert the log also had, by reminder, context and time, gets
   the same answer after as long on screen; any other alert goes unanswered.
-  Utile, in a log of 0.1, is replayed as Alla prossima volta. The kind of a
-  Rimanda is in the log from 0.2 on, also for one answered before the day,
+  Useful, in a log of 0.1, is replayed as Next time. The kind of a
+  Snooze is in the log from 0.2 on, also for one answered before the day,
   which still holds, or once over lets the reminder ring again within its
   unit; in 0.1 it is the one of 15 minutes, an hour or "domani" whose end
   falls between the reminder's last judgement as snoozed and its first as
@@ -224,6 +224,19 @@ replayed alike. Judged by the engine under the occasions of 0.2, with the
 default pause, it gives 103 alerts on 43 pairs, 10 of them false alarms with
 the labels of [#86](https://github.com/devfrx/jiffin/issues/86): the very
 alerts that #86 simulated, one by one ([#104](https://github.com/devfrx/jiffin/issues/104)).
+
+## The pages
+
+The pages are for the owner, in Italian; the summaries of numbers stay in
+English, since they go into issues. Each page is a Jinja template of
+`harness/pages/`: English markup that reads its texts by key, `t.report.title`,
+from `src/jiffin/lang/it/harness.toml`
+([ADR-0026](../adr/0026-italian-in-language-files.md)). `label.html` is one
+too: its script gets its own texts as `T`, and `fill()` puts the values in.
+Every value is escaped, since titles and addresses come from any window and any
+web page. `jiffin.lang.harness` reads the file into `HARNESS`, and only the
+harness imports it: neither ships with the app
+([ADR-0017](../adr/0017-evaluation-harness-subpackage.md)).
 
 ## `monitor`
 

@@ -27,12 +27,12 @@ to `Interface.show_model` ([#44](https://github.com/devfrx/jiffin/issues/44)):
 `Interface` also takes a `ModelFile`: the pin's name, address, size and
 sha256, and the models folder, which the window shows for the file by hand,
 since the interface does not import `client`
-([ADR-0012](../adr/0012-package-structure-ports.md)). Riprova calls the
+([ADR-0012](../adr/0012-package-structure-ports.md)). Retry calls the
 app's `fetch_model`, which runs `ensure` again; it resumes a download from
 what arrived. A network problem is also tried again on its own, 30 s later
 (`app/model.py`): a connection that comes back resumes the download without
-Riprova, and the window shows it moving again. The other problems wait for
-Riprova, since only the user can mend them.
+Retry, and the window shows it moving again. The other problems wait for
+Retry, since only the user can mend them.
 
 ## The window
 
@@ -40,43 +40,43 @@ Riprova, since only the user can mend them.
 stateDiagram-v2
     [*] --> Hidden
     Hidden --> Open : a download or a problem, unless the user closed it during this run
-    Hidden --> Open : Dettagli, in the tray list
-    Open --> Hidden : Chiudi, the X or Esc: closed for this run
-    Open --> Hidden : Inizia, once ready
+    Hidden --> Open : Details, in the tray list
+    Open --> Hidden : Close, the X or Esc: closed for this run
+    Open --> Hidden : Start, once ready
 ```
 
 - The plain check at every start opens nothing: the window opens by itself
   only when the model needs the user to wait or to act. Once the user closes
   it, it stays closed for this run, and the tray list carries on.
 - **Three steps**, chosen by the owner on screen over a plain card and one
-  with the app's glyph: Scarico il modello, Controllo il file, Pronto. Each
-  has a disc with its number, the accent's ring while it runs, the caution
-  colour's when it stopped, and a check once done. The running step has a
-  bar, and the download a line under it: "0,8 GB di 2,4 GB · circa 4 min".
+  with the app's glyph: "Scarico il modello", "Controllo il file", "Pronto".
+  Each has a disc with its number, the accent's ring while it runs, the
+  caution colour's when it stopped, and a check once done. The running step
+  has a bar, and the download a line under it: "0,8 GB di 2,4 GB · circa 4 min".
   The time left comes from the last 30 s of the download, and shows after
   5 s of it.
 - Sizes are in gigabytes of 1,024³ bytes, as Windows' Explorer shows them.
 - Under the steps, while it waits: the reminders can already be written, with
-  Win+Shift+N, or from Nuovo in the tray list when another app holds the
+  Win+Shift+N, or from New in the tray list when another app holds the
   shortcut.
 - **A problem** keeps the step it stopped at, with its bar paused, and shows
-  as a line with Riprova, which reads "Riprovo…" until the app answers:
+  as a line with Retry, which reads "Riprovo…" until the app answers:
 
   | Problem | The window says |
   |---|---|
-  | `NETWORK` | the download stopped: check the connection; Riprova resumes it |
+  | `NETWORK` | the download stopped: check the connection; Retry resumes it |
   | `SPACE` | the disk is full: free so many GB, in tenths rounded up |
   | `DISK` | the models folder cannot be written or read |
-  | `MISMATCH` | the file is not the right one: replace it or delete it, then Riprova |
+  | `MISMATCH` | the file is not the right one: replace it or delete it, then Retry |
 
 - **By hand**, offline or with the wrong file: "Senza rete? Mettilo a mano"
   opens three steps: the address to download the file from, which a button
   copies; the models folder and the file's name, which a button opens in
-  Explorer, made first; and the size in bytes and the sha256 that Riprova
+  Explorer, made first; and the size in bytes and the sha256 that Retry
   checks.
 - **Ready**: "Jiffin è pronto", how to write a reminder, and where the tray
   icon is: Windows 11 puts a new icon in the ^ overflow, so the window says to
-  drag it onto the taskbar. Inizia closes it.
+  drag it onto the taskbar. Start closes it.
 - It is a card like the creation window, with the focus, without Windows'
   title bar or a taskbar button, and with the X on its title's line
   ([ADR-0023](../adr/0023-window-frame.md)). It drags from any point no
@@ -89,13 +89,13 @@ stateDiagram-v2
 While the model downloads or has a problem, the tray list shows it on top, as
 a quiet line: the download in the accent's colour, with its bar and "Finché
 non è pronto, i promemoria non avvisano."; a problem in the critical colour,
-with Riprova. Both have Dettagli, which opens the window again
+with Retry. Both have Details, which opens the window again
 ([tray](tray.md)).
 
 ## Trying it
 
 `uv run python -m jiffin.ui --model download` plays a download of a minute,
 its check and ready; `--model network`, `space`, `disk` or `mismatch` starts
-with that problem, which Riprova mends. The unit tests drive the window and
+with that problem, which Retry mends. The unit tests drive the window and
 the tray list's line on Qt's offscreen platform
 (`tests/unit/ui/test_first_run.py`, `test_tray_list.py`).

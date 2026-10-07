@@ -15,7 +15,7 @@ What the log does not keep is inferred from what it does:
   between: a moment with no context separates them;
 - a reminder's new text starts when it was made, from version 0.2 on; before, when the context
   of its first evaluation came to the foreground;
-- which Rimanda answered an alert, from version 0.2 on; before, from when the reminder was last
+- which Snooze answered an alert, from version 0.2 on; before, from when the reminder was last
   judged snoozed and first judged free after it.
 """
 
@@ -146,7 +146,7 @@ class Timeline:
             self._collect()
 
     def _move(self, time: int) -> None:
-        """Forward to `time`: a deadline already past, as the end of a Rimanda from before the
+        """Forward to `time`: a deadline already past, as the end of a Snooze from before the
         day, is handled at once."""
         self._clock.advance(max(time - self._clock.now(), 0))
 
@@ -251,7 +251,7 @@ class Replay:
         self._made_known = any(
             evaluation.return_pause is not None for evaluation in day.evaluations
         )
-        """From version 0.2 on the log records when each revision was made and which Rimanda
+        """From version 0.2 on the log records when each revision was made and which Snooze
         answered an alert; it judges with a return pause, which 0.1 did not have."""
         self._zone = zone or SystemClock().local(self._begin).tzinfo or UTC
         self._calendar = SimulatedClock(self._begin, self._zone)
@@ -361,7 +361,7 @@ class Replay:
         ]
 
     def _snoozed_at_start(self, reminder: Reminder) -> int | None:
-        """A Rimanda from before the day, even one over already: a reminder that has not rung
+        """A Snooze from before the day, even one over already: a reminder that has not rung
         since comes back within its unit (ADR-0021). From its recorded kind, from version 0.2
         on; before, until the reminder was first judged free."""
         answered = [
@@ -381,7 +381,7 @@ class Replay:
         return next((at for at, outcome in judged if outcome is not Outcome.SNOOZED), None)
 
     def _last_alerts(self) -> tuple[tuple[int, int, int], ...]:
-        """For each reminder, its last alert before the day that counts: not answered Non qui."""
+        """For each reminder, its last alert before the day that counts: not answered Not here."""
         last: dict[int, Alert] = {}
         for alert in self._log.alerts:
             if alert.created_at < self._begin and alert.answer is not Answer.NOT_HERE:
@@ -403,7 +403,7 @@ class Replay:
             for since, revision in chain[1:]:
                 commands.append((since, self._edit(reminder.id, revision)))
             if reminder.completed_at is not None:
-                # A millisecond late, so that a replayed Fatto completes it first, as it did.
+                # A millisecond late, so that a replayed Done completes it first, as it did.
                 commands.append((reminder.completed_at + 1, self._complete(reminder.id)))
         commands += [(observation.at, observe(observation)) for observation in self._seen]
         return commands
@@ -459,7 +459,7 @@ class Replay:
             match original.answer:
                 case Answer.DONE:
                     core.done(alert_id)
-                case Answer.USEFUL:  # Alla prossima volta took its place (ADR-0021)
+                case Answer.USEFUL:  # Next time took its place (ADR-0021)
                     core.snooze(alert_id, Snooze.NEXT_TIME)
                 case Answer.NOT_HERE:
                     core.not_here(alert_id)
@@ -473,7 +473,7 @@ class Replay:
         return reply
 
     def _snooze(self, original: Alert) -> Snooze:
-        """For version 0.1, which did not record it: the Rimanda whose end falls after the
+        """For version 0.1, which did not record it: the Snooze whose end falls after the
         reminder's last judgement as snoozed and by its first judgement as free. A reminder the
         day never judged again stays snoozed until tomorrow, so the replay does not judge it
         where the day did not."""

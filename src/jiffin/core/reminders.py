@@ -61,20 +61,20 @@ back: the default of the settings, which allow 10 s to 2 hours (ADR-0021)."""
 SHORTEST_RETURN_PAUSE_MS = 10_000
 LONGEST_RETURN_PAUSE_MS = 2 * HOUR_MS
 
-# "Domani" is the next day at 08:00, local time: the usual meaning in mail and reminder apps,
+# Tomorrow is the next day at 08:00, local time: the usual meaning in mail and reminder apps,
 # at the earlier of their usual hours (8 or 9), since the alert waits for its context anyway.
 # Before 04:00 the night is not over, and "domani" is 08:00 of the same day, as in Anki.
 TOMORROW_AT = time(8)
 
 
 def tomorrow(clock: Clock, now: int) -> int:
-    """08:00 of the next Jiffin day: Rimanda's "Domani", and the pause's."""
+    """08:00 of the next Jiffin day: Snooze's Tomorrow, and the pause's."""
     day = jiffin_day(clock.local(now)) + timedelta(days=1)
     return clock.instant(day, TOMORROW_AT)
 
 
 def snooze_end(snooze: Snooze, clock: Clock, now: int) -> int | None:
-    """When a Rimanda answered at `now` ends; Alla prossima volta has no end, only a next unit.
+    """When a Snooze answered at `now` ends; Next time has no end, only a next unit.
     The harness replays the snoozes of a log with it."""
     match snooze:
         case Snooze.NEXT_TIME:
@@ -88,11 +88,11 @@ def snooze_end(snooze: Snooze, clock: Clock, now: int) -> int | None:
 
 
 class Pause(Enum):
-    """Sospendi, in the tray icon's menu (ADR-0024)."""
+    """Pause, in the tray icon's menu (ADR-0024)."""
 
     HOUR = auto()
     TOMORROW = auto()
-    """Until `tomorrow`, as Rimanda's "Domani"."""
+    """Until `tomorrow`, as Snooze's Tomorrow."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,7 +101,7 @@ class ActiveReminder:
 
     reminder: Reminder
     silences: int
-    """How many contexts "Non qui" has silenced it in, until its text changes."""
+    """How many contexts Not here has silenced it in, until its text changes."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,7 +177,7 @@ class Reminders:
             reminder_id: [(alert_id, at)] for reminder_id, alert_id, at in saved.last_alerts
         }
         """The alerts that count in the units of each reminder, as (id, when): all but those
-        answered "Non qui"."""
+        answered Not here."""
         self._stretches: dict[int, _Stretches] = {}
         self._times: dict[int, Times] = {}
         """The windows of the revisions with a time, by revision."""
@@ -254,7 +254,7 @@ class Reminders:
     # The pause from the tray (ADR-0024)
 
     def pause(self, pause: Pause) -> int:
-        """Sospendi: from now until the pause ends, the user is away. Return when it ends, for
+        """Pause: from now until the pause ends, the user is away. Return when it ends, for
         the settings to keep."""
         now = self._clock.now()
         self._catch_up(now)
@@ -267,7 +267,7 @@ class Reminders:
         return until
 
     def resume(self) -> None:
-        """Riprendi: back now, as after any absence (ADR-0021)."""
+        """Resume: back now, as after any absence (ADR-0021)."""
         now = self._clock.now()
         self._catch_up(now)
         if self._paused_until is not None:
@@ -372,7 +372,7 @@ class Reminders:
         self._publish()
 
     def done(self, alert_id: int) -> None:
-        """Fatto: a one-off reminder is completed; a perennial one waits for its next unit."""
+        """Done: a one-off reminder is completed; a perennial one waits for its next unit."""
         alert = self._answer(alert_id, Answer.DONE)
         reminder = None if alert is None else self._reminders.get(alert.reminder_id)
         if reminder is not None and not reminder.revision.perennial:
@@ -380,7 +380,7 @@ class Reminders:
         self._publish()
 
     def not_here(self, alert_id: int) -> None:
-        """Non qui: the reminder keeps quiet in this exact context until its text changes, and the
+        """Not here: the reminder keeps quiet in this exact context until its text changes, and the
         alert does not count, so it may ring elsewhere in the same unit (ADR-0021)."""
         alert = self._answer(alert_id, Answer.NOT_HERE)
         if alert is not None and alert.reminder_id in self._reminders:
@@ -395,7 +395,7 @@ class Reminders:
         self._publish()
 
     def snooze(self, alert_id: int, snooze: Snooze) -> None:
-        """Rimanda. Alla prossima volta waits for the next unit; the others keep the reminder quiet
+        """Snooze. Next time waits for the next unit; the others keep the reminder quiet
         until they end, then it rings at the first chance, even within the same unit."""
         alert = self._answer(alert_id, Answer.SNOOZE, snooze)
         reminder = None if alert is None else self._reminders.get(alert.reminder_id)

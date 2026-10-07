@@ -27,6 +27,7 @@ from jiffin.harness import (
 )
 from jiffin.harness import day as days
 from jiffin.harness.errors import HarnessError
+from jiffin.lang.harness import HARNESS
 from jiffin.store.folders import Folders
 
 log = logging.getLogger(__name__)
@@ -282,7 +283,7 @@ def _report(options: argparse.Namespace) -> None:
     monitor_path = options.monitor or data / f"monitor-{day.day.isoformat()}.csv"
     used = report.machine(monitor_path) if options.monitor or monitor_path.exists() else None
     print(report.markdown(days.summarize(day, final, clock), labelled, used))
-    source = f"Dalla copia {copy.name}"
+    source = HARNESS.report.from_copy.format(copy=copy.name)
     path = data / f"report-{day.day.isoformat()}.html"
     log.info("the page is %s", report.page(day, final, clock, source, path))
 
@@ -316,7 +317,7 @@ def _replay(options: argparse.Namespace) -> None:
         log.info("no labels for %s yet: run label", day.day)
     for name, slug, replayed in rows[1:]:
         path = data / f"replay-{day.day.isoformat()}-{slug}.html"
-        report.page(replayed, final, clock, f"Rigiocata: {name}", path)
+        report.page(replayed, final, clock, HARNESS.report.replayed.format(name=name), path)
     log.info("the pages are in %s", data)
 
 

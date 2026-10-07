@@ -75,7 +75,7 @@ def when(schedule: Schedule, perennial: bool, today: date) -> str:
 
 
 def passed(schedule: Schedule, today: date) -> str:
-    """A time over already when written, short, for Salva's warning: "Oggi alle 09:00" (#84).
+    """A time over already when written, short, for Save's warning: "Oggi alle 09:00" (#84).
     `meanings` finds one only on a date; any other time gets its whole line."""
     if not isinstance(schedule.days, OnDate):
         return when(schedule, False, today)
@@ -174,11 +174,11 @@ def _hours(hours: Hours) -> str:
         case Moment(at) if at == time(0):
             return WORDS.hours.midnight
         case Moment(at):
-            phrase = WORDS.hours.moment_night if _night(at) else WORDS.hours.moment
-            return phrase.format(time=f"{at:%H:%M}")
+            moment = WORDS.hours.moment_night if _night(at) else WORDS.hours.moment
+            return moment.format(time=f"{at:%H:%M}")
         case Slot(start, end):
-            phrase = WORDS.hours.slot_night if _night(start) else WORDS.hours.slot
-            return phrase.format(start=f"{start:%H:%M}", end=f"{end:%H:%M}")
+            slot = WORDS.hours.slot_night if _night(start) else WORDS.hours.slot
+            return slot.format(start=f"{start:%H:%M}", end=f"{end:%H:%M}")
 
 
 def _night(start: time) -> bool:
@@ -232,19 +232,21 @@ def _recurring(days: EveryNWeeks | MonthWeekday | MonthDay | YearDay, today: dat
         case EveryNWeeks(weekday, weeks, first):
             feminine = weekday == SUNDAY
             if weeks == 2:
-                phrase = recurring.alternate_feminine if feminine else recurring.alternate
+                every_weeks = recurring.alternate_feminine if feminine else recurring.alternate
             else:
-                phrase = recurring.every_weeks_feminine if feminine else recurring.every_weeks
-            every = phrase.format(weekday=WEEKDAYS[weekday], count=_count(weeks))
+                every_weeks = recurring.every_weeks_feminine if feminine else recurring.every_weeks
+            every = every_weeks.format(weekday=WEEKDAYS[weekday], count=_count(weeks))
             return f"{every}, {WORDS.period.since.format(date=_date(first, today))}"
         case MonthWeekday(weekday, nth):
             feminine = weekday == SUNDAY
             if nth == -1:
-                phrase = recurring.month_weekday_elided
+                month_weekday = recurring.month_weekday_elided
             else:
-                phrase = recurring.month_weekday_feminine if feminine else recurring.month_weekday
+                month_weekday = (
+                    recurring.month_weekday_feminine if feminine else recurring.month_weekday
+                )
             ordinal = ORDINALS[nth].feminine if feminine else ORDINALS[nth].masculine
-            return phrase.format(nth=ordinal, weekday=WEEKDAYS[weekday])
+            return month_weekday.format(nth=ordinal, weekday=WEEKDAYS[weekday])
         case MonthDay(-1):
             return recurring.month_last_day
         case MonthDay(day):

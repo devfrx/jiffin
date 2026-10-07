@@ -1,8 +1,8 @@
 """One place for an alert on screen: what its window shows, and what the user answers there.
 
 An alert enters, waits 10 s for an answer, and leaves: answered, vanished when the 10 s are up,
-or withdrawn when `core` no longer shows it. Its commands are Fatto, Rimanda, whose menu holds
-the snoozes and Non qui, and the X (#83, ADR-0023). The 10 s pause while the mouse is over the
+or withdrawn when `core` no longer shows it. Its commands are Done, Snooze, whose menu holds
+the snoozes and Not here, and the X (#83, ADR-0023). The 10 s pause while the mouse is over the
 alert or while the menu is open (#12). Its windows never take the focus (ADR-0009).
 """
 
@@ -75,7 +75,7 @@ class AlertSlot(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has
 
     @property
     def menu_open(self) -> bool:
-        """Rimanda's menu is open, until an answer, a second click on Rimanda, a click outside it
+        """Snooze's menu is open, until an answer, a second click on Snooze, a click outside it
         and its alert, or the alert leaving."""
         return self._menu
 
@@ -116,7 +116,7 @@ class AlertSlot(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has
 
     @Property(bool, notify=changed)
     def perennial(self) -> bool:
-        """ "Ogni volta": Fatto means "done this time", and the icon says it (#83)."""
+        """ "Ogni volta": Done means "done this time", and the icon says it (#83)."""
         return self._revision is not None and self._revision.perennial
 
     @Property(bool, notify=changed)
@@ -125,7 +125,7 @@ class AlertSlot(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has
 
     @Property(bool, notify=changed)
     def nextTime(self) -> bool:
-        """Whether the menu has Alla prossima volta: the reminder has a next unit, asked of
+        """Whether the menu has Next time: the reminder has a next unit, asked of
         `core` when the menu opens (ADR-0021)."""
         return self._next_time
 
@@ -143,7 +143,7 @@ class AlertSlot(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has
 
     @Slot()
     def toggleMenu(self) -> None:
-        """Rimanda: its menu opens, or closes on a second click."""
+        """Snooze: its menu opens, or closes on a second click."""
         if self._state != _State.SHOWN or self._revision is None:
             return
         if not self._menu:

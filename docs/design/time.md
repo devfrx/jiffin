@@ -54,7 +54,7 @@ flowchart LR
 | `schedule` | The time, in real dates; none without a time, or with one not understood |
 | `remainder` | What the engine rewrites: the condition without its time words and without what they leave hanging, that is connectors, commas, empty brackets and a preposition that led into the time ("il report di domani"). Without a time, or with one not understood, the condition byte for byte, so its statement stays as in 0.1 |
 | `unclear` | Where the words not understood are, as phrases, for the line under "Quando" to name them |
-| `past` | The time has no instance left when written: Salva turns off |
+| `past` | The time has no instance left when written: Save turns off |
 | `recurring` | Words that tick "Ogni volta" by themselves: "ogni…", "tutti i…", "un lunedì sì e uno no", a recurrence of the month or of the year |
 
 `written_at` is the local time as the user's clock shows it: a zone, if it
@@ -184,7 +184,7 @@ are tests in `tests/unit/ui/test_words.py`.
   then its days ("il lunedì"), its hours, "da" and the day its periods count
   from, and its period: "Una volta alla settimana, dalle 18:00 alle 23:00, da
   oggi, venerdì 2 ottobre".
-- **A time already over** is named short, for Salva's warning (`passed`):
+- **A time already over** is named short, for Save's warning (`passed`):
   "Oggi alle 09:00". `read` finds one only on a date, always the Jiffin day
   of writing.
 

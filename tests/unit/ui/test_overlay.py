@@ -53,7 +53,7 @@ MENU = (
     TEXTS.snooze.tomorrow,
     TEXTS.alert.not_here,
 )
-"""Rimanda's menu, from the top (#83)."""
+"""Snooze's menu, from the top (#83)."""
 
 
 class Answers:
@@ -201,7 +201,7 @@ class Screen:
         return found
 
     def menu(self, alert_id: int) -> QQuickWindow:
-        """Rimanda's menu of the alert, shown or not."""
+        """Snooze's menu of the alert, shown or not."""
         found = self.window(alert_id).property("menu")
         assert isinstance(found, QQuickWindow)
         return found
@@ -435,7 +435,7 @@ def test_rimanda_opens_its_menu_under_the_button(screen: Screen) -> None:
     menu = screen.menu(1)
     assert menu.isVisible()
     assert screen.names(menu) == list(MENU)
-    # On Rimanda's left edge, 4 px under it, as QML rounds.
+    # On Snooze's left edge, 4 px under it, as QML rounds.
     button = screen.item(window, TEXTS.alert.snooze)
     corner = button.mapToItem(window.contentItem(), QPointF(0, button.height() + 4))
     x, y = (math.floor(value + 0.5) for value in (corner.x(), corner.y()))

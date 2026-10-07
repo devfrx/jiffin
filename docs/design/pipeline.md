@@ -51,7 +51,7 @@ comes. The first outcome that applies is recorded with the evaluation:
    model and prompts, kept on the acceptance day of 0.2; only the harness
    replays a day at another);
 2. **outside time**: true, but its time does not hold now;
-3. **silenced**: "Non qui" was answered in this exact context;
+3. **silenced**: Not here was answered in this exact context;
 4. **snoozed**: its snooze with a time has not ended;
 5. **same occasion**: it has rung already in its unit, and no snooze has ended
    since ([lifecycles.md](lifecycles.md));
@@ -90,12 +90,12 @@ its time or the end of its snooze, whichever came last
   the worker thread: the alerts on screen (at most 3), how many wait, and those
   that vanished unanswered, one per reminder. `on_reminders` receives a
   `RemindersView` after every change of a reminder or of its silences: the
-  active reminders, newest first, each with how many contexts "Non qui"
+  active reminders, newest first, each with how many contexts Not here
   silenced it in. The interface answers with `done`, `snooze` (with its kind),
   `not_here`, `close` (the X), `vanished` (its own 10 s timer) and `seen` (the
   tray list is open), and changes the reminders with `create`, `edit` (both
   with "Ogni volta"), `complete` and `delete`. Commands about something already
-  gone do nothing. Whether "Alla prossima volta" has a unit to wait for, and
+  gone do nothing. Whether Next time has a unit to wait for, and
   whether a period has ended, are pure functions of `core/units.py` it may call
   itself: `next_occasion` and `ended`.
 - **Model port.** `build()` names the engine that answers, also while it

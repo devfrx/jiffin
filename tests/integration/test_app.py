@@ -1,12 +1,12 @@
 """The app as the owner starts it, `python -m jiffin` (#44) or the installed `Jiffin.exe` (#45),
 with the real engine on the GPU, the real context capture and the real screen: a reminder written
-with Win+Shift+N alerts once a window it is about has stayed in front for 5 s, and Fatto on the
+with Win+Shift+N alerts once a window it is about has stayed in front for 5 s, and Done on the
 alert completes it.
 
 It runs only on the owner's machine, with `uv run pytest -m integration
 tests/integration/test_app.py`, and skips without the model in the `NO_GIT` folder beside the
 repository, or for the installed app when Jiffin is not installed. A Jiffin already running, the
-installed one started at login among them, must be closed with Esci first. For about a minute
+installed one started at login among them, must be closed with Quit first. For about a minute
 per app it shows a window in front of everything, presses Win+Shift+N, types a reminder and
 clicks the alert: leave the computer alone meanwhile, and any window or dialog that shows up too.
 The app keeps its data in a temporary folder, never in the owner's.

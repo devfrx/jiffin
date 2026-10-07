@@ -1,5 +1,5 @@
 """The alerts on screen: up to three windows at the top centre of the screen (#12, ADR-0010),
-each with Rimanda's menu, a window of its own (#83).
+each with Snooze's menu, a window of its own (#83).
 
 `core` says which alerts are on screen; the overlay gives each one a window, stacked from the
 top in the order they came, and the others move up once one has left. An alert answered here

@@ -52,7 +52,7 @@ MENU = (
     TEXTS.snooze.tomorrow,
     TEXTS.alert.not_here,
 )
-"""The alert's menu, from the top (#83), which the unseen alerts' Rimanda opens (#84)."""
+"""The alert's menu, from the top (#83), which the unseen alerts' Snooze opens (#84)."""
 F24 = "Controllare la scadenza dell'F24"
 
 
@@ -256,7 +256,7 @@ class Screen:
         menu = window.property("menu")
         assert isinstance(menu, QQuickWindow)
         self.menu = menu
-        """Rimanda's menu, a window of its own."""
+        """Snooze's menu, a window of its own."""
 
     def model(self, stage: FirstRun.Stage, done: int = 0) -> None:
         """What the app says of the model file, with the first-run window closed by the user."""
@@ -311,7 +311,7 @@ class Screen:
         )
 
     def menu_items(self) -> list[QQuickItem]:
-        """The items of Rimanda's menu, from the top."""
+        """The items of Snooze's menu, from the top."""
         found = [item for item in shown(self.menu) if item.inherits("QQuickAbstractButton")]
         return sorted(found, key=lambda item: item.mapToScene(QPointF(0, 0)).y())
 
@@ -727,7 +727,7 @@ def test_an_alert_new_to_the_list_keeps_its_dot_until_the_list_closes(screen: Sc
     assert column(screen.list.property("unseen"), "fresh") == [False, False, False]
 
 
-# Rimanda's menu, on an unseen alert
+# Snooze's menu, on an unseen alert
 
 
 def test_rimanda_opens_the_alerts_menu_over_its_button_where_the_work_area_ends(
@@ -809,7 +809,7 @@ def test_a_press_anywhere_in_the_list_closes_the_menu_and_does_nothing_more(
     screen.click(TEXTS.alert.snooze, F24)
     screen.click(TEXTS.alert.done, F24)
     assert not screen.menu.isVisible()
-    # A second click on Rimanda only closes it.
+    # A second click on Snooze only closes it.
     screen.click(TEXTS.alert.snooze, F24)
     screen.click(TEXTS.alert.snooze, F24)
     assert not screen.menu.isVisible()

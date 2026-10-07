@@ -35,6 +35,14 @@ repos:
         language: unsupported
         types_or: [python, pyi, toml]
         pass_filenames: false
+      # Italian only in the language files, or between quotes as an example (ADR-0026). Every
+      # file every time: a word new in a language file can make an old comment Italian.
+      - id: italian
+        name: Italian only in the language files
+        entry: uv run --locked python scripts/check_italian.py
+        language: unsupported
+        types: [text]
+        pass_filenames: false
       # Writes .qmltypes and qmldir for the types registered from Python, which qmllint reads.
       # Its input is the [tool.pyside6-project] table of pyproject.toml.
       - id: pyside6-project-build

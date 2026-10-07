@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Affermazioni Jiffin</title>
+<title>{{ t.statements.title }}</title>
 <link rel="icon" href="data:,">
 <style>
 {% include "page.css" %}
@@ -11,20 +11,20 @@
 </head>
 <body>
 <main>
-  <h1>Le affermazioni dei promemoria</h1>
-  <p>Dalla copia {{ copy }}. Per ogni promemoria, la condizione come l'hai scritta, l'orario che Jiffin ha capito, la condizione senza l'orario e l'affermazione in inglese che il modello giudica. Controlla che l'orario sia quello che volevi e che l'affermazione dica la stessa cosa della condizione senza orario.</p>
+  <h1>{{ t.statements.heading }}</h1>
+  <p>{{ t.statements.intro.format(copy=copy) }}</p>
   <table>
-    <thead><tr><th>#</th><th>Stato</th><th>Quando</th><th>Orario capito</th><th>Senza orario</th><th>Ricordami di</th><th>Affermazione</th><th>Scritta da</th></tr></thead>
+    <thead><tr><th>#</th><th>{{ t.statements.state }}</th><th>{{ t.statements.condition }}</th><th>{{ t.statements.time }}</th><th>{{ t.statements.remainder }}</th><th>{{ t.statements.action }}</th><th>{{ t.statements.statement }}</th><th>{{ t.statements.build }}</th></tr></thead>
     <tbody>
     {% for row in rows %}
       <tr>
         <td class="number">{{ row.number }}</td>
         <td class="muted">{{ row.state }}</td>
         <td>{{ row.condition }}</td>
-        <td>{% if row.time %}{{ row.time }}{% elif row.unclear %}<span class="no">non capito: «{{ row.unclear }}»</span>{% else %}<span class="muted">nessuno</span>{% endif %}</td>
-        <td>{% if row.remainder %}{{ row.remainder }}{% else %}<span class="muted">solo orario</span>{% endif %}</td>
+        <td>{% if row.time %}{{ row.time }}{% elif row.unclear %}<span class="no">{{ t.statements.unclear.format(words=row.unclear) }}</span>{% else %}<span class="muted">{{ t.statements.no_time }}</span>{% endif %}</td>
+        <td>{% if row.remainder %}{{ row.remainder }}{% else %}<span class="muted">{{ t.statements.time_only }}</span>{% endif %}</td>
         <td>{{ row.action }}</td>
-        <td>{% if row.statement %}{{ row.statement }}{% elif not row.remainder %}<span class="muted">nessuna: non va al modello</span>{% else %}<span class="no">non ancora scritta</span>{% endif %}</td>
+        <td>{% if row.statement %}{{ row.statement }}{% elif not row.remainder %}<span class="muted">{{ t.statements.no_statement }}</span>{% else %}<span class="no">{{ t.statements.not_written }}</span>{% endif %}</td>
         <td class="muted">{{ row.build }}</td>
       </tr>
     {% endfor %}

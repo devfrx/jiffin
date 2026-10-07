@@ -34,11 +34,11 @@ class Upkeep(Protocol):
     would go unnoticed."""
 
     def restart_engine(self) -> None:
-        """Riprova, on the engine's trouble in the tray list."""
+        """Retry, on the engine's trouble in the tray list."""
         ...
 
     def fetch_model(self) -> None:
-        """Riprova, on a problem with the model file: `model_file.ensure` again."""
+        """Retry, on a problem with the model file: `model_file.ensure` again."""
         ...
 
     def keep_material(self, material: Material) -> None:
@@ -56,12 +56,12 @@ class Upkeep(Protocol):
         ...
 
     def pause(self, pause: Pause) -> None:
-        """Sospendi, in the tray icon's menu: in force at once, and kept through a restart until
+        """Pause, in the tray icon's menu: in force at once, and kept through a restart until
         it ends (ADR-0024)."""
         ...
 
     def resume(self) -> None:
-        """Riprendi, in the tray icon's menu or on the pause's line in its list."""
+        """Resume, in the tray icon's menu or on the pause's line in its list."""
         ...
 
 
