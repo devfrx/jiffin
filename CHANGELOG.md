@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- "Qui dovevi avvisarmi": Win+Shift+Q, or a new row at the top of the list,
+  opens a card with the active reminders for the window in front. A click
+  rings the chosen one at once, and from then on it rings in that window.
+  Under each reminder, the list shows the places where it was asked for or
+  silenced, and forgets them one by one or all at once.
+
 ### Changed
 
 - The model frees the graphics card when Jiffin does not need it: at once

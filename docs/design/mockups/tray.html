@@ -263,6 +263,46 @@
     margin: 8px 0 0 17px;
   }
 
+  /* The row of Remind here (ADR-0029), under the title: it opens the card Win+Shift+Q opens,
+     for the place under it. */
+  .here-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: -4px 8px 0;
+    padding: 6px 10px 7px 8px;
+    border-radius: 4px;
+    background: var(--card-fill);
+  }
+  .here-row > div {
+    flex: 1;
+    min-width: 0;
+  }
+  /* What a reminder learned, which opens its places, each with its X; then Dimentica tutto. */
+  .learned {
+    display: flex;
+    gap: 4px;
+  }
+  .learned .glyph {
+    font-size: 10px;
+    margin-top: 3px;
+  }
+  .place {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .place .name {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .forget-all {
+    margin-left: -12px;
+  }
+
   /* An active reminder: the circle completes; the pencil edits; the trash asks first. */
   .row {
     display: flex;
@@ -425,7 +465,7 @@
 </head>
 <body>
 <h1>Lista nella tray</h1>
-<p class="lead">Un clic sull'icona di Jiffin nella tray apre la lista: la pausa, se c'è, cosa impedisce a Jiffin di funzionare del tutto, gli avvisi spariti senza risposta, i promemoria attivi e la pausa di ritorno. Qui con Jiffin in pausa, il modello fermo e un browser di cui non si legge l'indirizzo; il menu Rimanda è aperto sull'avviso non visto, e l'ultimo promemoria sta chiedendo se eliminarlo.</p>
+<p class="lead">Un clic sull'icona di Jiffin nella tray apre la lista: la riga di «Qui dovevi avvisarmi», la pausa, se c'è, cosa impedisce a Jiffin di funzionare del tutto, gli avvisi spariti senza risposta, i promemoria attivi e la pausa di ritorno. Qui con Jiffin in pausa, il modello fermo e un browser di cui non si legge l'indirizzo; il menu Rimanda è aperto sull'avviso non visto, il primo promemoria mostra i posti in cui ha imparato qualcosa, e l'ultimo sta chiedendo se eliminarlo.</p>
 
 <div class="themes">
   <section class="theme light" aria-label="Tema chiaro">
@@ -433,6 +473,7 @@
     <div class="desk">
       <div class="window" role="dialog" aria-label="Promemoria">
         <div class="header"><span class="title">Promemoria</span><button><span class="glyph">&#xE710;</span>Nuovo</button><button class="subtle" aria-label="Chiudi"><span class="glyph">&#xE711;</span></button></div>
+        <div class="here-row" role="button"><span class="glyph">&#xEA8F;</span><div><p>Qui dovevi avvisarmi</p><p class="caption">Preventivi · mail.google.com</p></div><span class="glyph chevron">&#xE76C;</span></div>
         <div class="notice">
           <span class="status info"><span class="glyph ring">&#xF136;</span><span class="glyph mark">&#xF13F;</span></span>
           <div><p>In pausa fino alle 15:30.</p><button>Riprendi</button></div>
@@ -456,7 +497,7 @@
           <p class="section">Attivi</p>
           <div class="row">
             <span class="glyph repeat" aria-label="Ogni volta">&#xE8EE;</span>
-            <div class="row-text"><p>Bere un bicchiere d'acqua</p><p class="caption">Quando apro Claude</p><p class="caption when"><span class="glyph">&#xE121;</span><span>Ogni giorno dalle 23:00 alle 04:00</span></p></div>
+            <div class="row-text"><p>Bere un bicchiere d'acqua</p><p class="caption">Quando apro Claude</p><p class="caption when"><span class="glyph">&#xE121;</span><span>Ogni giorno dalle 23:00 alle 04:00</span></p><p class="caption learned" role="button"><span>Taciuto in 1 posto · Chiesto in 2 posti · Più attento</span><span class="glyph">&#xE70E;</span></p><div class="places"><p class="caption place"><span class="glyph">&#xEA8F;</span><span class="name">Nuova chat – Claude</span><button class="subtle" aria-label="Dimentica"><span class="glyph">&#xE711;</span></button></p><p class="caption place"><span class="glyph">&#xE7ED;</span><span class="name">Impostazioni – Claude</span><button class="subtle" aria-label="Dimentica"><span class="glyph">&#xE711;</span></button></p><p class="caption place"><span class="glyph">&#xEA8F;</span><span class="name">Claude · claude.ai</span><button class="subtle" aria-label="Dimentica"><span class="glyph">&#xE711;</span></button></p><button class="subtle text forget-all">Dimentica tutto</button></div></div>
             <button class="subtle" aria-label="Modifica"><span class="glyph">&#xE70F;</span></button>
             <button class="subtle" aria-label="Elimina"><span class="glyph">&#xE74D;</span></button>
           </div>
@@ -489,6 +530,7 @@
     <div class="desk">
       <div class="window" role="dialog" aria-label="Promemoria">
         <div class="header"><span class="title">Promemoria</span><button><span class="glyph">&#xE710;</span>Nuovo</button><button class="subtle" aria-label="Chiudi"><span class="glyph">&#xE711;</span></button></div>
+        <div class="here-row" role="button"><span class="glyph">&#xEA8F;</span><div><p>Qui dovevi avvisarmi</p><p class="caption">Preventivi · mail.google.com</p></div><span class="glyph chevron">&#xE76C;</span></div>
         <div class="notice">
           <span class="status info"><span class="glyph ring">&#xF136;</span><span class="glyph mark">&#xF13F;</span></span>
           <div><p>In pausa fino alle 15:30.</p><button>Riprendi</button></div>
@@ -512,7 +554,7 @@
           <p class="section">Attivi</p>
           <div class="row">
             <span class="glyph repeat" aria-label="Ogni volta">&#xE8EE;</span>
-            <div class="row-text"><p>Bere un bicchiere d'acqua</p><p class="caption">Quando apro Claude</p><p class="caption when"><span class="glyph">&#xE121;</span><span>Ogni giorno dalle 23:00 alle 04:00</span></p></div>
+            <div class="row-text"><p>Bere un bicchiere d'acqua</p><p class="caption">Quando apro Claude</p><p class="caption when"><span class="glyph">&#xE121;</span><span>Ogni giorno dalle 23:00 alle 04:00</span></p><p class="caption learned" role="button"><span>Taciuto in 1 posto · Chiesto in 2 posti · Più attento</span><span class="glyph">&#xE70E;</span></p><div class="places"><p class="caption place"><span class="glyph">&#xEA8F;</span><span class="name">Nuova chat – Claude</span><button class="subtle" aria-label="Dimentica"><span class="glyph">&#xE711;</span></button></p><p class="caption place"><span class="glyph">&#xE7ED;</span><span class="name">Impostazioni – Claude</span><button class="subtle" aria-label="Dimentica"><span class="glyph">&#xE711;</span></button></p><p class="caption place"><span class="glyph">&#xEA8F;</span><span class="name">Claude · claude.ai</span><button class="subtle" aria-label="Dimentica"><span class="glyph">&#xE711;</span></button></p><button class="subtle text forget-all">Dimentica tutto</button></div></div>
             <button class="subtle" aria-label="Modifica"><span class="glyph">&#xE70F;</span></button>
             <button class="subtle" aria-label="Elimina"><span class="glyph">&#xE74D;</span></button>
           </div>
@@ -550,6 +592,8 @@
   <li>Rimanda apre il menu dell'avviso, con le stesse voci; Alla prossima volta c'è solo se il promemoria ha una prossima volta. Sta sotto il pulsante, o sopra quando sotto finisce l'area di lavoro. Un clic ovunque nella lista lo chiude e non fa altro; anche Esc, prima della lista. Con la tastiera: le frecce scorrono le voci, Spazio o Invio scelgono.</li>
   <li>Il cerchio a sinistra completa il promemoria; un promemoria «Ogni volta» non si completa mai, e lì ha le frecce del suo avviso. La matita lo apre nella finestra di modifica, il cestino chiede prima di eliminarlo, con Annulla prima di Elimina.</li>
   <li>Sotto l'azione, la condizione senza l'orario, poi l'orario capito accanto all'orologio, scritto per oggi; un promemoria solo a orario ha solo quella riga. «Periodo finito il …» quando il suo periodo è passato.</li>
+  <li>Sotto il titolo, «Qui dovevi avvisarmi» con il posto sotto: l'ultimo posto che Jiffin ha giudicato, cioè la finestra di prima, perché la lista è di Jiffin. Apre la stessa scheda di Win+Maiusc+Q, e la lista si chiude. C'è anche se un'altra app tiene i tasti.</li>
+  <li>Sotto un promemoria che ha imparato qualcosa, una riga dice quanti posti: Taciuto (Non qui), Chiesto (Qui dovevi avvisarmi), e Più attento se la soglia è scesa; mai numeri. Un clic apre i posti, l'ultimo risposto per primo, ognuno con la sua campanella, barrata dove l'hai zittito, e una X che lo dimentica; poi Dimentica tutto.</li>
   <li>In fondo, dopo una riga sottile, la pausa di ritorno, in minuti quando è di minuti interi, e Cambia, che apre le impostazioni.</li>
   <li>La lista cresce verso l'alto fino all'area di lavoro, poi scorre. L'icona ha il puntino finché un avviso aspetta o non è stato visto, e «!» finché l'indirizzo di un browser non si legge; in pausa, al posto del «!», due barre su un disco.</li>
 </ul>

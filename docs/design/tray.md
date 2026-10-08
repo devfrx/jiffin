@@ -8,8 +8,9 @@ How Jiffin lives in the tray, in `jiffin.ui`. `ui/tray.py` draws the icon,
 [#12](https://github.com/devfrx/jiffin/issues/12),
 [#43](https://github.com/devfrx/jiffin/issues/43) and
 [#84](https://github.com/devfrx/jiffin/issues/84), the pause from
-[ADR-0024](../adr/0024-hold-and-hide-alerts.md), the look from
-[ADR-0010](../adr/0010-windows-11-look-own-components.md); the
+[ADR-0024](../adr/0024-hold-and-hide-alerts.md), Remind here and what the
+reminders learned from [ADR-0029](../adr/0029-learn-from-answers-per-place.md),
+the look from [ADR-0010](../adr/0010-windows-11-look-own-components.md); the
 [mockup](mockups/tray.html) shows the list in light and dark.
 
 ## The icon
@@ -48,12 +49,15 @@ stateDiagram-v2
     Open --> Hidden : Esc, the X, or a click on the icon or elsewhere
     Open --> Hidden : New or Edit, which open the creation window
     Open --> Hidden : Change, which opens the settings
+    Open --> Hidden : the row of Remind here, which opens its card
     state Open {
         [*] --> Rows
         Rows --> Menu : Snooze, on an unseen alert
         Menu --> Rows : an item, Snooze again, a press in the list, Esc, Tab
         Rows --> Question : the trash, on an active reminder
         Question --> Rows : Cancel
+        Rows --> Places : what an active reminder learned
+        Places --> Rows : that line again, or nothing left to forget
     }
 ```
 
@@ -74,6 +78,12 @@ stateDiagram-v2
   - the title, "Promemoria", **New**, which opens the creation window
     ([creation](creation.md)), and the X, 12 px from the edge; Tab passes the X
     by, since Esc does the same;
+  - the row of **Remind here** on a card's fill: the bell (Ringer), "Qui
+    dovevi avvisarmi", the place under it and a chevron. It opens the card that
+    Win+Shift+Q opens ([overlay](overlay.md)), and the list closes; it stays
+    when another app holds the keys. The place is the last one Jiffin judged,
+    asked of `core` each time the list opens: the list is one of Jiffin's
+    windows, so it is the window before;
   - while Jiffin is paused, "In pausa fino alle 15:30." ("fino a domani alle
     08:00." when it ends on a later day), with **Resume**, as the icon's menu
     has it; the same quiet line as those below, with the news icon;
@@ -99,16 +109,24 @@ stateDiagram-v2
     [ADR-0020](../adr/0020-read-the-time-in-core.md)): a reminder with only a
     time has only that line, one whose time was not understood only its
     condition, whole. Then, when useful: "Periodo finito il 30 settembre", once
-    its period is over (`units.ended`), its snooze ("torna tra 12 min") and the
-    places Not here silenced it in. The owner chose the rows on screen;
+    its period is over (`units.ended`), and its snooze ("torna tra 12 min").
+    The owner chose the rows on screen. Last, what it learned, never as a
+    number ([ADR-0029](../adr/0029-learn-from-answers-per-place.md)): "Taciuto
+    in 2 posti · Chiesto in 1 posto · Più attento", the places Not here
+    silenced it in, those Remind here asked it in, and whether its threshold
+    went down. The line is a button with a chevron, and opens the places in the
+    row, the last answered first: each with its bell, struck where Not here
+    silenced it, its title (with the site in a browser) and an X, **Forget**, which forgets what
+    the reminder learned there; then **Forget all**. A forgotten place is as if
+    never answered, and `core` computes the threshold again;
   - after a thin line, the return pause: "Gli avvisi tornano se riprendi una
     cosa dopo almeno 2 min.", in minutes when it is whole minutes, as the
     settings show it, else in seconds ("90 s"), and **Change**, a subtle button
     that opens the settings, where it is set. The owner chose it on screen, over
     showing the pause only in the creation window.
 - Answers go to `core`, and the list changes when `core`'s next view comes. A
-  row that stays keeps its place, its focus and an open question while others
-  come and go; opening the list closes those left open.
+  row that stays keeps its place, its focus and an open question or its open
+  places while others come and go; opening the list closes those left open.
 - While it is open, the list reads the clock again every 10 s, for the
   snoozes' minutes, for the time's "Oggi" and for the pause's "domani".
 
@@ -159,10 +177,11 @@ engine's supervisor ([#44](https://github.com/devfrx/jiffin/issues/44)):
 
 `uv run python -m jiffin.ui --unreadable chrome.exe --engine failures` puts
 the icon in the tray with its "!", and its list with both lines, reminders
-with a time, a perennial one and a period over; an alert left to vanish comes
-into the list after 10 s, with its menu. Retry brings the engine back,
-Pause in the icon's menu shows the pause on the icon and in the list until
-Resume, and every answer is printed. The unit tests draw the icon and drive the list on
+with a time, a perennial one and a period over, one silenced in two places;
+an alert left to vanish comes into the list after 10 s, with its menu. Retry
+brings the engine back, Pause in the icon's menu shows the pause on the icon
+and in the list until Resume, a pick on the card of Remind here adds its
+place to the reminder, and every answer is printed. The unit tests draw the icon and drive the list on
 Qt's offscreen platform, which has no tray (`tests/unit/ui/test_tray.py`,
 `test_tray_list.py` and `test_rows.py`); there every window takes the focus as
 it shows, so the tests give it back to the list as Windows never takes it

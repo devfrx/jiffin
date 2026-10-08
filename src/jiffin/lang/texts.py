@@ -176,8 +176,25 @@ class TrayList:
     returns_at: str
     returns_tomorrow_at: str
     silenced: Plural
+    requested: Plural
+    attentive: str
+    forget: str
+    forget_all: str
     returns_after_minutes: str
     returns_after_seconds: str
+
+
+@dataclass(frozen=True, slots=True)
+class RemindHere:
+    title: str
+    question: str
+    no_place: str
+    outside_time: str
+    period_over: str
+    outside_situation: str
+    silenced: str
+    snoozed: str
+    same_occasion: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,6 +223,7 @@ class Texts:
     model_file: ModelFile
     tray: Tray
     tray_list: TrayList
+    remind_here: RemindHere
     engine: Engine
     browser: Mapping[str, str]
     """By the browser's app, "chrome.exe"."""

@@ -93,14 +93,14 @@ def test_a_time_already_over_is_named(catalog: Catalog) -> None:
 
 
 @pytest.mark.parametrize(
-    ("ended_on", "returns_in", "returns_at", "tomorrow", "silences", "status"),
+    ("ended_on", "returns_in", "returns_at", "tomorrow", "status"),
     [
-        ("", 0, "", False, 0, ""),
-        ("il 20 ottobre", 0, "", False, 0, "Periodo finito il 20 ottobre"),
-        ("", 5, "15:30", True, 0, "Rimandato: torna tra 5 min"),
-        ("", 0, "15:30", False, 1, "Rimandato: torna alle 15:30 · Taciuto in 1 posto"),
-        ("il 20 ottobre", 0, "08:00", True, 2,
-         "Periodo finito il 20 ottobre · Rimandato: torna domani alle 08:00 · Taciuto in 2 posti"),
+        ("", 0, "", False, ""),
+        ("il 20 ottobre", 0, "", False, "Periodo finito il 20 ottobre"),
+        ("", 5, "15:30", True, "Rimandato: torna tra 5 min"),
+        ("", 0, "15:30", False, "Rimandato: torna alle 15:30"),
+        ("il 20 ottobre", 0, "08:00", True,
+         "Periodo finito il 20 ottobre · Rimandato: torna domani alle 08:00"),
     ],
 )  # fmt: skip
 def test_an_active_reminder_says_what_is_useful_on_one_line(
@@ -109,10 +109,26 @@ def test_an_active_reminder_says_what_is_useful_on_one_line(
     returns_in: int,
     returns_at: str,
     tomorrow: bool,
-    silences: int,
     status: str,
 ) -> None:
-    assert catalog.status(ended_on, returns_in, returns_at, tomorrow, silences) == status
+    assert catalog.status(ended_on, returns_in, returns_at, tomorrow) == status
+
+
+@pytest.mark.parametrize(
+    ("silences", "requests", "attentive", "learned"),
+    [
+        (0, 0, False, ""),
+        (1, 0, False, "Taciuto in 1 posto"),
+        (0, 1, False, "Chiesto in 1 posto"),
+        (2, 3, False, "Taciuto in 2 posti · Chiesto in 3 posti"),
+        (0, 2, True, "Chiesto in 2 posti · Più attento"),
+        (1, 2, True, "Taciuto in 1 posto · Chiesto in 2 posti · Più attento"),
+    ],
+)
+def test_what_a_reminder_learned_is_one_line_of_counts_and_never_a_number_of_its_threshold(
+    catalog: Catalog, silences: int, requests: int, attentive: bool, learned: str
+) -> None:
+    assert catalog.learned(silences, requests, attentive) == learned
 
 
 def test_a_pause_says_until_when(catalog: Catalog) -> None:

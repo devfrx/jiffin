@@ -6,7 +6,7 @@ from PySide6.QtCore import QObject, Signal, Slot
 
 from jiffin.client.supervisor import State, Status, StopReason
 from jiffin.core.alerts import AlertsView
-from jiffin.core.reminders import RemindersView
+from jiffin.core.reminders import HereView, RemindersView
 from jiffin.ui.first_run import ModelState
 from jiffin.ui.interface import Interface
 from jiffin.ui.tray_list import TrayList
@@ -39,6 +39,8 @@ class Relay(QObject):
 
     alerts = Signal(object)
     reminders = Signal(object)
+    here = Signal(object)
+    """`core`'s answer to the card of Remind here (ADR-0029)."""
     unreadable = Signal(object)
     engine = Signal(object)
     """The supervisor's `Status`."""
@@ -50,6 +52,7 @@ class Relay(QObject):
         self._interface = interface
         self.alerts.connect(self._show_alerts)
         self.reminders.connect(self._show_reminders)
+        self.here.connect(self._show_here)
         self.unreadable.connect(self._show_unreadable)
         self.engine.connect(self._show_engine)
         self.model.connect(self._show_model)
@@ -61,6 +64,10 @@ class Relay(QObject):
     @Slot(object)
     def _show_reminders(self, view: RemindersView) -> None:
         self._interface.show_reminders(view)
+
+    @Slot(object)
+    def _show_here(self, view: HereView) -> None:
+        self._interface.show_here(view)
 
     @Slot(object)
     def _show_unreadable(self, apps: frozenset[str]) -> None:

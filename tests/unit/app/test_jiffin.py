@@ -1,24 +1,28 @@
 """The whole app on Qt's offscreen platform: a reminder written in the creation window alerts in
-a context judged true, its answer is given on the alert, and the database keeps it all (#44).
+a context judged true, its answer is given on the alert, and the database keeps it all (#44);
+Win+Shift+Q asks for it again there (ADR-0029).
 
 The engine is the client's fake, which judges every statement true; the model file is a small
 one pinned by the test; the contexts are played by the test, as the harness replays a day; the
 clock is simulated.
 """
 
+import ctypes
 import hashlib
 import sqlite3
 import sys
 from collections.abc import Callable, Iterator
 from contextlib import closing
+from ctypes import wintypes
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QPoint
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlEngine, qmlEngine
 from PySide6.QtQuick import QQuickWindow
+from PySide6.QtTest import QTest
 from pytestqt.qtbot import QtBot
 
 from jiffin.app.root import Jiffin
@@ -26,12 +30,12 @@ from jiffin.client.model_file import PinnedFile
 from jiffin.core.clock import Clock, SimulatedClock
 from jiffin.core.context import Context, Observation
 from jiffin.core.debounce import DEBOUNCE_MS
-from jiffin.core.records import Answer, Outcome
+from jiffin.core.records import Answer, Here, Outcome
 from jiffin.core.reminders import HOUR_MS
 from jiffin.lang.texts import TEXTS
 from jiffin.store.folders import Folders
 from jiffin.store.store import Log, Store
-from jiffin.ui import win32
+from jiffin.ui import hotkey, win32
 from jiffin.ui.alert import AlertSlot
 from jiffin.ui.tray import Tray
 
@@ -45,6 +49,16 @@ MODEL = PinnedFile(
     hashlib.sha256(CONTENT).hexdigest(),
 )
 FIGMA = Context("figma.exe", "Icone - Figma", None)
+_kernel32 = ctypes.WinDLL("kernel32")
+_kernel32.GetCurrentThreadId.restype = wintypes.DWORD
+_user32 = ctypes.WinDLL("user32", use_last_error=True)
+_user32.PostThreadMessageW.argtypes = [
+    wintypes.DWORD,
+    wintypes.UINT,
+    wintypes.WPARAM,
+    wintypes.LPARAM,
+]
+_user32.PostThreadMessageW.restype = wintypes.BOOL
 
 
 class Contexts:
@@ -126,6 +140,12 @@ class Desk:
             store.close()
 
 
+def press(key: int) -> None:
+    """Win+Shift and `key`, as Windows posts them to the interface thread."""
+    thread = _kernel32.GetCurrentThreadId()
+    assert _user32.PostThreadMessageW(thread, win32.WM_HOTKEY, key, 0)
+
+
 @pytest.fixture
 def desk(
     qapp: QGuiApplication,
@@ -147,7 +167,7 @@ def desk(
     # What the interface set on the application, for the tests after this one.
     interface = desk.jiffin.interface
     qapp.removeNativeEventFilter(interface.glass)
-    qapp.removeNativeEventFilter(interface.hotkey)
+    qapp.removeNativeEventFilter(interface.hotkeys)
     qapp.setQuitOnLastWindowClosed(True)
     QQuickWindow.setDefaultAlphaBuffer(False)
 
@@ -186,6 +206,43 @@ def test_a_reminder_alerts_in_its_context_and_its_answer_is_kept(qtbot: QtBot, d
     assert [candidate.outcome for candidate in evaluation.candidates] == [Outcome.ALERT]
     [alert] = log.alerts
     assert (alert.evaluation_id, alert.answer) == (evaluation.id, Answer.DONE)
+
+
+def test_win_shift_q_opens_the_card_on_the_place_judged_and_a_pick_rings_and_is_kept(
+    qtbot: QtBot, desk: Desk
+) -> None:
+    """ADR-0029: from any app, the key opens the card on the last place judged; a pick rings at
+    once, also after the reminder rang there, and is kept as Remind here."""
+    desk.jiffin.start()
+    creation = desk.jiffin.interface.creation
+    creation.new()
+    creation.setCondition("quando apro Figma")
+    creation.setAction("esportare le icone")
+    creation.save()
+    qtbot.waitUntil(desk.statement_written)
+    desk.contexts.enter(FIGMA)
+    desk.clock.advance(DEBOUNCE_MS)
+    qtbot.waitUntil(lambda: desk.alert() is not None)
+    first = desk.alert()
+    assert first is not None
+    first.close()
+    qtbot.waitUntil(lambda: desk.alert() is None)
+    press(hotkey.HERE)
+    card = desk.window(TEXTS.remind_here.title)
+    qtbot.waitUntil(card.isVisible)
+    assert desk.jiffin.interface.remind_here.property("place") == "Icone - Figma"
+    qtbot.waitUntil(card.isActive)
+    QTest.keyClick(card, Qt.Key.Key_Down)
+    QTest.keyClick(card, Qt.Key.Key_Return)
+    assert not card.isVisible()
+    qtbot.waitUntil(lambda: desk.alert() is not None)
+    desk.jiffin.close()
+
+    log = desk.log()
+    [reminder] = log.reminders
+    [answer] = log.answers
+    assert (answer.reminder_id, answer.context, answer.here) == (reminder.id, FIGMA, Here.YES)
+    assert [alert.requested for alert in log.alerts] == [False, True]
 
 
 def test_the_windows_places_are_kept_and_put_back_at_the_start(qtbot: QtBot, desk: Desk) -> None:

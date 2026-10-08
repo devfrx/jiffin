@@ -11,6 +11,7 @@ takes, and how they join, is written here.
 
 from datetime import date, datetime, time
 
+from jiffin.core.context import Context
 from jiffin.core.schedule import (
     DAY_STARTS_AT,
     EveryNWeeks,
@@ -62,6 +63,14 @@ def sentence(text: str) -> str:
 def tidy(text: str) -> str:
     """One space between words, as the reminder is saved: a pasted line break goes too."""
     return " ".join(text.split())
+
+
+def place(context: Context) -> str:
+    """A place, as Remind here shows it (ADR-0029): the window's title, with the site in a
+    browser, "Preventivi · mail.google.com"; the app when the window has no title."""
+    title = context.title or context.app
+    site = context.site
+    return title if site is None else TEXTS.format.parts.join((title, site))
 
 
 def when(schedule: Schedule, perennial: bool, today: date) -> str:

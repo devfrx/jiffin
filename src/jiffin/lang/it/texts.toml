@@ -165,16 +165,39 @@ paused_until_tomorrow = "In pausa fino a domani alle {at}."
 # The browsers whose address cannot be read, by their names: "Chrome e Brave".
 unreadable = "{browsers}: non riesco a leggere l'indirizzo. Uso solo app e titolo."
 # Under an active reminder, when useful, joined by `format.parts`: its period over (#91), "il 20
-# ottobre", its snooze, and the places Not here silenced it in.
+# ottobre", and its snooze.
 period_over = "Periodo finito {on}"
 returns_in = "Rimandato: torna tra {minutes} min"
 returns_at = "Rimandato: torna alle {at}"
 returns_tomorrow_at = "Rimandato: torna domani alle {at}"
+# Under an active reminder that learned something, after the line above, joined by
+# `format.parts` (ADR-0029): the places Not here silenced it in, those Remind here asked it in,
+# and whether its threshold went down. It opens the places, each with its X, then Forget all.
 silenced = { one = "Taciuto in {count} posto", other = "Taciuto in {count} posti" }
+requested = { one = "Chiesto in {count} posto", other = "Chiesto in {count} posti" }
+attentive = "Più attento"
+forget = "Dimentica"
+forget_all = "Dimentica tutto"
 # At the bottom (#84): the return pause, in minutes when it is whole minutes, as the settings
 # show it, else in seconds.
 returns_after_minutes = "Gli avvisi tornano se riprendi una cosa dopo almeno {minutes} min."
 returns_after_seconds = "Gli avvisi tornano se riprendi una cosa dopo almeno {seconds} s."
+
+# The card of Remind here, "qui dovevi avvisarmi" (ADR-0029), and the row at the top of the tray
+# list that opens it, with the place under it.
+[remind_here]
+title = "Qui dovevi avvisarmi"
+question = "Qui dovevi avvisarmi di…"
+# With no place judged yet: Jiffin has just started, or only private or full-screen windows
+# stayed in front.
+no_place = "Non so ancora dove sei: resta qualche secondo su una finestra, poi riprova."
+# After a reminder's condition, what else kept it quiet in the place, by `core.records.Outcome`.
+outside_time = "Fuori orario"
+period_over = "Periodo finito"
+outside_situation = "Fuori situazione"
+silenced = "Taciuto qui"
+snoozed = "Rimandato"
+same_occasion = "Già suonato"
 
 # What the tray list says of the engine's trouble, by TrayList.Engine; WORKING says nothing.
 [engine]

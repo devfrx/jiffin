@@ -20,8 +20,15 @@ from jiffin.core.alerts import AlertsView
 from jiffin.core.clock import Clock, SimulatedClock, SystemClock
 from jiffin.core.context import Context, Observation
 from jiffin.core.debounce import DEBOUNCE_MS
-from jiffin.core.records import Evaluation, Record, Snooze
-from jiffin.core.reminders import HOUR_MS, RETURN_PAUSE_MS, Pause, Reminders, RemindersView
+from jiffin.core.records import Evaluation, Outcome, Record, Snooze
+from jiffin.core.reminders import (
+    HOUR_MS,
+    RETURN_PAUSE_MS,
+    HereView,
+    Pause,
+    Reminders,
+    RemindersView,
+)
 from jiffin.core.situations import (
     CHANGE_MS,
     NO,
@@ -76,6 +83,7 @@ class Scene:
         self.alerts: list[AlertsView] = []
         self.lists: list[RemindersView] = []
         self.statuses: list[Status] = []
+        self.heres: list[HereView] = []
         self.worker = Worker(
             clock,
             self.database,
@@ -87,7 +95,7 @@ class Scene:
             self._contexts,
             engine=FAKE_ENGINE,
         )
-        self.core = QueuedCore(self.worker)
+        self.core = QueuedCore(self.worker, self.heres.append)
 
     def _contexts(self, observe: Callable[[Observation | SituationObservation], None]) -> Contexts:
         self.contexts = self._kind(observe)
@@ -237,6 +245,23 @@ def test_a_reminder_written_before_the_engine_gets_its_statement_once_it_is_up(
     scene.worker.model_ready()
     scene.settle()
     assert scene.statement() == "The user: quando apro Figma."
+
+
+def test_the_card_of_remind_here_asks_core_through_the_queue_and_rings_what_it_picks(
+    scene: Scene,
+) -> None:
+    scene.core.create("oggi", "pagare la bolletta", False)
+    scene.enter(FIGMA)
+    scene.advance(DEBOUNCE_MS)
+    scene.core.here()
+    scene.settle()
+    [view] = scene.heres
+    [here] = view.reminders
+    # It rang at the first stable context, on its own: a pick rings it again, as asked.
+    assert (view.place, here.quiet) == (FIGMA, Outcome.SAME_OCCASION)
+    scene.core.remind_here(here.reminder.id, FIGMA)
+    scene.settle()
+    assert [alert.requested for alert in scene.alerts[-1].visible] == [False, True]
 
 
 def test_the_contexts_reach_core(scene: Scene) -> None:
@@ -553,14 +578,24 @@ class Recorded:
         ("edit", (3, "quando apro Figma", "esportare le icone", True)),
         ("complete", (3,)),
         ("delete", (3,)),
+        ("remind_here", (3, FIGMA)),
+        ("withdraw", (3, FIGMA)),
+        ("withdraw_all", (3,)),
     ],
 )
 def test_each_command_of_the_interface_reaches_core_as_given(
     name: str, arguments: tuple[object, ...]
 ) -> None:
     recorded = Recorded()
-    getattr(QueuedCore(cast(Worker, recorded)), name)(*arguments)
+    getattr(QueuedCore(cast(Worker, recorded), lambda view: None), name)(*arguments)
     assert recorded.made == [(name, *arguments)]
+
+
+def test_before_any_place_the_card_gets_no_place_and_no_reminder(scene: Scene) -> None:
+    scene.core.create("quando apro Figma", "esportare le icone", False)
+    scene.core.here()
+    scene.settle()
+    assert scene.heres == [HereView(None)]
 
 
 def test_the_worker_is_its_own_thread(scene: Scene) -> None:

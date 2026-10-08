@@ -4,7 +4,9 @@ at the interface without the app.
 Answering an alert, or letting it vanish, prints what happened; a new alert comes 2 s later,
 and one that vanished waits in the tray list. Win+Shift+N opens the creation window, the tray
 icon the list, and Settings in its menu the settings; what they change is printed and kept
-until the end. Pause in the same menu shows the pause on the icon and in the list, until
+until the end. Win+Shift+Q, or the row at the top of the list, opens the card of Remind here on
+a made-up place; a pick rings its reminder at once, and the list shows what it learned there,
+which its X forgets. Pause in the same menu shows the pause on the icon and in the list, until
 Resume. `--model` plays a first run: a download of a minute and its check, or a problem
 first, which Retry mends. No model and no data are needed. Quit in the tray icon's menu, or
 Ctrl+C in the terminal, ends it.
@@ -27,16 +29,19 @@ from jiffin.core.alerts import AlertsView
 from jiffin.core.clock import SystemClock
 from jiffin.core.context import Context
 from jiffin.core.meanings import read
-from jiffin.core.records import Alert, Here, Reminder, Revision, Snooze
+from jiffin.core.records import Alert, Here, Outcome, Reminder, Revision, Snooze
 from jiffin.core.reminders import (
     HOUR_MS,
     MINUTE_MS,
     ActiveReminder,
+    HereReminder,
+    HereView,
     Pause,
     Place,
     RemindersView,
     tomorrow,
 )
+from jiffin.ui import hotkey
 from jiffin.ui.first_run import FirstRun, ModelFile, ModelState
 from jiffin.ui.interface import Interface
 from jiffin.ui.look import Material
@@ -62,6 +67,17 @@ silences: without a time, perennial with one, with only a time, and with a perio
 DAY_MS = 24 * HOUR_MS
 NEXT_MS = 2000
 BROWSERS = ("vivaldi.exe", "chrome.exe", "brave.exe")
+HERE = Context("vivaldi.exe", "Preventivi", "mail.google.com/mail/u/0")
+"""The made-up place of the card of Remind here."""
+QUIET = (
+    None,
+    Outcome.SNOOZED,
+    Outcome.SILENCED,
+    Outcome.OUTSIDE_TIME,
+    Outcome.SAME_OCCASION,
+    Outcome.OUTSIDE_SITUATION,
+)
+"""What else kept each reminder quiet in that place, from the newest, in turn."""
 _NAME = "spark-x2.5-4b-rizzo-flow-lora-q4_k_m.gguf"
 MODEL = ModelFile(
     name=_NAME,
@@ -132,8 +148,12 @@ class Preview:
     """Plays `core`'s part: the alerts on screen, a new one after each answer, those that
     vanished in the tray list, and the reminders, printed and kept in memory."""
 
-    def __init__(self, count: int, download: "Download | None" = None) -> None:
+    def __init__(
+        self, count: int, download: "Download | None" = None, *, placed: bool = True
+    ) -> None:
         self._download = download
+        self._placed = placed
+        """False: no place judged yet, for the card of Remind here."""
         self._clock = SystemClock()
         self._ids = itertools.count(1)
         self._texts = itertools.cycle(SAMPLES)
@@ -225,6 +245,45 @@ class Preview:
         self._reminders.pop(reminder_id, None)
         QTimer.singleShot(0, self._show_reminders)
 
+    def here(self) -> None:
+        reminders = sorted(self._reminders.values(), key=lambda a: a.reminder.id, reverse=True)
+        quiet = itertools.cycle(QUIET)
+        view = (
+            HereView(HERE, tuple(HereReminder(a.reminder, next(quiet)) for a in reminders))
+            if self._placed
+            else HereView(None)
+        )
+        QTimer.singleShot(0, lambda: self._show_here(view))
+
+    def remind_here(self, reminder_id: int, context: Context) -> None:
+        print(f"reminder {reminder_id}: remind here, in {context.title}", flush=True)
+        active = self._reminders.get(reminder_id)
+        if active is None:
+            return
+        self._say(active, context, Here.YES)
+        now = self._clock.now()
+        revision = active.reminder.revision
+        alert_id = next(self._ids)
+        self._visible.append(
+            Alert(
+                alert_id, reminder_id, revision, None, context, None, now, now, now, requested=True
+            )
+        )
+        QTimer.singleShot(0, self._show_alerts)
+
+    def withdraw(self, reminder_id: int, context: Context) -> None:
+        print(f"reminder {reminder_id}: forgotten in {context.title}", flush=True)
+        active = self._reminders.get(reminder_id)
+        if active is not None:
+            self._say(active, context, None)
+
+    def withdraw_all(self, reminder_id: int) -> None:
+        print(f"reminder {reminder_id}: everything forgotten", flush=True)
+        active = self._reminders.get(reminder_id)
+        if active is not None:
+            self._reminders[reminder_id] = ActiveReminder(active.reminder)
+            QTimer.singleShot(0, self._show_reminders)
+
     def restart_engine(self) -> None:
         print("retry, on the engine", flush=True)
         assert self.interface is not None
@@ -278,6 +337,15 @@ class Preview:
             perennial=perennial,
         )
 
+    def _say(self, active: ActiveReminder, context: Context, here: Here | None) -> None:
+        """The answer in a place, the last answered first; None forgets it. Two Remind here
+        make the reminder more attentive, as near the cut in `core`."""
+        others = tuple(place for place in active.places if place.context != context)
+        places = others if here is None else (Place(context, here), *others)
+        attentive = sum(place.here is Here.YES for place in places) >= 2
+        self._reminders[active.reminder.id] = ActiveReminder(active.reminder, places, attentive)
+        QTimer.singleShot(0, self._show_reminders)
+
     def _answered(self, alert_id: int, what: str) -> None:
         print(f"alert {alert_id}: {what}", flush=True)
         self._visible = [alert for alert in self._visible if alert.id != alert_id]
@@ -297,6 +365,10 @@ class Preview:
         assert self.interface is not None
         newest_first = sorted(self._reminders.values(), key=lambda a: a.reminder.id, reverse=True)
         self.interface.show_reminders(RemindersView(tuple(newest_first), self._paused_until))
+
+    def _show_here(self, view: HereView) -> None:
+        assert self.interface is not None
+        self.interface.show_here(view)
 
     def _alert(self) -> Alert:
         alert_id = next(self._ids)
@@ -318,6 +390,11 @@ def main() -> None:
     )
     parser.add_argument(
         "--creation", action="store_true", help="open the creation window at the start"
+    )
+    parser.add_argument(
+        "--no-place",
+        action="store_true",
+        help="the card of Remind here with no place judged yet",
     )
     parser.add_argument(
         "--unreadable",
@@ -344,11 +421,12 @@ def main() -> None:
     os.environ.setdefault("QT_FORCE_STDERR_LOGGING", "1")
     app = QGuiApplication(sys.argv[:1])
     download = Download(args.model)
-    preview = Preview(args.alerts, download)
+    preview = Preview(args.alerts, download, placed=not args.no_place)
     interface = Interface(app, preview, preview, MODEL)
     interface.look.material = Material(args.material)
-    if not interface.hotkey.registered:
-        print("Win+Shift+N is taken by another app", flush=True)
+    for key in (hotkey.NEW, hotkey.HERE):
+        if key not in interface.hotkeys.registered:
+            print(f"Win+Shift+{chr(key)} is taken by another app", flush=True)
     preview.start(interface)
     download.begin(interface)
     interface.show_unreadable(frozenset(args.unreadable))

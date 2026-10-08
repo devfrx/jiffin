@@ -1,9 +1,10 @@
-// The tray list (#12, #43, #84): what keeps Jiffin from working fully, the model file on its way
-// first, the alerts that vanished unanswered, with Done and Snooze, the active reminders, with
-// New, Edit, Complete and Delete, and the return pause, with Change. A card on the alerts'
-// material, over the tray, with an X after New (ADR-0010, ADR-0023). It takes the focus; Tab
-// moves from button to button, and Esc, the X or a click elsewhere closes it. It drags from any
-// point no control takes. Snooze opens the alert's menu, a window of its own.
+// The tray list (#12, #43, #84): the row of Remind here, what keeps Jiffin from working fully, the
+// model file on its way first, the alerts that vanished unanswered, with Done and Snooze, the
+// active reminders, with New, Edit, Complete and Delete and what each learned, and the return
+// pause, with Change. A card on the alerts' material, over the tray, with an X after New
+// (ADR-0010, ADR-0023). It takes the focus; Tab moves from button to button, and Esc, the X or a
+// click elsewhere closes it. It drags from any point no control takes. Snooze opens the alert's
+// menu, a window of its own.
 // Bound: the rows take their data as required properties, and reach the list by its id.
 pragma ComponentBehavior: Bound
 
@@ -16,6 +17,7 @@ Window {
     id: window
 
     required property TrayList trayList
+    required property RemindHere remindHere
     required property FirstRun firstRun
     required property Preferences preferences
     // Snooze's menu, for the list to show and hide: a QtObject, since PySide has no converter
@@ -142,6 +144,98 @@ Window {
                         glyph: "" // Cancel
                         Accessible.name: Texts.close
                         onClicked: window.trayList.close()
+                    }
+                }
+
+                // Remind here (ADR-0029): the card Win+Shift+Q opens, for the last place Jiffin
+                // judged, written under it.
+                T.AbstractButton {
+                    id: remindHereRow
+
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 8
+                    Layout.rightMargin: 8
+                    Layout.topMargin: -4
+                    implicitHeight: implicitContentHeight + topPadding + bottomPadding
+                    leftPadding: 8
+                    rightPadding: 10
+                    topPadding: 6
+                    bottomPadding: 7
+                    hoverEnabled: true
+                    focusPolicy: Qt.StrongFocus
+                    Accessible.name: Texts.remindHere
+                    Accessible.description: window.remindHere.place
+                    Keys.onReturnPressed: click()
+                    Keys.onEnterPressed: click()
+                    onClicked: window.trayList.remindHere()
+
+                    background: Rectangle {
+                        radius: 4
+                        color: remindHereRow.down ? Colors.subtleFillPressed : remindHereRow.hovered ? Colors.subtleFillHover : Colors.cardFill
+
+                        // The focus ring, 3 px outside, as a button's.
+                        Rectangle {
+                            visible: remindHereRow.visualFocus
+                            anchors.fill: parent
+                            anchors.margins: -3
+                            radius: 7
+                            color: "transparent"
+                            border.width: 2
+                            border.color: Colors.focusStrokeOuter
+
+                            Rectangle {
+                                anchors.fill: parent
+                                anchors.margins: 2
+                                radius: 5
+                                color: "transparent"
+                                border.width: 1
+                                border.color: Colors.focusStrokeInner
+                            }
+                        }
+                    }
+                    contentItem: RowLayout {
+                        spacing: 10
+
+                        Text {
+                            Layout.alignment: Qt.AlignVCenter
+                            text: "" // Ringer
+                            color: Colors.textPrimary
+                            font.family: Typography.iconFont
+                            font.pixelSize: Typography.icon
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 0
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: Texts.remindHere
+                                color: Colors.textPrimary
+                                font.family: Typography.textFont
+                                font.pixelSize: Typography.body
+                                lineHeight: Typography.bodyLine
+                                lineHeightMode: Text.FixedHeight
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                visible: window.remindHere.place.length > 0
+                                text: window.remindHere.place
+                                color: Colors.textSecondary
+                                font.family: Typography.captionFont
+                                font.pixelSize: Typography.caption
+                                lineHeight: Typography.captionLine
+                                lineHeightMode: Text.FixedHeight
+                                elide: Text.ElideRight
+                                maximumLineCount: 1
+                            }
+                        }
+                        Text {
+                            Layout.alignment: Qt.AlignVCenter
+                            text: "" // ChevronRight
+                            color: Colors.textSecondary
+                            font.family: Typography.iconFont
+                            font.pixelSize: Typography.chevron
+                        }
                     }
                 }
 
@@ -328,9 +422,21 @@ Window {
                             required property string returnsAt
                             required property bool returnsTomorrow
                             required property int silences
-                            readonly property string status: Texts.status(endedOn, returnsIn, returnsAt, returnsTomorrow, silences)
+                            required property int requests
+                            required property bool attentive
+                            // The places of its answers, the last answered first: [{line, requested}].
+                            required property var places
+                            readonly property string status: Texts.status(endedOn, returnsIn, returnsAt, returnsTomorrow)
+                            readonly property string learned: Texts.learned(silences, requests, attentive)
                             // Delete asks first: the reminder goes for good, with all it knows.
                             property bool confirming: false
+                            // What it learned opens its places, under it.
+                            property bool placesOpen: false
+
+                            onLearnedChanged: {
+                                if (learned.length === 0)
+                                    row.placesOpen = false;
+                            }
 
                             // The row turns into the question and back; the focus goes along
                             // when it was on the button.
@@ -422,6 +528,118 @@ Window {
                                         visible: !row.confirming && row.status.length > 0
                                         text: row.status
                                     }
+                                    // What it learned (ADR-0029): a click opens its places.
+                                    T.AbstractButton {
+                                        id: learnedButton
+
+                                        Layout.fillWidth: true
+                                        visible: !row.confirming && row.learned.length > 0
+                                        implicitHeight: implicitContentHeight
+                                        hoverEnabled: true
+                                        focusPolicy: Qt.StrongFocus
+                                        Accessible.name: row.learned
+                                        Accessible.description: row.action
+                                        Keys.onReturnPressed: click()
+                                        Keys.onEnterPressed: click()
+                                        onClicked: row.placesOpen = !row.placesOpen
+
+                                        background: Rectangle {
+                                            visible: learnedButton.visualFocus
+                                            anchors.fill: parent
+                                            anchors.margins: -3
+                                            radius: 5
+                                            color: "transparent"
+                                            border.width: 2
+                                            border.color: Colors.focusStrokeOuter
+
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                anchors.margins: 2
+                                                radius: 3
+                                                color: "transparent"
+                                                border.width: 1
+                                                border.color: Colors.focusStrokeInner
+                                            }
+                                        }
+                                        contentItem: RowLayout {
+                                            spacing: 4
+
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: row.learned
+                                                color: learnedButton.hovered ? Colors.textPrimary : Colors.textSecondary
+                                                font.family: Typography.captionFont
+                                                font.pixelSize: Typography.caption
+                                                font.underline: learnedButton.hovered
+                                                lineHeight: Typography.captionLine
+                                                lineHeightMode: Text.FixedHeight
+                                                wrapMode: Text.Wrap
+                                            }
+                                            Text {
+                                                Layout.alignment: Qt.AlignTop
+                                                Layout.topMargin: 3
+                                                text: row.placesOpen ? "" : "" // ChevronUp, ChevronDown
+                                                color: Colors.textSecondary
+                                                font.family: Typography.iconFont
+                                                font.pixelSize: 10
+                                            }
+                                        }
+                                    }
+                                    // The places, each with its icon and its X, which forgets it;
+                                    // then Forget all.
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        visible: !row.confirming && row.placesOpen
+                                        spacing: 0
+
+                                        Repeater {
+                                            model: row.places
+
+                                            delegate: RowLayout {
+                                                id: placeRow
+
+                                                required property var modelData
+                                                required property int index
+
+                                                Layout.fillWidth: true
+                                                spacing: 6
+
+                                                Text {
+                                                    Layout.alignment: Qt.AlignVCenter
+                                                    text: placeRow.modelData.requested ? "" : "" // Ringer, RingerSilent
+                                                    color: Colors.textSecondary
+                                                    font.family: Typography.iconFont
+                                                    font.pixelSize: Typography.caption
+                                                }
+                                                Text {
+                                                    Layout.fillWidth: true
+                                                    Layout.alignment: Qt.AlignVCenter
+                                                    text: placeRow.modelData.line
+                                                    color: Colors.textSecondary
+                                                    font.family: Typography.captionFont
+                                                    font.pixelSize: Typography.caption
+                                                    elide: Text.ElideRight
+                                                    maximumLineCount: 1
+                                                }
+                                                FluentButton {
+                                                    kind: FluentButton.Subtle
+                                                    glyph: "" // Cancel
+                                                    Accessible.name: Texts.forget
+                                                    Accessible.description: placeRow.modelData.line
+                                                    focusPolicy: Qt.StrongFocus
+                                                    onClicked: window.trayList.forget(row.reminderId, placeRow.index)
+                                                }
+                                            }
+                                        }
+                                        FluentButton {
+                                            Layout.leftMargin: -12
+                                            kind: FluentButton.Subtle
+                                            text: Texts.forgetAll
+                                            Accessible.description: row.action
+                                            focusPolicy: Qt.StrongFocus
+                                            onClicked: window.trayList.forgetAll(row.reminderId)
+                                        }
+                                    }
                                     CaptionText {
                                         visible: row.confirming
                                         text: Texts.removeQuestion
@@ -477,6 +695,7 @@ Window {
 
                                 function onOpened(): void {
                                     row.confirming = false;
+                                    row.placesOpen = false;
                                 }
                             }
                         }

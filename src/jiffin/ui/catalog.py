@@ -89,12 +89,10 @@ class Catalog(QObject):
     def past(self, when: str) -> str:
         return TEXTS.creation.past.format(when=when)
 
-    @Slot(str, int, str, bool, int, result=str)
-    def status(
-        self, ended_on: str, returns_in: int, returns_at: str, tomorrow: bool, silences: int
-    ) -> str:
-        """Under an active reminder, what is useful to know: its period over, "il 20 ottobre", the
-        minutes or the time its snooze ends, and how many places Not here silenced it in."""
+    @Slot(str, int, str, bool, result=str)
+    def status(self, ended_on: str, returns_in: int, returns_at: str, tomorrow: bool) -> str:
+        """Under an active reminder, what is useful to know: its period over, "il 20 ottobre", and
+        the minutes or the time its snooze ends."""
         texts = TEXTS.tray_list
         parts = []
         if ended_on:
@@ -104,8 +102,21 @@ class Catalog(QObject):
         elif returns_at:
             returns = texts.returns_tomorrow_at if tomorrow else texts.returns_at
             parts.append(returns.format(at=returns_at))
+        return TEXTS.format.parts.join(parts)
+
+    @Slot(int, int, bool, result=str)
+    def learned(self, silences: int, requests: int, attentive: bool) -> str:
+        """Under an active reminder, what it learned (ADR-0029): how many places Not here
+        silenced it in and Remind here asked it in, and whether its threshold went down; empty
+        when it learned nothing."""
+        texts = TEXTS.tray_list
+        parts = []
         if silences > 0:
             parts.append(texts.silenced.format(silences))
+        if requests > 0:
+            parts.append(texts.requested.format(requests))
+        if attentive:
+            parts.append(texts.attentive)
         return TEXTS.format.parts.join(parts)
 
     @Slot(str, bool, result=str)
