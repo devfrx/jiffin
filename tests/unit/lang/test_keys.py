@@ -224,6 +224,12 @@ def pages() -> Iterator[tuple[str, str]]:
         yield page.name, page.read_text(encoding="utf-8")
 
 
+def section(page: str) -> str:
+    """The texts a page's script gets as `T`: those of the section named as the page,
+    "label.html" those of [label]."""
+    return Path(page).stem
+
+
 def page_formats() -> Iterator[tuple[str, set[Key], set[str]]]:
     for name, text in pages():
         for found in PAGE_FORMAT.finditer(text):
@@ -231,7 +237,7 @@ def page_formats() -> Iterator[tuple[str, set[Key], set[str]]]:
             yield name, {("HARNESS", *found[1].split("."))}, names
         for found in SCRIPT_FILL.finditer(text):
             names = {part.split(":")[0].strip() for part in found[2].split(",")}
-            yield name, {("HARNESS", "label", found[1])}, names
+            yield name, {("HARNESS", section(name), found[1])}, names
 
 
 def qml_keys() -> set[Key]:
@@ -244,9 +250,9 @@ def qml_keys() -> set[Key]:
 
 def page_keys() -> set[Key]:
     keys = set()
-    for _, text in pages():
+    for name, text in pages():
         keys |= {("HARNESS", *key.split(".")) for key in PAGE_KEY.findall(text)}
-        keys |= {("HARNESS", "label", key) for key in SCRIPT_KEY.findall(text)}
+        keys |= {("HARNESS", section(name), key) for key in SCRIPT_KEY.findall(text)}
     return {key[:-1] if key[-1] == "format" else key for key in keys}
 
 

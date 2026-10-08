@@ -58,8 +58,10 @@ flowchart LR
 ## A day of the app's log
 
 The app's log is its database ([ADR-0013](../adr/0013-sqlite-storage.md)):
-every evaluation with the reminders it judged, and every alert. After a day of
-use:
+every evaluation with the reminders it judged, and every alert; from 0.3 on,
+the stretches of the situations and the answers per place too
+([ADR-0028](../adr/0028-read-the-situations-in-core.md),
+[ADR-0029](../adr/0029-learn-from-answers-per-place.md)). After a day of use:
 
 ```mermaid
 flowchart LR
@@ -69,11 +71,16 @@ flowchart LR
     C --> L[label: labels-day.json]
     L -->|Claude labels every pair| L
     L -->|label --owner: the owner labels a share| L
+    C --> K[label --calls: calls-day.json]
+    K -->|the owner checks the calls and absences| K
     C --> R[report: numbers, and a page]
     L --> R
+    K --> R
     M[monitor-day.csv] --> R
     C --> P[replay: other thresholds, more reminders, another engine]
     L --> P
+    K --> P
+    P <--> Q[scores-day.json: the engine's scores]
     R --> F[forget: the copies go]
     P --> F
 ```
@@ -82,20 +89,25 @@ flowchart LR
   read-only connection, so the app may be running, into `log-<time>.db`: one
   file, without a write-ahead log beside it. The commands after it read the
   newest copy unless `--copy` names another, migrating a copy of an older app
-  as the app would.
+  as the app would. A stretch of a situation is stored once it ends, so a copy
+  lacks those still open: on the acceptance day, quit Jiffin before the
+  snapshot, and its close ends them all.
 - **`forget`** deletes the copies. A copy keeps what the user deletes in the
   app afterwards, so it goes once the analysis is done; labels and pages stay
   in the data folder.
-- **`statements`** writes a page with every reminder's condition, the time
-  understood, the remainder and the English statement the engine judges, to
-  check on the acceptance day that each time is read right and that each
-  statement says what its remainder says
+- **`statements`** writes a page with every reminder's condition, the time and
+  the situations understood, the remainder and the English statement the
+  engine judges, to check on the acceptance day that each time and situation
+  is read right and that each statement says what its remainder says
   ([ADR-0008](../adr/0008-rewrite-conditions-english-statements.md),
   [ADR-0021](../adr/0021-one-alert-per-unit.md)). The time is written as the
   creation window writes it, by `ui/words.py`
   ([ADR-0020](../adr/0020-read-the-time-in-core.md)): pure Python, without Qt,
-  the one module of `ui` the harness imports. A time not understood shows its
-  words: that reminder rings at any time.
+  the one module of `ui` the harness imports. The situations have provisional
+  words in `harness.toml` until the creation window writes them too
+  ([#153](https://github.com/devfrx/jiffin/issues/153)). Words not understood,
+  of a time or of a situation, are shown under the condition: that reminder
+  rings at any time, or as if those words were not there.
 - **A day** is a local day: the last one with evaluations unless `--day` says
   otherwise.
 
@@ -108,8 +120,9 @@ flowchart LR
   ([ADR-0021](../adr/0021-one-alert-per-unit.md)). A pair is keyed by its
   texts (app, title, address, remainder), so labels outlive a new copy, a
   replay or another threshold, and preparing the file again keeps them. In a
-  log of 0.1 the remainder is the whole condition. Reminders with only a time
-  are never judged, so they have no pairs.
+  log of 0.1 the remainder is the whole condition. Reminders without a
+  remainder, with only a time or situations, are never judged, so they have no
+  pairs.
 - **Claude** labels every pair, with the file in front of it, as on 2026-09-28:
   true or false under `claude`, and the keys it is unsure of under
   `uncertain`.
@@ -117,8 +130,25 @@ flowchart LR
   follows): the pairs Claude is unsure of first, then others at random. The
   page is served on 127.0.0.1 behind a random token, as the prototype's was; it
   never shows Claude's labels or any score, and saves every answer at once.
-- **The label that counts** is the owner's where there is one, Claude's
-  elsewhere; the report says how often the two agree.
+- **The label that counts** is the owner's from the page where there is one;
+  then "qui dovevi avvisarmi", which makes its pair relevant
+  ([ADR-0031](../adr/0031-acceptance-thresholds-v0-3.md)): the remainder of the
+  text it was said for, in its place, unless Not here or a withdrawal took it
+  back there while that text stood; then Claude's. The report says how often
+  the owner and Claude agree.
+- **The calls and the absences** are checked by the owner with
+  `label --calls`, in about 5 minutes at the end of the day
+  ([ADR-0031](../adr/0031-acceptance-thresholds-v0-3.md)): a page, served as
+  the owner's share is, lists those recorded with the app in front when each
+  began and ended. The owner marks the wrong ones (they did not happen, are
+  split, or start or end more than a minute from the true time), adds the
+  missing ones, and closes with "Controllato": only then do the unmarked ones
+  count as right, and until then the report counts them as recorded. The marks
+  go into `calls-<day>.json`, keyed by situation, value and start, so a new
+  copy keeps them; a stretch new since the check asks for it again. The other
+  situations are cheap and reliable to read
+  ([ADR-0028](../adr/0028-read-the-situations-in-core.md)), and count as
+  recorded.
 
 ### `report`
 
@@ -130,11 +160,14 @@ numbers.
 
 | Measure | From |
 |---|---|
-| Delay, p50 and p95 | each alert on screen, those of reminders with only a time too: when it appeared, minus when it became due (in 0.1, when its context came to the foreground) |
-| Missed reminders | relevant pairs never on screen that day and not kept quiet as already reminded, over all relevant pairs ([ADR-0025](../adr/0025-kept-quiet-not-missed.md)); a pair is relevant when labelled true and judged at least once while its reminder's time held. Each with why, from the candidate that came closest then: waited for a place and never shown, or below the threshold |
+| Delay, p50 and p95 | each alert on screen, those of reminders without a remainder too: when it appeared, minus when it became due, for a situation when the situation made it due, the 5 s included (in 0.1, when its context came to the foreground) |
+| Missed reminders | relevant pairs never on screen that day and not kept quiet as already reminded, over all relevant pairs ([ADR-0025](../adr/0025-kept-quiet-not-missed.md)); a pair is relevant when labelled true and judged at least once while its reminder could ring: within its time as `core` reads it, its situations as they were, and its thing lasted as long as the condition wants, by the labels. Each with why, from the candidate that came closest then: waited for a place and never shown, outside its situation (read wrong), out of time, or below the threshold. A unit of a call or an absence the owner added, where a reminder without a remainder could ring and did not, is missed too: its situation was not read |
 | Kept quiet as already reminded | relevant pairs never on screen because their reminder had rung in the same unit (same occasion, or held back by the once-an-hour rule of 0.1) or the user had answered it (snoozed, silenced): counted apart by why, not missed |
-| False alarms | pairs on screen labelled not relevant, each once however often it rang, since Not here silences it ([ADR-0022](../adr/0022-acceptance-thresholds-v0-2.md)) |
-| Alerts of reminders with only a time | counted apart: they are right when the time is read right, which the statements page shows |
+| False alarms | pairs on screen labelled not relevant, or rung on a situation that the owner's truth does not bear out within a minute, whatever their label; each once however often it rang, since Not here silences it ([ADR-0022](../adr/0022-acceptance-thresholds-v0-2.md)) |
+| Alerts of reminders without a remainder | counted apart. With only a time, right when the time is read right, which the statements page shows; on situations, by pairs of the reminder and a unit of its situations (a stretch, an end, a duration reached), right when the truth bears the situation out within a minute ([ADR-0031](../adr/0031-acceptance-thresholds-v0-3.md)) |
+| Asked for with Remind here | the alerts asked for with "qui dovevi avvisarmi": never the judge's, counted apart; their pair is relevant by its label ([ADR-0029](../adr/0029-learn-from-answers-per-place.md)) |
+| Shown under the threshold | alerts of the judge under the threshold, for Remind here said in their place or under a threshold it lowered near the cut: shown apart, by why |
+| Calls and absences | those recorded; once the owner checked them, those marked wrong and those added. A day without a call says that the end of a call is not verified; a day before 0.3, that it recorded no situation |
 | Evaluations per hour | the evaluations, over the time from the first context evaluated to the last evaluation; of them, those that asked the engine and those that failed |
 | Late wakes | each wake of the engine but those for a statement: late when the engine was ready after the end of the 5 s of the first evaluation after the wake, by how much |
 | Sleep errors | each time the engine was still awake 5 minutes and 10 s after `core`'s last request or its wake, or 10 s after nothing came in front or after a request while nothing was |
@@ -182,10 +215,19 @@ page `replay-<day>-<what>.html`.
 |---|---|---|
 | `--threshold 0.9,1.2` | the threshold | none: the scores the log keeps |
 | `--engine` | the scores and the statements, from this checkout's engine | the app's, started as `sample` starts it |
-| `--reminders 20,40,80` | invented reminders from `tests/fixtures/reminders.json`, from the start of the day, up to each number of active reminders | the same |
+| `--reminders 20,40,80` | invented reminders from `tests/fixtures/reminders.json`, from the start of the day, up to each number of active reminders | the same, only for the scores not kept yet |
 
 With none of them, the day is replayed at its own threshold: the line must
 match the day as recorded, and a test checks that it does, alert by alert.
+With `--engine` or `--reminders`, `--threshold` sets the thresholds of their
+replays, a line each, as ADR-0031 asks for the choice of T: the engine judges
+once, and `scores-<day>.json` keeps every statement it wrote, by remainder, and
+every score it gave, by context and statement (the record of #106's script).
+The replays at each threshold read them, and a later run starts the engine
+only for what is not kept; `--engine` starts it at once. A file of another
+build of the engine is refused: delete it to judge the day again. Moving T
+moves the thresholds that Remind here lowered too, since they stay relative to
+it ([ADR-0029](../adr/0029-learn-from-answers-per-place.md)).
 
 ```mermaid
 sequenceDiagram
@@ -194,9 +236,10 @@ sequenceDiagram
     participant C as core, on simulated time
     participant O as the owner, as recorded
 
-    L->>C: the state when the day began: reminders, answers per place, last alerts
+    L->>C: the state when the day began: reminders, answers per place, last alerts, the tray list
     L->>T: each evaluated context, when it came to the foreground
-    L->>T: reminders created, edited and completed, when they were
+    L->>T: the values of each situation, at each start and end of its stretches
+    L->>T: reminders created, edited and completed; Remind here and withdrawals; when they were
     loop in order of time
         T->>C: the next command, or poll at the next deadline
         C-->>T: evaluations and alerts
@@ -226,22 +269,42 @@ sequenceDiagram
   unit; in 0.1 it is the one of 15 minutes, an hour or "domani" whose end
   falls between the reminder's last judgement as snoozed and its first as
   free.
+- **The situations** (from 0.3 on): each stretch the log has gives back its
+  situation's values at its start and at its end, from the start of the app's
+  run under way when the day began, which read them all from its start; `core`
+  counts the 5 s again, and gives the same stretches. Where one of the
+  situations that always have a value while read (away, power, display,
+  headphones) ends with no other value starting, the app closed: every
+  situation is observed as not read then, so a call cut by the close is no
+  end, as in the app.
 - **The answers per place**: in each place, what counted when the day began,
   the last answer said there before it unless it was withdrawn (in a log of
   0.2, each Not here from the time of its alert). During the day, the Not here
-  of its alerts come again with the owner's answers; its other answers are not
-  replayed yet ([#155](https://github.com/devfrx/jiffin/issues/155)).
+  of its alerts come again with the owner's answers, and Remind here and the
+  withdrawals when the log says.
+- **The tray list**: the alerts on it when the day began, the last of each
+  active reminder if it was shown and not answered by then, start there, and
+  an answer to one of them comes at its time: a Not here on yesterday's alert
+  this morning counts from then, as in the app.
 - **The reminders**: those created before the day start as they were then;
   the others are created, edited and completed when the log says, an edit when
-  it was made, also one of a reminder with only a time (in 0.1, when the
+  it was made, also one of a reminder without a remainder (in 0.1, when the
   context of the new text's first evaluation came to the foreground). A
-  reminder with only a time rings as in the app, in any stable context,
+  reminder without a remainder rings as in the app, in any stable context,
   without being judged: the replay runs to the last evaluation, or to a later
-  alert of such a reminder. The times are read in this machine's time zone,
-  where the app wrote its log.
+  alert of such a reminder or one asked for with Remind here. The times are
+  read in this machine's time zone, where the app wrote its log.
 - **Labels**: the day's labels serve every replay, since they are keyed by
-  texts. The invented reminders need theirs: `label --reminders 80` adds their
-  pairs with the day's contexts to the file for Claude.
+  texts, and so do the owner's check of the calls and Remind here. The
+  invented reminders need theirs: `label --reminders 80` adds the pairs of
+  those with a remainder with the day's contexts to the file for Claude. The
+  first of them are on calls and absences, with and without a remainder, so
+  they are there at 20 ([ADR-0031](../adr/0031-acceptance-thresholds-v0-3.md)).
+- **Known limits.** One `core` replays the whole day, as for the contexts: what
+  the app's `core` forgets at a restart within the day, the replay's keeps. A
+  replay starts with an empty cache, so a score of a context judged before the
+  day is no longer from the cache, and a Not here on an alert of an earlier
+  day has no d there.
 
 ### `convert`
 
@@ -268,8 +331,9 @@ The pages are for the owner, in Italian; the summaries of numbers stay in
 English, since they go into issues. Each page is a Jinja template of
 `harness/pages/`: English markup that reads its texts by key, `t.report.title`,
 from `src/jiffin/lang/it/harness.toml`
-([ADR-0026](../adr/0026-italian-in-language-files.md)). `label.html` is one
-too: its script gets its own texts as `T`, and `fill()` puts the values in.
+([ADR-0026](../adr/0026-italian-in-language-files.md)). `label.html` and
+`calls.html` are too: the script of each gets the texts of the section named
+as its page as `T`, and `fill()` puts the values in.
 Every value is escaped, since titles and addresses come from any window and any
 web page. `jiffin.lang.harness` reads the file into `HARNESS`, and only the
 harness imports it: neither ships with the app

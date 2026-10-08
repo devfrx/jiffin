@@ -30,8 +30,27 @@ class Report:
     missed_intro: str
     reminded: str
     reminded_intro: str
+    requested: str
+    requested_intro: str
+    situations: str
+    situations_intro: str
+    kind: str
+    start: str
+    end: str
+    app: str
+    state: str
+    call: str
+    absence: str
+    confirmed: str
+    marked_wrong: str
+    added: str
+    unchecked: str
+    units: str
+    units_intro: str
     reasons: Mapping[str, str]
     """By the reason `harness.day` names: "below threshold"."""
+    learned: Mapping[str, str]
+    """By the reason `harness.day.under` names: "for Remind here"."""
     answers: Mapping[str, str]
     """By the answer as `store` keeps it: "not_here"."""
 
@@ -44,6 +63,7 @@ class Statements:
     state: str
     condition: str
     time: str
+    situations: str
     remainder: str
     action: str
     statement: str
@@ -52,10 +72,18 @@ class Statements:
     completed: str
     unclear: str
     no_time: str
-    time_only: str
+    no_situation: str
+    nothing_left: str
     no_statement: str
     not_written: str
     written_by: str
+    ends: str
+    lasts: str
+    lasting: str
+    call_on: str
+    understood: Mapping[str, str]
+    """By the situation, and its value after a space, as `core.situations` names them: "call",
+    "away yes"."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +114,42 @@ class Label:
 
 
 @dataclass(frozen=True, slots=True)
+class Calls:
+    title: str
+    heading: str
+    intro: str
+    meaning: str
+    loading: str
+    kind: str
+    app: str
+    start: str
+    end: str
+    in_front: str
+    mark: str
+    add_heading: str
+    add: str
+    check: str
+    recorded: str
+    none: str
+    call: str
+    absence: str
+    nothing: str
+    wrong: str
+    added: str
+    none_added: str
+    other_app: str
+    remove: str
+    remove_confirm: str
+    times_needed: str
+    ends_before: str
+    not_checked: str
+    checked_at: str
+    saved: str
+    not_saved: str
+    not_loaded: str
+
+
+@dataclass(frozen=True, slots=True)
 class Sample:
     condition_starts: tuple[str, ...]
     remind_me: str
@@ -97,6 +161,7 @@ class Harness:
     report: Report
     statements: Statements
     label: Label
+    calls: Calls
     sample: Sample
 
 

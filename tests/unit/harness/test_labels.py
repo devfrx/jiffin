@@ -5,21 +5,21 @@ from pathlib import Path
 import pytest
 
 from jiffin.core.context import Context
-from jiffin.core.records import Revision
+from jiffin.core.records import ContextAnswer, Here, Revision
+from jiffin.core.situations import Ends, Situation
 from jiffin.harness import labels
-from jiffin.harness.day import Pair
+from jiffin.harness.day import Day, Pair, key
 from jiffin.harness.errors import HarnessError
 
 DAY = date(2026, 10, 5)
+T0 = 1_791_190_800_000  # 2026-10-05 09:00 UTC
 ICONS = Revision(10, 1, 1, "quando apro Figma", "esportare le icone", "quando apro Figma")
-PAIRS = {
-    pair.key: pair
-    for pair in (
-        Pair(Context("figma.exe", "Icone - Figma", None), ICONS),
-        Pair(Context("vivaldi.exe", "Banca Rossi", "bancarossi.it"), ICONS),
-        Pair(Context("outlook.exe", "Posta in arrivo", None), ICONS),
-    )
-}
+CONTEXTS = (
+    Context("figma.exe", "Icone - Figma", None),
+    Context("vivaldi.exe", "Banca Rossi", "bancarossi.it"),
+    Context("outlook.exe", "Posta in arrivo", None),
+)
+PAIRS = {pair.key: pair for pair in (Pair(context, ICONS) for context in CONTEXTS)}
 FIGMA, BANK, MAIL = PAIRS
 
 
@@ -62,6 +62,48 @@ def test_the_owner_wins_and_agreement_is_counted_where_both_labelled(tmp_path: P
     )
     assert labelled.final() == {FIGMA: True, BANK: True, MAIL: False}
     assert labelled.agreement() == (0, 1)
+
+
+def test_remind_here_counts_under_the_owners_page_and_over_claude(tmp_path: Path) -> None:
+    labelled = labels.Labels(
+        tmp_path / "labels.json", DAY, [], {FIGMA: False, BANK: False}, [], {BANK: False}
+    )
+    asked = {FIGMA: True, BANK: True}
+    assert labelled.final(asked) == {FIGMA: True, BANK: False}
+
+
+def test_remind_here_asks_for_the_pair_of_the_text_it_was_said_for() -> None:
+    """Said in Figma, it stands; in the bank, Not here took it back; in the mail, the text
+    changed after it, which withdraws it in the app, not from the text it was said for."""
+    figma, bank, mail = CONTEXTS
+    evening = Revision(
+        11,
+        1,
+        2,
+        "quando apro Figma di sera",
+        "esportare",
+        "quando apro Figma di sera",
+        created_at=T0 + 50_000,
+    )
+    ends = (Ends(Situation.CALL),)
+    on_calls = Revision(20, 2, 1, "quando finisco la call", "scrivere", "", situations=ends)
+
+    def said(reminder: int, context: Context, here: Here, seconds: int) -> ContextAnswer:
+        return ContextAnswer(reminder, context, here, None, None, T0 + seconds * 1000)
+
+    answers = (
+        said(1, figma, Here.YES, 10),
+        said(1, bank, Here.YES, 20),
+        said(1, bank, Here.NO, 30),
+        said(1, mail, Here.YES, 40),
+        said(1, mail, Here.WITHDRAWN, 50),
+        said(2, figma, Here.YES, 60),  # no remainder: no pair to label
+    )
+    day = Day(DAY, (), (), {10: ICONS, 11: evening, 20: on_calls}, answers=answers)
+    assert labels.asked(day) == {
+        key(figma, ICONS.remainder): True,
+        key(mail, ICONS.remainder): True,
+    }
 
 
 def test_the_owners_share_starts_with_what_claude_is_unsure_of(tmp_path: Path) -> None:

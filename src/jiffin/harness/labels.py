@@ -17,7 +17,9 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-from jiffin.harness.day import Pair
+from jiffin.core.context import Context
+from jiffin.core.records import Here, Revision
+from jiffin.harness.day import Day, Pair, key
 from jiffin.harness.errors import HarnessError
 
 FORMAT = 2
@@ -43,9 +45,10 @@ class Labels:
     uncertain: list[str] = field(default_factory=list)
     owner: dict[str, bool] = field(default_factory=dict)
 
-    def final(self) -> dict[str, bool]:
-        """The owner's label where there is one, Claude's elsewhere."""
-        return self.claude | self.owner
+    def final(self, asked: Mapping[str, bool] | None = None) -> dict[str, bool]:
+        """The owner's label where there is one, then the pairs the owner `asked` for with
+        Remind here, then Claude's."""
+        return self.claude | dict(asked or {}) | self.owner
 
     def agreement(self) -> tuple[int, int]:
         """On how many of the pairs both labelled the owner agrees with Claude."""
@@ -121,6 +124,26 @@ def prepare(pairs: Mapping[str, Pair], path: Path, day: date) -> Labels:
     return labels
 
 
+def asked(day: Day) -> dict[str, bool]:
+    """The pairs the owner asked for with Remind here, "qui dovevi avvisarmi", up to the end of
+    the day: the owner's label, true (ADR-0031), on the remainder of the text it was said for.
+    One taken back in its place while that text stood, by Not here or a withdrawal, is none; a
+    change of text withdraws it from the app, not from what it said of that text."""
+    standing: dict[tuple[int, Context, int], Revision] = {}
+    for answer in day.answers:  # the oldest first
+        revision = _in_force(day, answer.reminder_id, answer.at)
+        if revision is None:
+            continue
+        place = (answer.reminder_id, answer.context, revision.id)
+        if answer.here is Here.YES and revision.remainder:
+            standing[place] = revision
+        elif answer.here is not Here.YES:
+            standing.pop(place, None)
+    return {
+        key(context, revision.remainder): True for (_, context, _), revision in standing.items()
+    }
+
+
 def owner_share(labels: Labels, size: int) -> list[str]:
     """The pairs for the owner: those Claude is unsure about first, then others at random."""
     keys = [pair["key"] for pair in labels.pairs]
@@ -128,6 +151,17 @@ def owner_share(labels: Labels, size: int) -> list[str]:
     others = [key for key in keys if key not in labels.uncertain]
     random.Random(labels.day.isoformat()).shuffle(others)
     return (unsure + others)[:size]
+
+
+def _in_force(day: Day, reminder_id: int, at: int) -> Revision | None:
+    """The reminder's revision at `at`: the last one made by then; a revision of version 0.1,
+    whose time is unknown, counts as made before."""
+    made = [
+        revision
+        for revision in day.revisions.values()
+        if revision.reminder_id == reminder_id and (revision.created_at or 0) <= at
+    ]
+    return max(made, key=lambda revision: revision.number, default=None)
 
 
 def _labels(values: Mapping[str, object], who: str) -> dict[str, bool]:

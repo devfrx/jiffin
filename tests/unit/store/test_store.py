@@ -254,6 +254,15 @@ def test_the_situations_are_kept(store: Store, path: Path) -> None:
     assert rows(path, "SELECT * FROM situation") == [("call", "zoom.exe", NOW - DAY, NOW)]
 
 
+def test_the_log_holds_the_stretches_of_the_situations_the_earliest_first(store: Store) -> None:
+    call = SituationStretch(Situation.CALL, "zoom.exe", NOW, NOW + 60_000)
+    plugged = SituationStretch(Situation.POWER, "plugged", NOW - DAY, NOW)
+    battery = SituationStretch(Situation.POWER, "battery", NOW, NOW + DAY)
+    store.save([battery, call])
+    store.save([plugged])
+    assert store.log().situations == (plugged, call, battery)
+
+
 def test_an_alert_asked_for_with_remind_here_is_kept_as_such(store: Store) -> None:
     figma = reminder(1)
     asked = replace(on_time(1, figma, NOW), d=0.5, shown_at=NOW, requested=True)
