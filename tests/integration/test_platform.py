@@ -1,13 +1,15 @@
-"""The real foreground, with Vivaldi, Chrome and Brave on fresh profiles (ADR-0005).
+"""The real foreground, with Vivaldi, Chrome and Brave on fresh profiles (ADR-0005), and the
+situations Windows tells (ADR-0028).
 
 These tests run only on the owner's machine. `uv run pytest -m integration` opens windows of
-each installed browser, in the foreground, for about a minute and a half, and puts a page in full
-screen; `uv run pytest -m benchmark -s` measures the CPU Vivaldi spends on the reads, in ten
-minutes. Leave the computer alone meanwhile. Every page comes from a local server; nothing of the
-owner's browsers is touched.
+each installed browser, in the foreground, for about two minutes, puts a page in full screen and
+records from the microphone for a few seconds in each; `uv run pytest -m benchmark -s` measures
+the CPU Vivaldi spends on the reads, in ten minutes. Leave the computer alone meanwhile. Every
+page comes from a local server; nothing of the owner's browsers is touched.
 """
 
 import ctypes
+import json
 import shutil
 import subprocess
 import threading
@@ -19,15 +21,19 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+import comtypes
 import comtypes.client
 import psutil
 import pytest
 
 from jiffin.core.clock import SystemClock
 from jiffin.core.context import Observation
+from jiffin.core.situations import Situation, SituationObservation
 from jiffin.platform import win32
 from jiffin.platform.address import BROWSERS
 from jiffin.platform.capture import Capture
+from jiffin.platform.media import Media
+from jiffin.platform.network import Networks
 
 PAGE = """<!doctype html><title>Jiffin {name}</title><p id="tick">0</p>
 <script>
@@ -39,6 +45,9 @@ if ({every} > 0) setInterval(() => {{
 }}, {every});
 addEventListener("keydown", (event) => {{
   if (event.key === "f") document.documentElement.requestFullscreen();
+}});
+if ({records}) navigator.mediaDevices.getUserMedia({{audio: true}}).then((stream) => {{
+  window.kept = stream;
 }});
 </script>"""
 BENCHMARK_SECONDS = 300
@@ -93,14 +102,19 @@ def press(key: int) -> None:
 
 class Pages:
     """A local server of pages titled "Jiffin <name>"; `?every=N` changes the title every N ms,
-    and the key F puts a page in full screen, as on a video."""
+    the key F puts a page in full screen, as on a video, and `&records=1` records from the
+    microphone, as a call does."""
 
     def __init__(self) -> None:
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:
                 path, _, query = self.path.partition("?")
-                every = query.removeprefix("every=") if query.startswith("every=") else "0"
-                body = PAGE.format(name=path.strip("/"), every=int(every)).encode()
+                values = dict(part.partition("=")[::2] for part in query.split("&") if part)
+                body = PAGE.format(
+                    name=path.strip("/"),
+                    every=int(values.get("every", "0")),
+                    records="true" if values.get("records") == "1" else "false",
+                ).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(body)))
@@ -114,8 +128,8 @@ class Pages:
         threading.Thread(target=self._server.serve_forever, daemon=True).start()
         self.host = f"127.0.0.1:{self._server.server_port}"
 
-    def url(self, name: str, every_ms: int = 0) -> str:
-        return f"http://{self.host}/{name}?every={every_ms}"
+    def url(self, name: str, every_ms: int = 0, records: bool = False) -> str:
+        return f"http://{self.host}/{name}?every={every_ms}&records={int(records)}"
 
     def close(self) -> None:
         self._server.shutdown()
@@ -123,23 +137,34 @@ class Pages:
 
 
 class Seen:
-    """The observations of a capture, to wait on."""
+    """The observations of a capture, to wait on: the contexts, and the situations apart."""
 
     def __init__(self) -> None:
         self.observations: list[Observation] = []
+        self.situations: list[SituationObservation] = []
         self._changed = threading.Condition()
 
-    def add(self, observation: Observation) -> None:
+    def add(self, observation: Observation | SituationObservation) -> None:
         with self._changed:
-            self.observations.append(observation)
+            if isinstance(observation, SituationObservation):
+                self.situations.append(observation)
+            else:
+                self.observations.append(observation)
             self._changed.notify_all()
 
     def wait(self, what: Callable[[Observation], bool], after: int = 0) -> int:
         """The index of the first observation from `after` on that matches, within 30 s."""
+        return self._wait(self.observations, what, after)
+
+    def wait_situation(self, what: Callable[[SituationObservation], bool]) -> int:
+        """The index of the first situation's observation that matches, within 30 s."""
+        return self._wait(self.situations, what, 0)
+
+    def _wait[T](self, seen: list[T], what: Callable[[T], bool], after: int) -> int:
         with self._changed:
             for _ in range(300):
-                for index in range(after, len(self.observations)):
-                    if what(self.observations[index]):
+                for index in range(after, len(seen)):
+                    if what(seen[index]):
                         return index
                 self._changed.wait(0.1)
         pytest.fail("the capture did not see it within 30 s")
@@ -150,9 +175,12 @@ def titled(prefix: str) -> Callable[[Observation], bool]:
 
 
 class Browser:
-    """A browser on a profile of its own, killed at the end."""
+    """A browser on a profile of its own, killed at the end. The pages of `allowed` (a host and
+    its port) may record from the microphone without asking: the profile says so before the
+    browser starts, as a user's Allow would. The browser's own switches that skip the question
+    would also skip what marks the tab that records (`FakeMediaStreamUIProxy`)."""
 
-    def __init__(self, app: str, program: str, profile: Path) -> None:
+    def __init__(self, app: str, program: str, profile: Path, allowed: str | None = None) -> None:
         self.app = app
         self._arguments = [
             program,
@@ -166,6 +194,13 @@ class Browser:
             "--disable-extensions",
         ]
         self._profile = profile
+        if allowed is not None:
+            exception = {f"http://{allowed},*": {"setting": 1}}  # CONTENT_SETTING_ALLOW
+            preferences = {
+                "profile": {"content_settings": {"exceptions": {"media_stream_mic": exception}}}
+            }
+            (profile / "Default").mkdir(parents=True)
+            (profile / "Default" / "Preferences").write_text(json.dumps(preferences))
         # The first window of a fresh Vivaldi shows its welcome, without the address bar.
         self._main = subprocess.Popen(self._arguments)
         time.sleep(5)
@@ -227,16 +262,16 @@ def seen() -> Iterator[Seen]:
     capture.close()
 
 
-def start(app: str, tmp_path: Path) -> Browser:
+def start(app: str, tmp_path: Path, allowed: str | None = None) -> Browser:
     program = installed(app)
     if program is None:
         pytest.skip(f"{app} is not installed")
-    return Browser(app, program, tmp_path / "profile")
+    return Browser(app, program, tmp_path / "profile", allowed)
 
 
 @pytest.fixture(params=sorted(BROWSERS))
-def browser(request: pytest.FixtureRequest, tmp_path: Path) -> Iterator[Browser]:
-    browser = start(request.param, tmp_path)
+def browser(request: pytest.FixtureRequest, tmp_path: Path, pages: Pages) -> Iterator[Browser]:
+    browser = start(request.param, tmp_path, allowed=pages.host)
     yield browser
     browser.close()
 
@@ -304,6 +339,46 @@ def test_a_page_in_full_screen_is_no_context_and_has_its_address_after(
     back = seen.observations[seen.wait(titled(page), after=away + 1)].context
     assert back is not None
     assert back.address == f"{pages.host}/video-{browser.app}"
+
+
+@pytest.mark.integration
+def test_a_tab_that_records_gives_the_call_its_site(
+    pages: Pages, seen: Seen, browser: Browser
+) -> None:
+    """With the microphone, for a few seconds: Windows shows its icon meanwhile. Vivaldi marks
+    no tab that records: its calls count whole."""
+    browser.open(pages.url(f"call-{browser.app}", records=True))
+    seen.wait(titled(f"Jiffin call-{browser.app}"))
+    site = browser.app if browser.app == "vivaldi.exe" else "127.0.0.1"
+    seen.wait_situation(
+        lambda observation: (
+            observation.situation is Situation.CALL and observation.values == frozenset({site})
+        )
+    )
+
+
+@pytest.mark.integration
+def test_the_media_controls_and_the_networks_are_read_here() -> None:
+    """On the owner's machine, where both answer: the ids only, never a name."""
+    read: dict[str, frozenset[str]] = {}
+
+    def run() -> None:
+        comtypes.CoInitializeEx(comtypes.COINIT_MULTITHREADED)
+        try:
+            media = Media()
+            read["playing"] = media.playing()
+            media.close()
+            networks = Networks(lambda: None)
+            read["connected"] = networks.connected()
+            networks.close()
+        finally:
+            comtypes.CoUninitialize()
+
+    thread = threading.Thread(target=run)
+    thread.start()
+    thread.join()
+    assert all(app == app.lower() for app in read["playing"])
+    assert all(len(network) == 36 and "{" not in network for network in read["connected"])
 
 
 @pytest.mark.benchmark

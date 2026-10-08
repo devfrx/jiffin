@@ -19,6 +19,9 @@ CHANGE_MS = 5_000
 """How long a change of a situation must last to count, as a context's (ADR-0019): a microphone
 that stops for 2 s does not end a call. A starting number, assumed until real calls measure it
 (ADR-0028)."""
+AWAY_MS = 180_000
+"""How long without a key or the mouse makes the user away, as ActivityWatch's (ADR-0028): a
+starting number too, until real days tell whether it suits "quando torno"."""
 
 
 class Situation(StrEnum):
@@ -28,8 +31,8 @@ class Situation(StrEnum):
     """An app captures from a microphone: its values are those apps' executables, or for a
     browser the site of the tab in front that records, when its name can be read."""
     AWAY = "away"
-    """No key or mouse for 3 minutes, without a call and with nothing playing, or the PC locked
-    or asleep: `YES` or `NO`."""
+    """No key or mouse for `AWAY_MS`, and no call nor anything playing in that time; or the PC
+    locked or asleep: `YES` or `NO`."""
     POWER = "power"
     """`BATTERY` or `PLUGGED`."""
     DISPLAY = "display"
@@ -40,8 +43,9 @@ class Situation(StrEnum):
     """`HOME` or `OFFICE`, by the labels of the settings; `OFFLINE`; no value on a network without
     a label."""
     PLAYBACK = "playback"
-    """Something plays: its values are the executables of the apps that play. No words name it:
-    it keeps `AWAY` off in front of a video."""
+    """Something plays, through Windows' media controls: its values are the ids Windows gives
+    those apps, in lower case (`spotify.exe`, `vivaldi.<id>`). No words name it: it keeps `AWAY`
+    off in front of a video."""
 
 
 YES = "yes"

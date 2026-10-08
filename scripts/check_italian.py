@@ -42,8 +42,15 @@ ANSWERS = frozenset({"fatto", "utile", "rimanda", "non_qui", "chiuso"})
 to translate them."""
 NAMES = {
     PurePosixPath("src/jiffin/harness/folders.py"): frozenset({"etichette.json"}),
-}
-"""Literals a file may hold whole, as names: a file of the prototype's that keeps its name."""
+    PurePosixPath("src/jiffin/platform/address.py"): frozenset({
+        "Registrazione con videocamera e microfono",
+        "Registrazione con microfono",
+        "Contenuti del desktop condivisi",
+    }),
+}  # fmt: skip
+"""Literals a file may hold whole, as names: a file of the prototype's that keeps its name, and
+what Chromium writes in Italian on a tab that records, which Jiffin reads in any language of its
+own."""
 NOT_READ = (
     PurePosixPath("docs/adr"),
     PurePosixPath("docs/design/mockups"),
@@ -70,6 +77,9 @@ QUOTED = re.compile(r'"[^"]*"|«[^»]*»|“[^”]*”|`[^`]*`')
 FENCE = re.compile(r"^ *```.*$", re.MULTILINE)
 PLACEHOLDER = re.compile(r"\{[^{}]*\}")
 ESCAPE = re.compile(r"\\[nrt]")
+HEXADECIMAL = re.compile(r"\b(?:0[xX])?(?=[0-9A-Fa-f]*\d)[0-9A-Fa-f]+\b")
+"""A hexadecimal number, as an error's code or the parts of a GUID: its letters, "1DA5D803",
+are no words."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,7 +123,7 @@ def italian(
     if quotes:
         text = QUOTED.sub(lambda quoted: re.sub(r"[^\n]", " ", quoted[0]), text)
     for number, row in enumerate(text.split("\n"), start=line):
-        for word in WORD.findall(row):
+        for word in WORD.findall(HEXADECIMAL.sub(" ", row)):
             lower = word.lower()
             # An English possessive, "Rimanda's", is the word without its apostrophe.
             forms = (lower, lower.rstrip("'’"))

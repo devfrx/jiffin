@@ -8,6 +8,7 @@ import pytest
 
 from jiffin.core.clock import SimulatedClock, SystemClock
 from jiffin.core.context import Context, Observation
+from jiffin.core.situations import Situation, SituationObservation
 from jiffin.platform import win32
 from jiffin.platform.address import Outcome, Reading
 from jiffin.platform.capture import (
@@ -15,6 +16,7 @@ from jiffin.platform.capture import (
     UNREADABLE_MS,
     Capture,
     Foreground,
+    Situations,
     Unreadable,
 )
 
@@ -89,6 +91,8 @@ class Scene:
         }
         self.observations: list[Observation] = []
         self.unreadable: list[frozenset[str]] = []
+        self.fronts: list[tuple[int | None, Context | None]] = []
+        """The window in front with each context that went out."""
         monkeypatch.setattr(win32, "foreground", lambda: self.front)
         monkeypatch.setattr(win32, "process_id", lambda hwnd: self.windows[hwnd].pid)
         monkeypatch.setattr(win32, "program", lambda hwnd: self.windows[hwnd].program)
@@ -100,6 +104,7 @@ class Scene:
             self.bars,
             self.observations.append,
             Unreadable(self.clock, self.unreadable.append),
+            lambda window, context: self.fronts.append((window, context)),
         )
 
     @property
@@ -171,6 +176,14 @@ def test_only_a_change_of_context_is_sent(scene: Scene) -> None:
 def test_a_browser_tab_is_observed_with_its_address(scene: Scene) -> None:
     scene.switch(VIVALDI)
     assert scene.contexts == [Context("vivaldi.exe", "Fatture", "fatture.example.it/elenco")]
+
+
+def test_the_window_in_front_goes_with_each_context(scene: Scene) -> None:
+    scene.foreground.refresh()
+    scene.switch(VIVALDI)
+    scene.rename(VIVALDI, "Fatture - Vivaldi")  # the same context: nothing goes out
+    scene.switch(JIFFIN)
+    assert scene.fronts == [(NOTEPAD, NOTES), (VIVALDI, INVOICES), (JIFFIN, None)]
 
 
 @pytest.mark.parametrize(
@@ -375,13 +388,20 @@ def test_a_read_in_between_starts_the_count_again() -> None:
 
 
 def test_the_capture_thread_observes_at_once_and_closes() -> None:
-    observations: list[Observation] = []
+    """With Windows' own sources: those this machine cannot read go out as not read."""
+    observations: list[Observation | SituationObservation] = []
     capture = Capture(SystemClock(), observations.append, lambda apps: None)
     capture.start()
     try:
-        assert observations  # whatever is in front
+        seen = list(observations)
     finally:
         capture.close()
+    assert any(isinstance(observation, Observation) for observation in seen)  # whatever is in front
+    situations = [
+        observation for observation in seen if isinstance(observation, SituationObservation)
+    ][: len(Situation)]
+    assert [observation.situation for observation in situations] == list(Situation)
+    assert len({observation.at for observation in situations}) == 1
     assert not any(thread.name == "context" for thread in threading.enumerate())
 
 
@@ -389,18 +409,22 @@ def test_the_capture_thread_takes_windows_notices_and_ends_them(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     made: list[FakeNotices] = []
+    heard: list[str] = []
 
     def make(handler: Callable[[win32.Notice], None]) -> FakeNotices:
         made.append(FakeNotices(handler, threading.current_thread().name))
         return made[-1]
 
     monkeypatch.setattr(win32, "Notices", make)
+    monkeypatch.setattr(Foreground, "on_notice", lambda self, notice: heard.append("contexts"))
+    monkeypatch.setattr(Situations, "on_notice", lambda self, notice: heard.append("situations"))
     capture = Capture(SystemClock(), lambda observation: None, lambda apps: None)
     capture.start()
     capture.close()
     [notices] = made
     assert (notices.thread, notices.closed) == ("context", True)
-    assert getattr(notices.handler, "__func__", None) is Foreground.on_notice
+    notices.handler(win32.Notice.LOCKED)
+    assert heard == ["contexts", "situations"]
 
 
 def test_a_capture_that_cannot_start_says_why(monkeypatch: pytest.MonkeyPatch) -> None:

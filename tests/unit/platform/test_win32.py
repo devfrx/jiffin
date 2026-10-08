@@ -1,7 +1,9 @@
 """Win32 against Windows itself, on windows that never show."""
 
 import ctypes
+import os
 import threading
+import time
 from collections.abc import Iterator
 from ctypes import wintypes
 from typing import Any
@@ -205,6 +207,59 @@ def test_the_notices_of_a_lock_and_of_sleep_reach_the_handler() -> None:
 def test_notices_closed_on_one_thread_can_be_made_again() -> None:
     for _ in range(2):
         win32.Notices(lambda notice: None).close()
+
+
+def test_a_timer_and_the_messages_of_another_thread_reach_the_loop() -> None:
+    ticks: list[int] = []
+    messages: list[int] = []
+    ready = threading.Event()
+    thread_id: list[int] = []
+
+    def run() -> None:
+        win32.make_queue()
+        thread_id.append(threading.get_native_id())
+        timer = win32.Timer(10, lambda: ticks.append(threading.get_native_id()))
+        ready.set()
+        try:
+            win32.run_messages(messages.append)
+        finally:
+            timer.close()
+
+    thread = threading.Thread(target=run)
+    thread.start()
+    ready.wait()
+    [native] = thread_id
+    win32.post(native, win32.WM_APP + 1)
+    deadline = time.monotonic() + 5
+    while len(ticks) < 2 and time.monotonic() < deadline:
+        time.sleep(0.01)
+    win32.post_quit(native)
+    thread.join()
+    assert messages == [win32.WM_APP + 1]
+    assert len(ticks) >= 2
+    assert set(ticks) == {native}  # on the timer's own thread
+
+
+def test_a_message_to_a_thread_that_ended_says_so() -> None:
+    thread = threading.Thread(target=win32.make_queue)
+    thread.start()
+    native = thread.native_id
+    thread.join()
+    assert native is not None
+    with pytest.raises(OSError):
+        win32.post(native, win32.WM_APP + 1)
+
+
+def test_the_time_since_the_last_input_and_the_power_are_read() -> None:
+    assert 0 <= win32.idle_ms() < 2**32
+    assert isinstance(win32.plugged_in(), bool)
+
+
+def test_the_program_of_a_process_is_its_file_name() -> None:
+    program = win32.program_of(os.getpid())
+    assert program is not None
+    assert program.lower().endswith(".exe")
+    assert win32.program_of(0) is None  # the system's idle process cannot be opened
 
 
 def test_a_title_cut_inside_an_emoji_can_still_reach_the_engine() -> None:

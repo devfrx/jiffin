@@ -1,14 +1,16 @@
-"""The address bar of Vivaldi, Chrome and Brave, read through UI Automation (ADR-0005).
+"""The address bar of Vivaldi, Chrome and Brave, read through UI Automation (ADR-0005), and
+whether the tab in front records (ADR-0028).
 
 It runs on the context thread, in the multithreaded apartment. Chromium exposes its web content,
 and so all of Vivaldi's interface, only to clients that look like assistive technology: hence a
 focus listener that does nothing and, while Vivaldi's address bar is not exposed yet, a hit test
 into the window. A private window has the same title as any other; UI Automation tells them
 apart. The private flag of a window never changes and its bar seldom does, so both are kept per
-window; a kept bar that is gone is looked up again.
+window; a kept bar that is gone is looked up again. So is the strip of a window's tabs.
 
 The ways to find the bar and the private marks were checked on 2026-09-30 with Vivaldi 8.2 (in
-Italian), Chrome 154 and Brave 1.96.
+Italian), Chrome 154 and Brave 1.96; the marks of a tab that records, on 2026-10-08 in
+Chromium's sources and in Vivaldi 8.2's own.
 """
 
 import logging
@@ -22,6 +24,7 @@ from typing import Any, ClassVar
 import comtypes
 import comtypes.client
 
+from jiffin.core.context import BROWSER_SUFFIXES
 from jiffin.platform import win32
 
 log = logging.getLogger(__name__)
@@ -33,10 +36,26 @@ _GONE = 0x80040201
 """UIA_E_ELEMENTNOTAVAILABLE (UIAutomationCoreApi.h): the element no longer exists."""
 _WAKES = 4
 _WAKE_SECONDS = 0.25
+_STRIP_DEPTH = 4
+"""How far above a tab its strip is looked for."""
 _IGNORE_CASE_SUBSTRING = 1 | 2  # PropertyConditionFlags_IgnoreCase | _MatchSubstring
 _PRIVATE_NAME = re.compile(r"\(([^()]*)\)\s*$")
 _PRIVATE_WORDS = ("incognit", "privat")
 """In the name of Chromium's root view: "(In incognito)", "(Privato)", "(Incognito)"."""
+CALL_MARKS = frozenset({
+    "Camera and microphone recording",
+    "Microphone recording",
+    "Desktop content shared",
+    "Registrazione con videocamera e microfono",
+    "Registrazione con microfono",
+    "Contenuti del desktop condivisi",
+})  # fmt: skip
+"""What Chrome and Brave add after " - " to the name of a tab that records from a microphone or
+shares the screen, in English and in Italian: Chromium's `IDS_TAB_AX_LABEL_MEDIA_RECORDING_FORMAT`,
+`_AUDIO_RECORDING_FORMAT` and `_DESKTOP_CAPTURING_FORMAT`. A tab shows one alert, the first in
+Chromium's order: the desktop shared, the tab shared by another one ("Tab content shared": not
+the call's tab), camera and microphone, the microphone, the camera alone (no microphone: not a
+call's). Other marks may come before it (a group, pinned) or after it (the tab's memory)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,7 +114,8 @@ class _FocusListener(comtypes.COMObject):  # type: ignore[misc]  # comtypes has 
 
 
 class AddressBars:
-    """Reads the address bars of the supported browsers, on the thread that created it."""
+    """Reads the address bars of the supported browsers, and whether their tab in front records,
+    on the thread that created it."""
 
     def __init__(self) -> None:
         self._uia = comtypes.client.CreateObject(_UIA.CUIAutomation8, interface=_UIA.IUIAutomation2)
@@ -105,11 +125,88 @@ class AddressBars:
         self._uia.AddFocusChangedEventHandler(None, self._listener)
         self._windows: dict[int, tuple[Any, bool]] = {}
         """The bar and the private flag of the windows seen so far."""
+        self._tab = self._uia.CreatePropertyCondition(
+            _UIA.UIA_ControlTypePropertyId, _UIA.UIA_TabItemControlTypeId
+        )
+        self._names = self._uia.CreateCacheRequest()
+        """The tabs' names come with the search, in one call."""
+        self._names.AddProperty(_UIA.UIA_NamePropertyId)
+        self._strips: dict[int, Any] = {}
+        """The strip of tabs of the windows read so far."""
+        self._unmatched: dict[int, str] = {}
+        """The title of a window whose tabs were searched and none bore it: not searched again
+        until its title changes."""
 
     def close(self) -> None:
         self._windows.clear()
+        self._strips.clear()
+        self._unmatched.clear()
         self._uia.RemoveAllEventHandlers()
         self._uia = None
+
+    def records(self, hwnd: int, app: str) -> bool | None:
+        """Whether the tab in front of a window of `app`, one of BROWSERS, records from a
+        microphone or shares the screen, by the marks of its name (`CALL_MARKS`). None when it
+        cannot be told: a window that is not of tabs, its tab not found, or Vivaldi, whose tabs
+        show what plays and what is shared, never what records (its interface's code, 8.2)."""
+        title = win32.title(hwnd)
+        if BROWSERS[app].web_ui or not title.endswith(BROWSER_SUFFIXES[app]):
+            return None
+        title = title.removesuffix(BROWSER_SUFFIXES[app])
+        try:
+            name = self._tab_name(hwnd, title)
+        except comtypes.COMError as error:
+            self._strips.pop(hwnd, None)
+            log.info("%s: the tab could not be read, error %#010x", app, error.hresult & 0xFFFFFFFF)
+            return None
+        if name is None:
+            return None
+        return not CALL_MARKS.isdisjoint(name[len(title) :].split(" - "))
+
+    def _tab_name(self, hwnd: int, title: str) -> str | None:
+        """The name of the tab in front: the one that bears the window's title, alone or before
+        its marks. Chrome's and Brave's strips tell UI Automation of no selected tab (their
+        views answer no selection), and a page's own tabs are not named so. None when no tab
+        bears it, or not yet: a tab's name may follow the title a moment later."""
+        strip = self._strips.get(hwnd)
+        if strip is not None:
+            try:
+                return _bearing(
+                    strip.FindAllBuildCache(_UIA.TreeScope_Descendants, self._tab, self._names),
+                    title,
+                )
+            except comtypes.COMError as error:
+                if error.hresult & 0xFFFFFFFF != _GONE:
+                    raise
+                del self._strips[hwnd]  # the browser built its strip again
+        if self._unmatched.get(hwnd) == title:
+            return None
+        self._forget_closed()
+        found = self._uia.ElementFromHandle(hwnd).FindAllBuildCache(
+            _UIA.TreeScope_Descendants, self._tab, self._names
+        )
+        for index in range(found.Length):
+            tab = found.GetElement(index)
+            if _bears(tab.CachedName or "", title):
+                self._strips[hwnd] = self._strip_of(tab)
+                self._unmatched.pop(hwnd, None)
+                return str(tab.CachedName)
+        self._unmatched[hwnd] = title
+        return None
+
+    def _strip_of(self, tab: Any) -> Any:
+        """The list that holds the tab: its nearest ancestor that is a list of tabs, which holds
+        the tabs of every group too; its parent when there is none near."""
+        walker = self._uia.ControlViewWalker
+        parent = walker.GetParentElement(tab)
+        element = parent
+        for _ in range(_STRIP_DEPTH):
+            if not element:
+                break
+            if element.CurrentControlType == _UIA.UIA_TabControlTypeId:
+                return element
+            element = walker.GetParentElement(element)
+        return parent
 
     def read(self, hwnd: int, app: str) -> Reading:
         """What the bar of a window of `app`, one of BROWSERS, shows now."""
@@ -204,5 +301,22 @@ class AddressBars:
                 pass
 
     def _forget_closed(self) -> None:
-        for hwnd in [hwnd for hwnd in self._windows if not win32.is_window(hwnd)]:
-            del self._windows[hwnd]
+        kept: dict[int, Any]
+        for kept in (self._windows, self._strips, self._unmatched):
+            for hwnd in [hwnd for hwnd in kept if not win32.is_window(hwnd)]:
+                del kept[hwnd]
+
+
+def _bears(name: str, title: str) -> bool:
+    """Whether a tab's name is that of the tab whose title the window bears: the title alone, or
+    before " - " and its marks."""
+    return name == title or name.startswith(f"{title} - ")
+
+
+def _bearing(found: Any, title: str) -> str | None:
+    """The name of the first tab found that bears the title."""
+    for index in range(found.Length):
+        name = found.GetElement(index).CachedName or ""
+        if _bears(name, title):
+            return str(name)
+    return None

@@ -11,21 +11,21 @@ The code is in `core`: `situations.py` holds the situations, the call apps,
 the terms of a condition and `Situations`, which follows them over time;
 `grammar.py` finds their words beside the time's, `meanings.py` has `read`,
 and `reminders.py` and `units.py` ring them. The words are the lexicon's,
-`situations.toml`. The capture that observes them is
-[#147](https://github.com/devfrx/jiffin/issues/147); the store keeps a
-revision's terms and the stretches ([data model](data-model.md)).
+`situations.toml`. The context thread observes them
+([context.md](context.md#the-situations)); the store keeps a revision's terms
+and the stretches ([data model](data-model.md)).
 
 ## The situations
 
 | Situation | Its values | Holds when |
 |---|---|---|
 | `call` | the executables of the apps that capture from a microphone; for a browser, the site of the tab in front that records, when its name can be read | an app captures; with an app named, a call on it |
-| `away` | `yes`, `no` | no key or mouse for 3 minutes, without a call and with nothing playing; or the PC locked or asleep |
+| `away` | `yes`, `no` | no key, mouse, call or anything playing for 3 minutes (`AWAY_MS`); or the PC locked or asleep |
 | `power` | `battery`, `plugged` | |
 | `display` | `yes`, `no` | an external display is connected |
 | `headphones` | `yes`, `no` | the default output is headphones or a headset |
 | `network` | `home`, `office`, by the labels of the settings; `offline`; none on a network without a label | |
-| `playback` | the executables of the apps that play | no words name it: it keeps `away` off in front of a video |
+| `playback` | the ids Windows' media controls give the apps that play, in lower case: `spotify.exe`, `vivaldi.<id>` | no words name it: it keeps `away` off in front of a video |
 
 - **The call apps** are a closed list in `core`, `CALL_APPS`, each with the
   names a condition gives it, its executables and its sites: Discord, Meet
@@ -113,7 +113,9 @@ now.
   (situation, value, since, until), as `Left` is for contexts: a row of the
   table `situation`, kept 30 days.
 - **Not read any more** (`values` None, when the app ends or the capture loses
-  it) ends the stretches at once, and is no end.
+  it) ends the stretches at once, and is no end. At the app's close the worker
+  observes every situation so, all at the time the context in front leaves:
+  where the harness finds the close.
 - **After a restart** the stretches start again from the state read at start:
   a call in progress loses its minutes, a known limit.
 - **During the pause** the situations are read and recorded.

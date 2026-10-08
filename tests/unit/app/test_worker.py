@@ -22,8 +22,17 @@ from jiffin.core.context import Context, Observation
 from jiffin.core.debounce import DEBOUNCE_MS
 from jiffin.core.records import Evaluation, Record, Snooze
 from jiffin.core.reminders import HOUR_MS, RETURN_PAUSE_MS, Pause, Reminders, RemindersView
+from jiffin.core.situations import (
+    CHANGE_MS,
+    NO,
+    PLUGGED,
+    Situation,
+    SituationObservation,
+    SituationStretch,
+)
+from jiffin.harness.truth import unread
 from jiffin.store.migrate import StoreError
-from jiffin.store.store import RETENTION_MS, Json, Store
+from jiffin.store.store import RETENTION_MS, Json, Log, Store
 
 FAKE_ENGINE = [sys.executable, str(Path(__file__).parents[1] / "client" / "fake_engine.py")]
 START = 1_790_000_000_000  # 2026-09-21, in UTC milliseconds
@@ -38,7 +47,7 @@ STARTING, READY, ASLEEP = Status(State.STARTING), Status(State.READY), Status(St
 class Contexts:
     """The context port, played by the test: what it observes goes where the capture's would."""
 
-    def __init__(self, observe: Callable[[Observation], None]) -> None:
+    def __init__(self, observe: Callable[[Observation | SituationObservation], None]) -> None:
         self.observe = observe
         self.started = False
         self.closed = False
@@ -80,7 +89,7 @@ class Scene:
         )
         self.core = QueuedCore(self.worker)
 
-    def _contexts(self, observe: Callable[[Observation], None]) -> Contexts:
+    def _contexts(self, observe: Callable[[Observation | SituationObservation], None]) -> Contexts:
         self.contexts = self._kind(observe)
         return self.contexts
 
@@ -113,6 +122,14 @@ class Scene:
         """Rows in a table, read through a second connection."""
         with closing(sqlite3.connect(self.database)) as db:
             return int(db.execute(f"SELECT count(*) FROM {table}").fetchone()[0])
+
+    def log(self) -> Log:
+        """What the database keeps, once the worker has closed."""
+        store = Store.open(self.database)
+        try:
+            return store.log()
+        finally:
+            store.close()
 
     def statement(self) -> str | None:
         with closing(sqlite3.connect(self.database)) as db:
@@ -474,6 +491,30 @@ def test_closing_tells_when_the_context_in_front_left(scene: Scene) -> None:
     with closing(sqlite3.connect(scene.database)) as db:
         until = {row[0] for row in db.execute("SELECT context_until FROM evaluation")}
     assert until == {START + DEBOUNCE_MS + 60_000}  # on every evaluation of that stretch
+
+
+def test_closing_ends_every_situation_at_once_where_the_harness_finds_the_close(
+    scene: Scene,
+) -> None:
+    for situation, value in (
+        (Situation.AWAY, NO),
+        (Situation.CALL, "discord.exe"),
+        (Situation.POWER, PLUGGED),
+    ):
+        scene.contexts.observe(SituationObservation(START, situation, frozenset({value})))
+    scene.enter(FIGMA)
+    scene.advance(CHANGE_MS)
+    scene.settle()
+    scene.advance(60_000)
+    scene.worker.close()
+    closed_at = START + CHANGE_MS + 60_000
+    situations = scene.log().situations
+    assert situations == (
+        SituationStretch(Situation.AWAY, NO, START, closed_at),
+        SituationStretch(Situation.CALL, "discord.exe", START, closed_at),
+        SituationStretch(Situation.POWER, PLUGGED, START, closed_at),
+    )
+    assert unread(situations) == {closed_at}  # no end of the call there (#155)
 
 
 def test_closing_ends_the_capture_and_shuts_the_engine_down(scene: Scene) -> None:

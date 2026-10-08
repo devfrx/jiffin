@@ -27,6 +27,7 @@ from jiffin.client.model_file import MODEL, PinnedFile
 from jiffin.core.clock import Clock, SystemClock
 from jiffin.core.context import Observation
 from jiffin.core.reminders import Pause
+from jiffin.core.situations import SituationObservation
 from jiffin.lang.texts import TEXTS
 from jiffin.platform.capture import Capture
 from jiffin.store.folders import Folders
@@ -45,7 +46,12 @@ LOG_BACKUPS = 4
 """The log turns over at 1 MiB and keeps four old files."""
 
 type MakeCapture = Callable[
-    [Clock, Callable[[Observation], None], Callable[[frozenset[str]], None]], Source
+    [
+        Clock,
+        Callable[[Observation | SituationObservation], None],
+        Callable[[frozenset[str]], None],
+    ],
+    Source,
 ]
 
 
