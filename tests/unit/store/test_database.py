@@ -20,6 +20,7 @@ TABLES = {
     "setting",
     "situation",
     "engine_sleep",
+    "nothing_in_front",
 }
 
 

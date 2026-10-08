@@ -21,6 +21,7 @@ from jiffin.core.records import (
     Here,
     LastIds,
     Left,
+    NothingInFront,
     Outcome,
     Reminder,
     ReminderDeleted,
@@ -275,6 +276,27 @@ def test_a_sleep_of_the_engine_is_written_when_it_starts_and_again_when_it_ends(
     ]
 
 
+def test_a_stretch_with_nothing_in_front_is_written_when_it_starts_and_again_when_it_ends(
+    store: Store, path: Path
+) -> None:
+    store.save([NothingInFront(NOW, startup=True), NothingInFront(NOW + DAY)])
+    store.save([NothingInFront(NOW, NOW + 60_000, startup=True)])
+    assert rows(path, "SELECT * FROM nothing_in_front ORDER BY since") == [
+        (NOW, NOW + 60_000, 1),
+        (NOW + DAY, None, 0),
+    ]
+
+
+def test_the_log_holds_the_sleeps_and_the_stretches_with_nothing_in_front(store: Store) -> None:
+    woken = EngineSleep(NOW, SleepReason.IDLE, NOW + 60_000, Waker.STATEMENT, NOW + 63_000)
+    failed = EngineSleep(NOW + DAY, SleepReason.NOTHING_IN_FRONT, NOW + DAY + 1_000)
+    started = NothingInFront(NOW, NOW + 1_000, startup=True)
+    store.save([failed, woken, NothingInFront(NOW + DAY), started])
+    log = store.log()
+    assert log.sleeps == (woken, failed)
+    assert log.nothing_in_front == (started, NothingInFront(NOW + DAY))
+
+
 def test_retention_keeps_30_days(store: Store, path: Path) -> None:
     kept, answered = reminder(1), reminder(2)
     old = evaluation(1, NOW - RETENTION_MS - 1, FIGMA, kept, answered)
@@ -293,6 +315,8 @@ def test_retention_keeps_30_days(store: Store, path: Path) -> None:
             SituationStretch(Situation.POWER, "plugged", old.at - DAY, NOW - RETENTION_MS),
             EngineSleep(NOW - RETENTION_MS - 1, SleepReason.IDLE),
             EngineSleep(NOW - RETENTION_MS, SleepReason.IDLE),
+            NothingInFront(NOW - RETENTION_MS - 1, NOW),
+            NothingInFront(NOW - RETENTION_MS),
             replace(said(answered.id, FIGMA), at=old.at),
         ]
     )
@@ -306,6 +330,7 @@ def test_retention_keeps_30_days(store: Store, path: Path) -> None:
     assert count(path, "engine_build") == 1
     assert rows(path, "SELECT value FROM situation") == [("plugged",)]
     assert rows(path, "SELECT slept_at FROM engine_sleep") == [(NOW - RETENTION_MS,)]
+    assert rows(path, "SELECT since FROM nothing_in_front") == [(NOW - RETENTION_MS,)]
     assert count(path, "context_answer") == 1  # until its reminder is deleted
 
 

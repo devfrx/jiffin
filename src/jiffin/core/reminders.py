@@ -43,6 +43,7 @@ from jiffin.core.records import (
     Evaluation,
     Here,
     Left,
+    NothingInFront,
     Outcome,
     Record,
     Reminder,
@@ -292,7 +293,9 @@ class Reminders:
         windows, which asks for Remind here, leaves the context before it in front."""
         self._place: Context | None = None
         """The last context stable for 5 s: "here", for Remind here."""
-        self._records: list[Record] = []
+        self._nothing: NothingInFront | None = NothingInFront(clock.now(), startup=True)
+        """The stretch with nothing in front under way: from the start, until the capture says."""
+        self._records: list[Record] = [self._nothing]
         self._alerts_changed = bool(saved.unseen)
         self._reminders_changed = bool(saved.reminders) or paused_until is not None
         self._reminder_ids = itertools.count(saved.last_ids.reminder + 1)
@@ -333,7 +336,7 @@ class Reminders:
         """When the model will be asked next, as far as `core` knows: the client lets the engine
         sleep by it (ADR-0027). Soon when the context waiting to be stable has a judgement not in
         the cache, a revision without its statement included: it was never judged."""
-        if self._paused_until is not None or self._seen is None:
+        if self._nothing_in_front:
             return Need.NOTHING_IN_FRONT
         pending = self._debounce.pending
         if pending is None:
@@ -357,6 +360,7 @@ class Reminders:
             self._records.extend(self._situations.take_records())
         else:
             self._seen = observation.context
+            self._front_changed(observation.at)
             if self._paused_until is None:
                 self._in_front(observation)
         self._publish()
@@ -390,6 +394,7 @@ class Reminders:
             self._in_front(Observation(now, None))
         until = now + HOUR_MS if pause is Pause.HOUR else tomorrow(self._clock, now)
         self._paused_until = until
+        self._front_changed(now)
         self._reminders_changed = True
         self._publish()
         return until
@@ -670,9 +675,25 @@ class Reminders:
         if observation.context is not None:
             self._front = observation.context
 
+    @property
+    def _nothing_in_front(self) -> bool:
+        """No context in front, or the pause: nothing is judged, and the engine may sleep."""
+        return self._paused_until is not None or self._seen is None
+
+    def _front_changed(self, at: int) -> None:
+        """Record when nothing comes in front for the reminders, and when something comes back:
+        the harness checks that the engine slept (ADR-0031)."""
+        if self._nothing_in_front and self._nothing is None:
+            self._nothing = NothingInFront(at)
+            self._records.append(self._nothing)
+        elif not self._nothing_in_front and self._nothing is not None:
+            self._records.append(replace(self._nothing, until=at))
+            self._nothing = None
+
     def _end_pause(self, at: int) -> None:
         """The pause is over: what the capture sees is in front again."""
         self._paused_until = None
+        self._front_changed(at)
         self._reminders_changed = True
         self._in_front(Observation(at, self._seen))
 

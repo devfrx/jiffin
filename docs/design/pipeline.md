@@ -120,17 +120,21 @@ there.
   [engine](engine.md#supervision)): soon, while the context waiting for its 5 s
   has a judgement not in the cache, a revision without its statement
   included; nothing in front, with no context or during the pause; not now
-  otherwise. `core` does not know that the engine sleeps.
+  otherwise. `core` does not know that the engine sleeps, but it records each
+  stretch with nothing in front, the first from when it starts until the
+  capture's first window, so that the harness can check that the engine slept
+  ([ADR-0031](../adr/0031-acceptance-thresholds-v0-3.md)).
 - **Store.** After every event, `take_records()` returns what changed, in
   saving order: reminders (with their current revision), deletions, answers
   per place and their withdrawals, cache entries, evaluations, when a stable
-  context left, the stretches of the situations that ended, alerts. The worker
-  adds the engine's sleeps, which `core` never sees. `Store.save()` keeps them
-  in one transaction: records with an id replace the previous record with that
-  id, a cache entry replaces the one with the same context, revision and
-  engine build, a sleep's end replaces its start, and when a context left goes
-  on the evaluations of that stretch; every answer per place is a row of its
-  own. At startup, `Reminders` starts from `Store.load()`, with the return
+  context left, when nothing came in front and when something came back, the
+  stretches of the situations that ended, alerts. The worker adds the engine's
+  sleeps, which `core` never sees. `Store.save()` keeps them in one
+  transaction: records with an id replace the previous record with that id, a
+  cache entry replaces the one with the same context, revision and engine
+  build, the end of a sleep or of a stretch with nothing in front replaces its
+  start, and when a context left goes on the evaluations of that stretch;
+  every answer per place is a row of its own. At startup, `Reminders` starts from `Store.load()`, with the return
   pause the worker reads in the settings (2 minutes by default); a new one from
   the settings is in force at once, for the stretches that start after it.
   The schema is in [data-model.md](data-model.md).

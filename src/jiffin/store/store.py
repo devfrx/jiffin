@@ -25,13 +25,16 @@ from jiffin.core.records import (
     Here,
     LastIds,
     Left,
+    NothingInFront,
     Outcome,
     Record,
     Reminder,
     ReminderDeleted,
     Revision,
+    SleepReason,
     Snapshot,
     Snooze,
+    Waker,
 )
 from jiffin.core.situations import SituationStretch
 from jiffin.store import schedules, terms
@@ -40,8 +43,8 @@ from jiffin.store.database import open_database
 log = logging.getLogger(__name__)
 
 RETENTION_MS = 30 * 24 * 60 * 60 * 1000
-"""Evaluations, unanswered alerts, unused cache entries, the stretches of the situations and the
-engine's sleeps are kept for 30 days."""
+"""Evaluations, unanswered alerts, unused cache entries, the stretches of the situations, the
+engine's sleeps and the stretches with nothing in front are kept for 30 days."""
 
 type Json = None | bool | int | float | str | list[Json] | dict[str, Json]
 
@@ -83,6 +86,11 @@ class Log:
     left: tuple[Left, ...]
     """When each evaluated context left the foreground, the earliest first: none for the one
     still in front, and none in version 0.1."""
+    sleeps: tuple[EngineSleep, ...] = ()
+    """The engine's sleeps, the earliest first: none before version 0.3 (ADR-0027)."""
+    nothing_in_front: tuple[NothingInFront, ...] = ()
+    """The stretches with nothing in front for the reminders, the earliest first: none before
+    version 0.3."""
 
 
 class Store:
@@ -122,6 +130,8 @@ class Store:
                         self._save_evaluation(record)
                     case Left():
                         self._save_left(record)
+                    case NothingInFront():
+                        self._save_nothing_in_front(record)
                     case SituationStretch():
                         self._save_stretch(record)
                     case Alert():
@@ -234,7 +244,26 @@ class Store:
                 )
             )
             answers = self._answers(builds, "1")
-            return Log(reminders, revisions, evaluations, alerts, answers, left)
+            sleeps = tuple(
+                EngineSleep(
+                    row[0],
+                    SleepReason(row[1]),
+                    row[2],
+                    None if row[3] is None else Waker(row[3]),
+                    row[4],
+                )
+                for row in self._db.execute(
+                    """SELECT slept_at, reason, woken_at, woken_by, ready_at FROM engine_sleep
+                    ORDER BY slept_at"""
+                )
+            )
+            nothing = tuple(
+                NothingInFront(row[0], row[1], bool(row[2]))
+                for row in self._db.execute(
+                    "SELECT since, until, startup FROM nothing_in_front ORDER BY since"
+                )
+            )
+            return Log(reminders, revisions, evaluations, alerts, answers, left, sleeps, nothing)
 
     def cleanup(self, now: int) -> None:
         """Delete what the retention rules of ADR-0014 no longer keep, at startup and daily."""
@@ -247,16 +276,18 @@ class Store:
             entries = self._delete("DELETE FROM judgement WHERE last_used < ?", cutoff)
             stretches = self._delete("DELETE FROM situation WHERE until < ?", cutoff)
             sleeps = self._delete("DELETE FROM engine_sleep WHERE slept_at < ?", cutoff)
+            nothing = self._delete("DELETE FROM nothing_in_front WHERE since < ?", cutoff)
             contexts = self._delete_orphan_contexts()
         self._checkpoint(optimize=True)
         log.info(
             "cleanup deleted %d evaluations, %d alerts, %d cache entries, %d situation stretches, "
-            "%d engine sleeps and %d contexts",
+            "%d engine sleeps, %d stretches with nothing in front and %d contexts",
             evaluations,
             alerts,
             entries,
             stretches,
             sleeps,
+            nothing,
             contexts,
         )
 
@@ -447,6 +478,15 @@ class Store:
                 None if sleep.woken_by is None else sleep.woken_by.value,
                 sleep.ready_at,
             ),
+        )
+
+    def _save_nothing_in_front(self, stretch: NothingInFront) -> None:
+        """Like a sleep: the end replaces the start's row."""
+        self._db.execute(
+            """INSERT INTO nothing_in_front (since, until, startup) VALUES (?, ?, ?)
+            ON CONFLICT (since) DO UPDATE
+            SET until = excluded.until, startup = excluded.startup""",
+            (stretch.since, stretch.until, int(stretch.startup)),
         )
 
     def _context_id(self, context: Context) -> int:

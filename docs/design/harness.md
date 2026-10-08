@@ -1,7 +1,8 @@
 # Evaluation harness
 
 How the app is measured against the thresholds of
-[ADR-0022](../adr/0022-acceptance-thresholds-v0-2.md), which amends
+[ADR-0031](../adr/0031-acceptance-thresholds-v0-3.md), which keeps those of
+[ADR-0022](../adr/0022-acceptance-thresholds-v0-2.md) and amends
 [ADR-0003](../adr/0003-acceptance-thresholds.md), on the acceptance day and
 whenever the engine changes ([ADR-0017](../adr/0017-evaluation-harness-subpackage.md)).
 The code is `jiffin.harness`, run from a checkout with
@@ -122,7 +123,7 @@ flowchart LR
 ### `report`
 
 The summary, numbers only, compares the day with the thresholds of
-[ADR-0022](../adr/0022-acceptance-thresholds-v0-2.md), and says the return
+[ADR-0031](../adr/0031-acceptance-thresholds-v0-3.md), and says the return
 pause the day was judged with, which the acceptance day keeps at its default;
 a page in the data folder, `report-<day>.html`, holds the texts behind the
 numbers.
@@ -135,10 +136,41 @@ numbers.
 | False alarms | pairs on screen labelled not relevant, each once however often it rang, since Not here silences it ([ADR-0022](../adr/0022-acceptance-thresholds-v0-2.md)) |
 | Alerts of reminders with only a time | counted apart: they are right when the time is read right, which the statements page shows |
 | Evaluations per hour | the evaluations, over the time from the first context evaluated to the last evaluation; of them, those that asked the engine and those that failed |
-| VRAM, RAM, CPU, battery | the day's `monitor` rows, when there are any: VRAM and the RAM of app and engine at their peak, their CPU on average |
+| Late wakes | each wake of the engine but those for a statement: late when the engine was ready after the end of the 5 s of the first evaluation after the wake, by how much |
+| Sleep errors | each time the engine was still awake 5 minutes and 10 s after `core`'s last request or its wake, or 10 s after nothing came in front or after a request while nothing was |
+| The engine's sleeps | the sleeps that began, by why; the wakes, by what woke them, and their time from the wake to the model ready (min · median · max), those for a statement apart; the wakes that ended without the model; the time asleep over the time from the first context evaluated to the last evaluation |
+| VRAM, RAM, CPU, battery | the day's `monitor` rows, when there are any: the dedicated VRAM of app and engine at its peak, their shared GPU memory apart; the engine's dedicated VRAM asleep, after the first 10 s of each sleep, and awake; the RAM of app and engine at its peak, their CPU on average |
 
 The CPU the browsers spend on accessibility cannot be told apart in the
 monitor's rows: the benchmark in [context.md](context.md) measures it.
+
+**The engine's sleeps** ([ADR-0027](../adr/0027-light-sleep-of-the-engine.md))
+come from the copy: the app records each sleep with its wake, and `core` each
+stretch with nothing in front, from the app's start until the capture's first
+window, and from no context or the pause until something is in front again.
+The log of the contexts could not tell those stretches: a window that never
+stays 5 s leaves no trace there, and on the captured day of 2026-09-28, 14 of
+the 21 gaps longer than 10 s between stable contexts held only such windows.
+
+- **A wake is late** as ADR-0031 counts it: the worker waits for the wake, so
+  the first evaluation after it starts when the engine is ready, and it waited
+  as long as the engine was ready after the end of its 5 s. A judgement that
+  woke the engine itself waited the whole wake.
+- **`core`'s requests** are its evaluations that asked the engine, and the
+  statements it wrote, at the time of their revision; a wake counts as one, as
+  the request it came for follows it. A failed evaluation is none: the engine
+  may have been asleep, its wake refused.
+- **An error needs a record after its time**, of `core` or of the engine: a
+  later evaluation, a request, the sleep at last, or the stretch with nothing
+  in front ending. Without one the app may have closed, and nothing is counted.
+  Each deadline counts once. The stretch an app starts with begins a new run:
+  the engine of the run before is gone.
+- **Known limits.** A window that keeps changing before its 5 s, with
+  judgements not in the cache, holds the engine awake (`core` needs the model
+  soon): ADR-0031 counts it as an error, with no request to explain it. A
+  statement written after its revision, when the engine was down, is not seen
+  as a request.
+- **A day before 0.3** has none of these records: its rows say "not recorded".
 
 ### `replay`
 
@@ -246,8 +278,8 @@ harness imports it: neither ships with the app
 ## `monitor`
 
 Every 5 s, until Ctrl+C, a row in `monitor-<day>.csv`: CPU and RAM of the app,
-of its engine and of the browsers, the GPU's memory in use, the battery's
-charge and whether it is plugged in.
+of its engine and of the browsers, the dedicated and shared GPU memory of the
+app and of its engine, the battery's charge and whether it is plugged in.
 
 - **Which processes**: `Jiffin.exe` and `jiffin-engine.exe` when packaged
   ([ADR-0015](../adr/0015-package-pyinstaller-velopack.md)), `python -m jiffin`
@@ -255,5 +287,17 @@ charge and whether it is plugged in.
   and Brave.
 - **CPU** is in percent of the whole machine, from the time each process spent
   since the previous row. **RAM** is the working set, which also counts pages
-  shared with other processes. **VRAM** is the whole GPU's: on Windows
-  nvidia-smi does not tell it per process.
+  shared with other processes.
+- **GPU memory** comes from Windows' performance counters, `GPU Process
+  Memory(*)\Dedicated Usage` and `Shared Usage`, read through PDH by process
+  and summed over the adapters, as
+  [#121](https://github.com/devfrx/jiffin/issues/121) read them: they leave
+  the card in its power state, where nvidia-smi woke it every 5 s
+  ([ADR-0031](../adr/0031-acceptance-thresholds-v0-3.md)). Dedicated is the
+  VRAM of the 4.0 GiB threshold; shared is in the system's memory. In a
+  checkout it is the interpreter's, the child of the venv's launcher, in the
+  same group. Without the counters the columns stay empty.
+- nvidia-smi still tells the GPU's free memory, once, before `sample` or
+  `replay` start an engine. A monitor before 0.3 wrote the whole GPU's memory
+  in `vram_used_mib`: the report reads those rows without the VRAM of each
+  process.

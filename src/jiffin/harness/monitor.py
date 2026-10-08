@@ -1,15 +1,18 @@
-"""`monitor`: what the app costs the machine during the acceptance day (ADR-0003, ADR-0017).
+"""`monitor`: what the app costs the machine during the acceptance day (ADR-0003, ADR-0031).
 
 Every 5 s one row of numbers only: the CPU and RAM of the app, of its engine and of the
-browsers, the GPU's memory in use and the battery. CPU is in percent of the whole machine, as
-Task Manager shows it. RAM is the working set, which also counts the pages a process shares with
-others: for the app's 2 GB threshold it errs on the safe side.
+browsers, the GPU memory of the app and of its engine, and the battery. CPU is in percent of the
+whole machine, as Task Manager shows it. RAM is the working set, which also counts the pages a
+process shares with others: for the app's 2 GB threshold it errs on the safe side. The GPU
+memory comes from Windows' performance counters, which do not wake the card (ADR-0031):
+dedicated, the VRAM of the 4.0 GiB threshold, and shared, in the system's memory.
 """
 
 import csv
 import logging
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -24,10 +27,15 @@ log = logging.getLogger(__name__)
 
 EVERY_SECONDS = 5.0
 GROUPS = ("app", "engine", "browsers")
+JIFFIN = ("app", "engine")
+"""The groups whose GPU memory is read: the threshold is on the two together (ADR-0031)."""
+GPU_COLUMNS = tuple(
+    f"{group}_gpu_{kind}_mib" for group in JIFFIN for kind in ("dedicated", "shared")
+)
 COLUMNS = (
     "at",
     *(f"{group}_{measure}" for group in GROUPS for measure in ("cpu", "ram_mib")),
-    "vram_used_mib",
+    *GPU_COLUMNS,
     "battery_percent",
     "plugged",
 )
@@ -77,6 +85,23 @@ def usage(
     return row
 
 
+def gpu_usage(processes: Sequence[Process], memory: Mapping[int, gpu.Usage]) -> dict[str, int]:
+    """The dedicated and shared GPU memory of the app and of its engine, in MiB. In a checkout
+    each is a launcher and its child, the interpreter that holds the memory."""
+    dedicated = dict.fromkeys(JIFFIN, 0)
+    shared = dict.fromkeys(JIFFIN, 0)
+    for process in processes:
+        used = memory.get(process.pid)
+        if process.group in JIFFIN and used is not None:
+            dedicated[process.group] += used.dedicated
+            shared[process.group] += used.shared
+    row = {}
+    for group in JIFFIN:
+        row[f"{group}_gpu_dedicated_mib"] = dedicated[group] >> 20
+        row[f"{group}_gpu_shared_mib"] = shared[group] >> 20
+    return row
+
+
 def processes() -> list[Process]:
     found = []
     for process in psutil.process_iter(["name", "cmdline"]):
@@ -104,7 +129,7 @@ def run(
     header = not path.exists()
     cores = psutil.cpu_count() or 1
     written = 0
-    with path.open("a", newline="", encoding="utf-8") as file:
+    with path.open("a", newline="", encoding="utf-8") as file, _counters() as counters:
         writer = csv.DictWriter(file, COLUMNS)
         if header:
             writer.writeheader()
@@ -120,7 +145,8 @@ def run(
                     "at": datetime.now().astimezone().isoformat("T", "seconds")
                 }
                 row |= usage(before, now_processes, now - last, cores)
-                row |= _gpu() | _battery()
+                row |= _gpu(counters, now_processes)
+                row |= _battery()
                 writer.writerow(row)
                 file.flush()
                 written += 1
@@ -131,12 +157,29 @@ def run(
     return path
 
 
-def _gpu() -> dict[str, object]:
+@contextmanager
+def _counters() -> Iterator[gpu.Counters | None]:
+    """The GPU's counters for the whole run; None, and the columns empty, without them."""
     try:
-        return {"vram_used_mib": gpu.memory().used_mib}
+        counters = gpu.Counters()
+    except HarnessError as error:
+        log.warning("%s: the GPU's columns stay empty", error)
+        yield None
+        return
+    try:
+        yield counters
+    finally:
+        counters.close()
+
+
+def _gpu(counters: gpu.Counters | None, processes: Sequence[Process]) -> Mapping[str, object]:
+    if counters is None:
+        return dict.fromkeys(GPU_COLUMNS, "")
+    try:
+        return gpu_usage(processes, counters.read())
     except HarnessError as error:
         log.warning("%s", error)
-        return {"vram_used_mib": ""}
+        return dict.fromkeys(GPU_COLUMNS, "")
 
 
 def _battery() -> dict[str, object]:

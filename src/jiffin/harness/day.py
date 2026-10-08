@@ -191,8 +191,7 @@ def summarize(day: Day, labels: Mapping[str, bool], clock: Clock) -> Summary:
         reasons[pair.why] = reasons.get(pair.why, 0) + 1
     alerted = {Pair(alert.context, alert.revision).key for alert in _judged_shown(day)}
     in_time = {pair.key for _, pair in _in_time(day, clock)}
-    first = day.evaluations[0].context_since if day.evaluations else 0
-    last = day.evaluations[-1].at if day.evaluations else 0
+    first, last = span(day)
     pauses = (e.return_pause for e in day.evaluations if e.return_pause is not None)
     return Summary(
         day=day.day,
@@ -218,6 +217,13 @@ def summarize(day: Day, labels: Mapping[str, bool], clock: Clock) -> Summary:
 
 def delay(summary: Summary, p: float) -> float | None:
     return metrics.percentile(summary.delays, p) if summary.delays else None
+
+
+def span(day: Day) -> tuple[int, int]:
+    """The day's active time: from the first context evaluated to the last evaluation."""
+    if not day.evaluations:
+        return 0, 0
+    return day.evaluations[0].context_since, day.evaluations[-1].at
 
 
 def _judged_shown(day: Day) -> list[Alert]:

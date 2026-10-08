@@ -157,6 +157,21 @@ class Left:
     until: int
 
 
+@dataclass(frozen=True, slots=True)
+class NothingInFront:
+    """A stretch with nothing in front for the reminders: no context, or the pause. The engine
+    sleeps at once then (ADR-0027), and the harness checks that it did (ADR-0031): the log of
+    the contexts cannot tell, since a window that never stayed 5 s leaves no trace in it. It is
+    recorded when it starts, then again, with the same `since`, when it ends."""
+
+    since: int
+    until: int | None = None
+    """None while nothing is in front, and when the app closed before something came back."""
+    startup: bool = False
+    """The stretch `core` begins with when the app starts, until the capture's first
+    observation: the harness reads a new run of the app from it."""
+
+
 class Answer(StrEnum):
     """The answer to an alert, stored in English since migration 0003 (ADR-0026)."""
 
@@ -252,6 +267,7 @@ Record = (
     | CacheEntry
     | Evaluation
     | Left
+    | NothingInFront
     | SituationStretch
     | Alert
     | EngineSleep
