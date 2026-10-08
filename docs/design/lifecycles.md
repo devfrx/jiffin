@@ -92,7 +92,8 @@ stateDiagram-v2
   ([ADR-0024](../adr/0024-hold-and-hide-alerts.md)), "Sospendi per un'ora" or
   "Sospendi fino a domani", is away for every reminder: the context in front
   leaves when it starts, and nothing is judged and nothing rings until it ends
-  or Resume. Then what is in front comes back as after any absence: occasions
+  or Resume, but a Remind here, which was asked for. Then what is in front
+  comes back as after any absence: occasions
   start again, a late instance or an end that came meanwhile rings, due from
   the return, and a snooze that ended meanwhile rings at the first chance. The
   situations are read and recorded all along. Its end is kept with the
