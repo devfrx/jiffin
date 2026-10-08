@@ -162,7 +162,7 @@ sequenceDiagram
     participant C as core, on simulated time
     participant O as the owner, as recorded
 
-    L->>C: the state when the day began: reminders, silences, last alerts
+    L->>C: the state when the day began: reminders, answers per place, last alerts
     L->>T: each evaluated context, when it came to the foreground
     L->>T: reminders created, edited and completed, when they were
     loop in order of time
@@ -194,6 +194,11 @@ sequenceDiagram
   unit; in 0.1 it is the one of 15 minutes, an hour or "domani" whose end
   falls between the reminder's last judgement as snoozed and its first as
   free.
+- **The answers per place**: in each place, what counted when the day began,
+  the last answer said there before it unless it was withdrawn (in a log of
+  0.2, each Not here from the time of its alert). During the day, the Not here
+  of its alerts come again with the owner's answers; its other answers are not
+  replayed yet ([#155](https://github.com/devfrx/jiffin/issues/155)).
 - **The reminders**: those created before the day start as they were then;
   the others are created, edited and completed when the log says, an edit when
   it was made, also one of a reminder with only a time (in 0.1, when the

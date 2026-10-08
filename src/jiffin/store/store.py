@@ -20,6 +20,7 @@ from jiffin.core.records import (
     CacheEntry,
     Candidate,
     ContextAnswer,
+    EngineSleep,
     Evaluation,
     Here,
     LastIds,
@@ -29,18 +30,18 @@ from jiffin.core.records import (
     Reminder,
     ReminderDeleted,
     Revision,
-    Silence,
     Snapshot,
     Snooze,
 )
 from jiffin.core.situations import SituationStretch
-from jiffin.store import schedules
+from jiffin.store import schedules, terms
 from jiffin.store.database import open_database
 
 log = logging.getLogger(__name__)
 
 RETENTION_MS = 30 * 24 * 60 * 60 * 1000
-"""Evaluations, unanswered alerts and unused cache entries are kept for 30 days."""
+"""Evaluations, unanswered alerts, unused cache entries, the stretches of the situations and the
+engine's sleeps are kept for 30 days."""
 
 type Json = None | bool | int | float | str | list[Json] | dict[str, Json]
 
@@ -51,10 +52,17 @@ _CURRENT = (
 # The columns of a revision, in the order `Store._revision` reads them.
 _REVISION = """revision.id, revision.reminder, revision.number, revision.condition, revision.action,
     revision.remainder, revision.statement, revision.statement_build, revision.schedule,
-    revision.written_at, revision.perennial, revision.created_at"""
+    revision.written_at, revision.perennial, revision.created_at, revision.situations"""
+# The columns of an alert and its context, in the order `Store._alert` reads them.
+_ALERT = """alert.id, alert.revision, alert.evaluation, context.app, context.title,
+    context.address, alert.d, alert.created_at, alert.due_at, alert.shown_at, alert.vanished_at,
+    alert.seen_at, alert.answer, alert.answered_at, alert.snooze, alert.requested"""
 # The latest alert of the reminder of `revision`, among those `which` keeps.
 _LAST_ALERT = """(SELECT max(a.id) FROM alert AS a JOIN revision AS r ON r.id = a.revision
     WHERE r.reminder = revision.reminder AND {which})"""
+# The last answer of a reminder in a context: the one that counts there (ADR-0029).
+_LAST_ANSWER = """context_answer.id = (SELECT max(a.id) FROM context_answer AS a
+    WHERE a.reminder = context_answer.reminder AND a.context = context_answer.context)"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,8 +77,9 @@ class Log:
     """The oldest first, with their candidates."""
     alerts: tuple[Alert, ...]
     """The oldest first. An alert whose evaluation has expired is left out; one of a reminder
-    with only a time, which has none, is not."""
-    silences: tuple[Silence, ...]
+    with only a time, or asked for with Remind here, which have none, is not."""
+    answers: tuple[ContextAnswer, ...]
+    """Every answer per place and every withdrawal, the oldest first (ADR-0029)."""
     left: tuple[Left, ...]
     """When each evaluated context left the foreground, the earliest first: none for the one
     still in front, and none in version 0.1."""
@@ -95,7 +104,7 @@ class Store:
             self._db.close()
 
     def save(self, records: Iterable[Record]) -> None:
-        """Save what `core` changed, all or nothing."""
+        """Save what `core` changed and the engine's sleeps, all or nothing."""
         deleted = False
         with self._transaction():
             for record in records:
@@ -105,22 +114,8 @@ class Store:
                     case ReminderDeleted():
                         self._delete_reminder(record.reminder_id)
                         deleted = True
-                    # Until migration 0003 gives the answers per place their table (#150),
-                    # `silence` holds the places whose last answer is Not here: Remind here and
-                    # the withdrawals only take a silence away.
-                    case ContextAnswer(here=Here.NO):
-                        self._db.execute(
-                            "INSERT OR IGNORE INTO silence (reminder, context) VALUES (?, ?)",
-                            (record.reminder_id, self._context_id(record.context)),
-                        )
                     case ContextAnswer():
-                        context = record.context
-                        self._db.execute(
-                            """DELETE FROM silence WHERE reminder = ? AND context IN (
-                                SELECT id FROM context WHERE app = ? AND title = ?
-                                AND ifnull(address, '') = ifnull(?, ''))""",
-                            (record.reminder_id, context.app, context.title, context.address),
-                        )
+                        self._save_context_answer(record)
                     case CacheEntry():
                         self._save_cache_entry(record)
                     case Evaluation():
@@ -128,9 +123,11 @@ class Store:
                     case Left():
                         self._save_left(record)
                     case SituationStretch():
-                        pass  # until migration 0003 gives them their table, `situation` (#150)
+                        self._save_stretch(record)
                     case Alert():
                         self._save_alert(record)
+                    case EngineSleep():
+                        self._save_sleep(record)
                     case _:
                         assert_never(record)
         if deleted:
@@ -149,7 +146,10 @@ class Store:
                     WHERE {_CURRENT} ORDER BY reminder.id"""
                 )
             )
-            silences = self._silences()
+            # The answer that counts in each place, unless it was withdrawn (ADR-0029).
+            answers = self._answers(
+                builds, f"{_LAST_ANSWER} AND here IS NOT '{Here.WITHDRAWN.value}'"
+            )
             cache = tuple(
                 CacheEntry(Context(*row[:3]), row[3], builds[row[4]], row[5], row[6])
                 for row in self._db.execute(
@@ -170,7 +170,7 @@ class Store:
                 )
             )
             return Snapshot(
-                reminders, silences, cache, last_alerts, self._unseen(builds), self._last_ids()
+                reminders, answers, cache, last_alerts, self._unseen(builds), self._last_ids()
             )
 
     def log(self) -> Log:
@@ -220,10 +220,9 @@ class Store:
             alerts = tuple(
                 self._alert(row, revisions[row[1]])
                 for row in self._db.execute(
-                    """SELECT alert.id, revision, evaluation, app, title, address, d, created_at,
-                        due_at, shown_at, vanished_at, seen_at, answer, answered_at, snooze
-                    FROM alert JOIN context ON context.id = alert.context
-                    WHERE evaluation IS NOT NULL OR d IS NULL ORDER BY created_at, alert.id"""
+                    f"""SELECT {_ALERT} FROM alert JOIN context ON context.id = alert.context
+                    WHERE evaluation IS NOT NULL OR d IS NULL OR requested
+                    ORDER BY created_at, alert.id"""
                 )
             )
             left = tuple(
@@ -234,7 +233,8 @@ class Store:
                     WHERE context_until IS NOT NULL ORDER BY context_since, context_until"""
                 )
             )
-            return Log(reminders, revisions, evaluations, alerts, self._silences(), left)
+            answers = self._answers(builds, "1")
+            return Log(reminders, revisions, evaluations, alerts, answers, left)
 
     def cleanup(self, now: int) -> None:
         """Delete what the retention rules of ADR-0014 no longer keep, at startup and daily."""
@@ -245,13 +245,18 @@ class Store:
                 "DELETE FROM alert WHERE answer IS NULL AND created_at < ?", cutoff
             )
             entries = self._delete("DELETE FROM judgement WHERE last_used < ?", cutoff)
+            stretches = self._delete("DELETE FROM situation WHERE until < ?", cutoff)
+            sleeps = self._delete("DELETE FROM engine_sleep WHERE slept_at < ?", cutoff)
             contexts = self._delete_orphan_contexts()
         self._checkpoint(optimize=True)
         log.info(
-            "cleanup deleted %d evaluations, %d alerts, %d cache entries and %d contexts",
+            "cleanup deleted %d evaluations, %d alerts, %d cache entries, %d situation stretches, "
+            "%d engine sleeps and %d contexts",
             evaluations,
             alerts,
             entries,
+            stretches,
+            sleeps,
             contexts,
         )
 
@@ -282,8 +287,9 @@ class Store:
         revision = reminder.revision
         self._db.execute(
             """INSERT INTO revision (id, reminder, number, condition, action, remainder,
-                statement, statement_build, schedule, written_at, perennial, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                statement, statement_build, schedule, written_at, perennial, created_at,
+                situations)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (id) DO UPDATE
             SET statement = excluded.statement, statement_build = excluded.statement_build""",
             (
@@ -299,6 +305,7 @@ class Store:
                 revision.written_at,
                 int(revision.perennial),
                 revision.created_at,
+                terms.dumps(revision.situations),
             ),
         )
 
@@ -320,6 +327,21 @@ class Store:
         )
         self._delete_orphan_contexts()
         log.info("reminder %d deleted", reminder_id)
+
+    def _save_context_answer(self, answer: ContextAnswer) -> None:
+        """Every answer and every withdrawal is a row: the last of a place counts (ADR-0029)."""
+        self._db.execute(
+            """INSERT INTO context_answer (reminder, context, here, d, engine_build, at)
+            VALUES (?, ?, ?, ?, ?, ?)""",
+            (
+                answer.reminder_id,
+                self._context_id(answer.context),
+                answer.here.value,
+                answer.d,
+                self._build_id(answer.build),
+                answer.at,
+            ),
+        )
 
     def _save_cache_entry(self, entry: CacheEntry) -> None:
         self._db.execute(
@@ -352,15 +374,12 @@ class Store:
                 evaluation.return_pause,
             ),
         )
-        # Until migration 0003 adds `outside_situation` to the outcomes of `candidate` (#150),
-        # a reminder outside its situation leaves no row: its d is in the cache.
         self._db.executemany(
             """INSERT INTO candidate (evaluation, revision, d, from_cache, outcome)
             VALUES (?, ?, ?, ?, ?)""",
             [
                 (evaluation.id, c.revision_id, c.d, int(c.from_cache), c.outcome.value)
                 for c in evaluation.candidates
-                if c.outcome is not Outcome.OUTSIDE_SITUATION
             ],
         )
 
@@ -375,13 +394,21 @@ class Store:
             (left.until, left.since, left.context.app, left.context.title, left.context.address),
         )
 
+    def _save_stretch(self, stretch: SituationStretch) -> None:
+        self._db.execute(
+            "INSERT INTO situation (kind, value, since, until) VALUES (?, ?, ?, ?)",
+            (stretch.situation.value, stretch.value, stretch.since, stretch.until),
+        )
+
     def _save_alert(self, alert: Alert) -> None:
         # An alert the daily cleanup deleted while `core` kept it unseen comes back without its
         # evaluation, which expired with it: as the cleanup leaves an answered alert.
         self._db.execute(
             """INSERT INTO alert (id, revision, evaluation, context, d, created_at, due_at,
-                shown_at, vanished_at, seen_at, answer, snooze, answered_at)
-            VALUES (?, ?, (SELECT id FROM evaluation WHERE id = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                shown_at, vanished_at, seen_at, answer, snooze, answered_at, requested)
+            VALUES (
+                ?, ?, (SELECT id FROM evaluation WHERE id = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
             ON CONFLICT (id) DO UPDATE
             SET shown_at = excluded.shown_at, vanished_at = excluded.vanished_at,
                 seen_at = excluded.seen_at, answer = excluded.answer, snooze = excluded.snooze,
@@ -400,6 +427,25 @@ class Store:
                 None if alert.answer is None else alert.answer.value,
                 None if alert.snooze is None else alert.snooze.value,
                 alert.answered_at,
+                int(alert.requested),
+            ),
+        )
+
+    def _save_sleep(self, sleep: EngineSleep) -> None:
+        """A sleep comes when it starts, then again when it ends: the end replaces its row, so an
+        app that dies while the engine sleeps still leaves the start (ADR-0027)."""
+        self._db.execute(
+            """INSERT INTO engine_sleep (slept_at, reason, woken_at, woken_by, ready_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT (slept_at) DO UPDATE
+            SET reason = excluded.reason, woken_at = excluded.woken_at,
+                woken_by = excluded.woken_by, ready_at = excluded.ready_at""",
+            (
+                sleep.slept_at,
+                sleep.reason.value,
+                sleep.woken_at,
+                None if sleep.woken_by is None else sleep.woken_by.value,
+                sleep.ready_at,
             ),
         )
 
@@ -452,13 +498,21 @@ class Store:
             )
         }
 
-    def _silences(self) -> tuple[Silence, ...]:
+    def _answers(self, builds: Mapping[int, EngineBuild], which: str) -> tuple[ContextAnswer, ...]:
+        """The answers per place that `which` keeps, the oldest first."""
         return tuple(
-            Silence(row[0], Context(*row[1:]))
+            ContextAnswer(
+                row[0],
+                Context(*row[1:4]),
+                Here(row[4]),
+                row[5],
+                None if row[6] is None else builds[row[6]],
+                row[7],
+            )
             for row in self._db.execute(
-                """SELECT reminder, app, title, address
-                FROM silence JOIN context ON context.id = silence.context
-                ORDER BY reminder, context.id"""
+                f"""SELECT reminder, app, title, address, here, d, engine_build, at
+                FROM context_answer JOIN context ON context.id = context_answer.context
+                WHERE {which} ORDER BY context_answer.id"""
             )
         )
 
@@ -478,12 +532,12 @@ class Store:
             written_at=row[9],
             perennial=bool(row[10]),
             created_at=row[11],
+            situations=terms.loads(row[12]),
         )
 
     @staticmethod
     def _alert(row: Sequence[Any], revision: Revision) -> Alert:
-        """An alert from its columns: id, revision, evaluation, app, title, address, d,
-        created_at, due_at, shown_at, vanished_at, seen_at, answer, answered_at, snooze."""
+        """An alert from the columns of `_ALERT`."""
         return Alert(
             row[0],
             revision.reminder_id,
@@ -499,6 +553,7 @@ class Store:
             answer=None if row[12] is None else Answer(row[12]),
             answered_at=row[13],
             snooze=None if row[14] is None else Snooze(row[14]),
+            requested=bool(row[15]),
         )
 
     def _unseen(self, builds: Mapping[int, EngineBuild]) -> tuple[Alert, ...]:
@@ -506,9 +561,7 @@ class Store:
         vanish first: the tray list keeps one per reminder (ADR-0021)."""
         last = _LAST_ALERT.format(which="1")
         rows = self._db.execute(
-            f"""SELECT alert.id, revision.id, alert.evaluation, app, title, address, alert.d,
-                alert.created_at, due_at, shown_at, vanished_at, seen_at, answer, answered_at,
-                snooze, {_REVISION}
+            f"""SELECT {_ALERT}, {_REVISION}
             FROM alert
             JOIN revision ON revision.id = alert.revision
             JOIN reminder ON reminder.id = revision.reminder
@@ -517,7 +570,7 @@ class Store:
                 AND alert.id = {last}
             ORDER BY ifnull(vanished_at, shown_at) DESC, alert.id DESC"""
         )
-        return tuple(self._alert(row, self._revision(row[15:], builds)) for row in rows)
+        return tuple(self._alert(row, self._revision(row[16:], builds)) for row in rows)
 
     def _last_ids(self) -> LastIds:
         row = self._db.execute(
@@ -538,7 +591,9 @@ class Store:
             """DELETE FROM context
             WHERE NOT EXISTS (SELECT 1 FROM evaluation WHERE evaluation.context = context.id)
             AND NOT EXISTS (SELECT 1 FROM alert WHERE alert.context = context.id)
-            AND NOT EXISTS (SELECT 1 FROM silence WHERE silence.context = context.id)
+            AND NOT EXISTS (
+                SELECT 1 FROM context_answer WHERE context_answer.context = context.id
+            )
             AND NOT EXISTS (SELECT 1 FROM judgement WHERE judgement.context = context.id)"""
         ).rowcount
 

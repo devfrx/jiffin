@@ -276,23 +276,12 @@ class Worker:
         self._save()
 
     def _save(self) -> None:
-        records = self._core.take_records()
+        records = [*self._core.take_records(), *self._supervisor.take_records()]
         if records:
             try:
                 self._store.save(records)
             except Exception:
                 log.exception("%d records could not be saved", len(records))
-        # The engine's sleeps go to the log until migration 0003 gives them their table,
-        # `engine_sleep` (#150).
-        for sleep in self._supervisor.take_records():
-            log.info(
-                "engine asleep from %d (%s): woken at %s by %s, ready at %s",
-                sleep.slept_at,
-                sleep.reason,
-                sleep.woken_at,
-                sleep.woken_by,
-                sleep.ready_at,
-            )
 
     def _due(self) -> None:
         self._supervisor.poll()

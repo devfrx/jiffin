@@ -356,7 +356,7 @@ def test_python_m_jiffin_runs_the_whole_loop(app: App, target: Target) -> None:
     done = button(jiffin, TEXTS.alert.done)
     assert done is not None
     click(*done)
-    wait_for("answer", lambda: app.count("alert", "answer = 'fatto'") == 1)
+    wait_for("answer", lambda: app.count("alert", "answer = 'done'") == 1)
 
     assert app.count("reminder", "completed_at IS NOT NULL") == 1
     assert app.count("revision", "statement IS NOT NULL AND statement_build IS NOT NULL") == 1

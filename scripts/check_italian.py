@@ -10,8 +10,7 @@ it fails:
 - in the string literals and the pages of `src`, but for the examples of what the user writes
   in `ui/__main__.py` and in the rewrite prompt (`EXAMPLES`), and a few names (`NAMES`);
 - in `docs/design/` and the README;
-- in the migrations after 0002, which may name the answers 0.2 stores to translate them, as
-  `core/records.py` may until then.
+- in the migrations after 0002, which may name the answers 0.2 stored to translate them.
 
 The accepted ADRs, the CHANGELOG, the mockups, the tests' literals and the fixtures are not read.
 Given file names, it checks those; without, every file git tracks, as the hook runs it. It uses
@@ -39,14 +38,12 @@ EXAMPLES = (
 (ADR-0008)."""
 MIGRATIONS = PurePosixPath("src/jiffin/store/migrations")
 ANSWERS = frozenset({"fatto", "utile", "rimanda", "non_qui", "chiuso"})
-"""The answers version 0.2 stores: `core/records.py` names them until migration 0003 translates
-them, and the migrations may name them to translate them."""
+"""The answers version 0.2 stored, which migration 0003 translates: the migrations may name them
+to translate them."""
 NAMES = {
-    PurePosixPath("src/jiffin/core/records.py"): ANSWERS,
     PurePosixPath("src/jiffin/harness/folders.py"): frozenset({"etichette.json"}),
 }
-"""Literals a file may hold whole, as names: the stored answers, and a file of the prototype's
-that keeps its name."""
+"""Literals a file may hold whole, as names: a file of the prototype's that keeps its name."""
 NOT_READ = (
     PurePosixPath("docs/adr"),
     PurePosixPath("docs/design/mockups"),

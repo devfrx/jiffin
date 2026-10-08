@@ -124,19 +124,16 @@ there.
 - **Store.** After every event, `take_records()` returns what changed, in
   saving order: reminders (with their current revision), deletions, answers
   per place and their withdrawals, cache entries, evaluations, when a stable
-  context left, the stretches of the situations that ended, alerts. Until
-  migration 0003 the store keeps only the places whose answer is Not here, in
-  `silence`: Remind here, the withdrawals and `requested` do not survive a
-  restart; nor do a revision's situations, the stretches, and the candidates
-  outside their situation, which the outcomes of 0002 cannot hold.
-  `Store.save()` keeps them in one transaction: records with an id replace the
-  previous record with that id, a cache entry replaces the one with the same
-  context, revision and engine build, and when a context left goes on the
-  evaluations of that stretch. At startup, `Reminders` starts from
-  `Store.load()`, with the return pause the worker reads in the settings (2
-  minutes by default); a new one from the settings is in force at once, for
-  the stretches that start after it. The schema is in
-  [data-model.md](data-model.md).
+  context left, the stretches of the situations that ended, alerts. The worker
+  adds the engine's sleeps, which `core` never sees. `Store.save()` keeps them
+  in one transaction: records with an id replace the previous record with that
+  id, a cache entry replaces the one with the same context, revision and
+  engine build, a sleep's end replaces its start, and when a context left goes
+  on the evaluations of that stretch; every answer per place is a row of its
+  own. At startup, `Reminders` starts from `Store.load()`, with the return
+  pause the worker reads in the settings (2 minutes by default); a new one from
+  the settings is in force at once, for the stretches that start after it.
+  The schema is in [data-model.md](data-model.md).
 - **Interface.** `on_alerts` receives an `AlertsView` after every change, on
   the worker thread: the alerts on screen (at most 3), how many wait, and those
   that vanished unanswered, one per reminder. `on_reminders` receives a

@@ -85,9 +85,9 @@ stateDiagram-v2
 - **After a restart** each reminder goes on from its last alert that counts and
   from its snooze, so the instances of a time stay exact; occasions start
   afresh, and so do the stretches of the situations, from their state read at
-  start. The places answered Not here come back; until migration 0003 the
-  store keeps neither Remind here, nor the withdrawals, nor a revision's
-  situations.
+  start. What each reminder learned comes back: the answer that counts in each
+  place, Not here or Remind here, with its d and its build, so a lowered
+  threshold stays lowered.
 - **A pause from the tray**
   ([ADR-0024](../adr/0024-hold-and-hide-alerts.md)), "Sospendi per un'ora" or
   "Sospendi fino a domani", is away for every reminder: the context in front
@@ -102,18 +102,19 @@ stateDiagram-v2
 
 | Answer | Recorded | Then |
 |---|---|---|
-| Done, one-off | `fatto` | completed |
-| Done, perennial | `fatto` | waits for its next unit |
-| Next time | `rimanda`, `next_time` | waits for its next unit; a snooze with a time is lifted |
-| Quarter hour, Hour, Tomorrow | `rimanda`, with its kind | snoozed, then returning |
-| Not here | `non_qui`, and the place: `not_here` | silent in that context until the text changes; the alert does not count |
-| Remind here | the place: `remind_here` | true in that context until the text changes; rings at once if it is still in front |
-| the X | `chiuso` | waits for its next unit; not among the unseen |
+| Done, one-off | `done` | completed |
+| Done, perennial | `done` | waits for its next unit |
+| Next time | `snooze`, `next_time` | waits for its next unit; a snooze with a time is lifted |
+| Quarter hour, Hour, Tomorrow | `snooze`, with its kind | snoozed, then returning |
+| Not here | `not_here`, and the place: `not_here` | silent in that context until the text changes; the alert does not count |
+| Remind here | the place: `remind_here`, and its alert `requested` | true in that context until the text changes; rings at once if it is still in front |
+| the X | `closed` | waits for its next unit; not among the unseen |
 | 10 s without an answer | nothing | waits for its next unit; among the unseen |
 
 Tomorrow ends at 08:00 of the next day, local time, or of the same day when
-snoozed before 04:00; so does the pause until tomorrow. `utile`, the answer
-of version 0.1 that Next time replaced, stays in older rows.
+snoozed before 04:00; so does the pause until tomorrow. `useful`, the answer
+of version 0.1 that Next time replaced, stays in older rows. Versions 0.1 and
+0.2 stored the answers in Italian; migration 0003 translated them.
 
 ## Alert
 

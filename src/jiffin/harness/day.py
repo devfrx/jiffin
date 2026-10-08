@@ -56,7 +56,8 @@ class Day:
     evaluations: tuple[Evaluation, ...]
     """The oldest first."""
     alerts: tuple[Alert, ...]
-    """Those its evaluations raised, and those of reminders with only a time made that day."""
+    """Those its evaluations raised, and those of reminders with only a time made that day; not
+    those asked for with Remind here."""
     revisions: Mapping[int, Revision]
 
 
@@ -107,7 +108,9 @@ def key(context: Context, remainder: str) -> str:
 
 def select(log: Log, day: date | None, clock: Clock) -> Day:
     """The evaluations made on a local day, the last one with any by default, and their alerts;
-    with the alerts of reminders with only a time made that day, which have no evaluation."""
+    with the alerts of reminders with only a time made that day, which have no evaluation. The
+    alerts asked for with Remind here, which have none either, are left out: they are never the
+    judge's, and the report does not count them yet (#155)."""
     if not log.evaluations:
         raise HarnessError("the log holds no evaluation")
     if day is None:
@@ -118,7 +121,11 @@ def select(log: Log, day: date | None, clock: Clock) -> Day:
         alert
         for alert in log.alerts
         if alert.evaluation_id in ids
-        or (alert.evaluation_id is None and clock.local(alert.created_at).date() == day)
+        or (
+            alert.evaluation_id is None
+            and not alert.requested
+            and clock.local(alert.created_at).date() == day
+        )
     )
     return Day(day, evaluations, alerts, log.revisions)
 

@@ -1,4 +1,5 @@
 from collections.abc import Mapping
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -7,11 +8,12 @@ import pytest
 from jiffin.core.clock import SimulatedClock
 from jiffin.core.context import Context, Observation
 from jiffin.core.model import EngineBuild
-from jiffin.core.records import Alert, Candidate, Evaluation, Outcome, Revision
+from jiffin.core.records import Alert, Answer, Candidate, Evaluation, Outcome, Revision
 from jiffin.core.reminders import Reminders
 from jiffin.harness import __main__ as harness
 from jiffin.harness import day as days
 from jiffin.harness import labels, report, snapshot, statements
+from jiffin.lang.harness import HARNESS
 from jiffin.store.store import Log, Store
 
 T0 = 1_791_194_400_000  # 2026-10-05 10:00 UTC
@@ -230,6 +232,22 @@ def test_the_report_tells_the_pairs_kept_quiet_as_already_reminded_apart(tmp_pat
     missed, kept = page.read_text(encoding="utf-8").split("<h2>Taciuti")
     assert RENT in missed and ICONS not in missed
     assert ICONS in kept and "stessa occasione" in kept
+
+
+def test_the_report_names_each_answer_in_the_owners_words(tmp_path: Path) -> None:
+    clock = SimulatedClock(T0, UTC)
+    icons = Revision(10, 1, 1, ICONS, "esportare le icone", ICONS, "Figma.", BUILD)
+    evaluation = Evaluation(
+        1, T0 + 20_000, FIGMA, T0, 0.97, BUILD, (Candidate(10, 2.5, False, Outcome.ALERT),)
+    )
+    shown = Alert(1, 1, icons, 1, FIGMA, 2.5, evaluation.at, T0, shown_at=evaluation.at)
+    for answer in Answer:
+        alerts = (replace(shown, answer=answer),)
+        day = days.select(Log((), {10: icons}, (evaluation,), alerts, (), ()), None, clock)
+        page = report.page(day, {}, clock, "Copia", tmp_path / "report.html")
+        assert f'<td class="muted">{HARNESS.report.answers[answer]}</td>' in page.read_text(
+            encoding="utf-8"
+        )
 
 
 def test_the_report_reads_the_monitors_rows(

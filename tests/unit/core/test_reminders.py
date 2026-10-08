@@ -23,7 +23,6 @@ from jiffin.core.records import (
     Reminder,
     ReminderDeleted,
     Revision,
-    Silence,
     Snapshot,
     Snooze,
 )
@@ -1532,7 +1531,7 @@ def test_reminders_go_on_from_what_was_saved() -> None:
     unseen = Alert(5, 3, revision, 4, FIGMA, 4.0, before, before, before, before + 10_000)
     saved = Snapshot(
         reminders=(Reminder(3, START - DAY_MS, revision),),
-        silences=(Silence(3, BANK),),
+        answers=(ContextAnswer(3, BANK, Here.NO, None, None, before),),
         cache=(CacheEntry(FIGMA, 7, BUILD, 4.0, before),),
         last_alerts=((3, 5, before),),
         unseen=(unseen,),
@@ -1554,6 +1553,29 @@ def test_reminders_go_on_from_what_was_saved() -> None:
     assert scene.outcomes() == [Outcome.SILENCED]
     created = scene.create("se sono sul sito della banca")
     assert (created.id, created.revision.id) == (4, 8)
+
+
+def test_what_a_reminder_learned_comes_back_after_a_restart() -> None:
+    before, reminder = judged_in_drafts(0.5, 0.5)
+    for draft in DRAFTS[:2]:
+        before.reminders.remind_here(reminder.id, draft)
+    asked = tuple(before.saved(ContextAnswer))
+    assert [(answer.here, answer.d, answer.build) for answer in asked] == [
+        (Here.YES, 0.5, BUILD),
+        (Here.YES, 0.5, BUILD),
+    ]
+    saved = Snapshot(
+        reminders=(reminder,),
+        answers=asked,
+        last_ids=LastIds(reminder=1, revision=1, evaluation=3, alert=2),
+    )
+    scene = Scene(saved=saved)
+    scene.model.says(MID, "quando apro Figma", 0.8)
+    scene.wait(0)
+    [active] = scene.listed
+    assert active.places == (Place(DRAFTS[1], Here.YES), Place(DRAFTS[0], Here.YES))
+    assert active.attentive
+    assert true_in(scene, MID)  # its threshold went down a step
 
 
 def a_call_at_three() -> tuple[Reminder, Alert]:

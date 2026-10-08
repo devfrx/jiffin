@@ -15,9 +15,11 @@ TABLES = {
     "evaluation",
     "candidate",
     "alert",
-    "silence",
+    "context_answer",
     "judgement",
     "setting",
+    "situation",
+    "engine_sleep",
 }
 
 
