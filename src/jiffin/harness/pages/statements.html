@@ -14,15 +14,16 @@
   <h1>{{ t.statements.heading }}</h1>
   <p>{{ t.statements.intro.format(copy=copy) }}</p>
   <table>
-    <thead><tr><th>#</th><th>{{ t.statements.state }}</th><th>{{ t.statements.condition }}</th><th>{{ t.statements.time }}</th><th>{{ t.statements.remainder }}</th><th>{{ t.statements.action }}</th><th>{{ t.statements.statement }}</th><th>{{ t.statements.build }}</th></tr></thead>
+    <thead><tr><th>#</th><th>{{ t.statements.state }}</th><th>{{ t.statements.condition }}</th><th>{{ t.statements.time }}</th><th>{{ t.statements.situations }}</th><th>{{ t.statements.remainder }}</th><th>{{ t.statements.action }}</th><th>{{ t.statements.statement }}</th><th>{{ t.statements.build }}</th></tr></thead>
     <tbody>
     {% for row in rows %}
       <tr>
         <td class="number">{{ row.number }}</td>
         <td class="muted">{{ row.state }}</td>
-        <td>{{ row.condition }}</td>
-        <td>{% if row.time %}{{ row.time }}{% elif row.unclear %}<span class="no">{{ t.statements.unclear.format(words=row.unclear) }}</span>{% else %}<span class="muted">{{ t.statements.no_time }}</span>{% endif %}</td>
-        <td>{% if row.remainder %}{{ row.remainder }}{% else %}<span class="muted">{{ t.statements.time_only }}</span>{% endif %}</td>
+        <td>{{ row.condition }}{% if row.unclear %}<div class="no">{{ t.statements.unclear.format(words=row.unclear) }}</div>{% endif %}</td>
+        <td>{% if row.time %}{{ row.time }}{% else %}<span class="muted">{{ t.statements.no_time }}</span>{% endif %}</td>
+        <td>{% if row.situations %}{{ row.situations }}{% else %}<span class="muted">{{ t.statements.no_situation }}</span>{% endif %}</td>
+        <td>{% if row.remainder %}{{ row.remainder }}{% else %}<span class="muted">{{ t.statements.nothing_left }}</span>{% endif %}</td>
         <td>{{ row.action }}</td>
         <td>{% if row.statement %}{{ row.statement }}{% elif not row.remainder %}<span class="muted">{{ t.statements.no_statement }}</span>{% else %}<span class="no">{{ t.statements.not_written }}</span>{% endif %}</td>
         <td class="muted">{{ row.build }}</td>

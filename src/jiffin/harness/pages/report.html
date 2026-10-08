@@ -24,7 +24,7 @@
         <td>{{ alert.app }} · {{ alert.title }}{% if alert.address %}<div class="address">{{ alert.address }}</div>{% endif %}</td>
         <td>{{ alert.condition }} <span class="muted">→ {{ alert.action }}</span></td>
         <td class="number">{{ alert.d }}</td>
-        <td>{% if alert.time_only %}<span class="muted">{{ t.report.time_only }}</span>{% elif alert.label is none %}<span class="muted">—</span>{% elif alert.label %}<span class="yes">{{ t.report.right }}</span>{% else %}<span class="no">{{ t.report.false_alarm }}</span>{% endif %}</td>
+        <td>{% if alert.time_only %}<span class="muted">{{ t.report.time_only }}</span>{% elif alert.label is none %}<span class="muted">—</span>{% elif alert.label %}<span class="yes">{{ t.report.right }}</span>{% else %}<span class="no">{{ t.report.false_alarm }}</span>{% endif %}{% if alert.learned %}<div class="muted">{{ alert.learned }}</div>{% endif %}</td>
         <td class="muted">{{ alert.answer }}</td>
         <td class="number">{{ alert.delay }}</td>
       </tr>
@@ -55,6 +55,53 @@
   <h2>{{ t.report.reminded.format(count=reminded | length) }}</h2>
   <p>{{ t.report.reminded_intro }}</p>
   {{ unshown(reminded) }}
+
+  <h2>{{ t.report.requested.format(count=requested | length) }}</h2>
+  <p>{{ t.report.requested_intro }}</p>
+  <table>
+    <thead><tr><th>{{ t.report.time }}</th><th>{{ t.report.context }}</th><th>{{ t.report.reminder }}</th><th>{{ t.report.answer }}</th></tr></thead>
+    <tbody>
+    {% for alert in requested %}
+      <tr>
+        <td class="number">{{ alert.time }}</td>
+        <td>{{ alert.app }} · {{ alert.title }}{% if alert.address %}<div class="address">{{ alert.address }}</div>{% endif %}</td>
+        <td>{{ alert.condition }} <span class="muted">→ {{ alert.action }}</span></td>
+        <td class="muted">{{ alert.answer }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>{{ t.report.situations.format(count=situations | length) }}</h2>
+  <p>{{ t.report.situations_intro }}</p>
+  <table>
+    <thead><tr><th>{{ t.report.kind }}</th><th>{{ t.report.start }}</th><th>{{ t.report.end }}</th><th>{{ t.report.app }}</th><th>{{ t.report.state }}</th></tr></thead>
+    <tbody>
+    {% for stretch in situations %}
+      <tr>
+        <td>{{ stretch.kind }}</td>
+        <td class="number">{{ stretch.since }}</td>
+        <td class="number">{{ stretch.until }}</td>
+        <td>{{ stretch.app }}</td>
+        <td class="muted">{{ stretch.state }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>{{ t.report.units.format(count=units | length) }}</h2>
+  <p>{{ t.report.units_intro }}</p>
+  <table>
+    <thead><tr><th>{{ t.report.time }}</th><th>{{ t.report.reminder }}</th></tr></thead>
+    <tbody>
+    {% for unit in units %}
+      <tr>
+        <td class="number">{{ unit.time }}</td>
+        <td>{{ unit.condition }} <span class="muted">→ {{ unit.action }}</span></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
 </main>
 </body>
 </html>

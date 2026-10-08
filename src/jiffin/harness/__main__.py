@@ -4,6 +4,7 @@ import argparse
 import logging
 import sys
 from collections.abc import Sequence
+from contextlib import ExitStack
 from datetime import date, datetime
 from pathlib import Path
 
@@ -11,7 +12,9 @@ from jiffin.core.clock import Clock, SystemClock
 from jiffin.core.meanings import read
 from jiffin.core.model import ModelError
 from jiffin.core.records import Revision
+from jiffin.core.reminders import THRESHOLD
 from jiffin.harness import (
+    calls,
     capture,
     engine,
     fixtures,
@@ -22,14 +25,17 @@ from jiffin.harness import (
     replay,
     report,
     sample,
+    scores,
     sleeps,
     snapshot,
     statements,
 )
 from jiffin.harness import day as days
 from jiffin.harness.errors import HarnessError
+from jiffin.harness.truth import Truth
 from jiffin.lang.harness import HARNESS
 from jiffin.store.folders import Folders
+from jiffin.store.store import Log
 
 log = logging.getLogger(__name__)
 
@@ -126,15 +132,23 @@ def parser() -> argparse.ArgumentParser:
     label = commands.add_parser(
         "label",
         parents=[common, copy_options, day_options],
-        help="the day's pairs to label, for Claude; with --owner, a page for the owner's share",
+        help="the day's pairs to label, for Claude; with --owner, a page for the owner's share; "
+        "with --calls, a page for the owner's check of the calls and absences",
     )
-    label.add_argument(
+    pages = label.add_mutually_exclusive_group()
+    pages.add_argument(
         "--owner",
         type=int,
         nargs="?",
         const=labels.OWNER_SHARE,
         metavar="PAIRS",
         help=f"serve the page for the owner's share (default: {labels.OWNER_SHARE} pairs)",
+    )
+    pages.add_argument(
+        "--calls",
+        action="store_true",
+        help="serve the page where the owner marks the day's wrong calls and absences and adds "
+        "the missing ones",
     )
     label.add_argument(
         "--no-browser", action="store_true", help="print the page's address without opening it"
@@ -157,7 +171,8 @@ def parser() -> argparse.ArgumentParser:
         "--threshold",
         type=_decimals,
         metavar="T[,T...]",
-        help="thresholds to replay at, from the scores the log keeps: no engine",
+        help="thresholds to replay at: from the scores the log keeps, no engine; with --engine "
+        "or --reminders, from the engine's, kept in the data folder",
     )
     again.add_argument(
         "--engine", action="store_true", help="judge the day again with this checkout's engine"
@@ -166,7 +181,8 @@ def parser() -> argparse.ArgumentParser:
         "--reminders",
         type=_integers,
         metavar="N[,N...]",
-        help="active reminders to reach with invented ones, judged by the engine",
+        help="active reminders to reach with invented ones, judged by the engine: it starts "
+        "only for the scores not kept yet",
     )
     again.set_defaults(command=_replay)
 
@@ -258,6 +274,16 @@ def _label(options: argparse.Namespace) -> None:
     copy = options.copy or snapshot.latest(data)
     clock = SystemClock()
     day = days.select(snapshot.read(copy), options.day, clock)
+    if options.calls:
+        path = calls.path_for(data, day.day)
+        checked = calls.prepare(day.situations, day.evaluations, path, day.day)
+        log.info(
+            "%d calls and absences recorded; the owner's check goes into %s. Ctrl+C stops.",
+            len(checked.stretches),
+            path,
+        )
+        page.serve(page.CallsServer(checked, clock), open_browser=not options.no_browser)
+        return
     path = labels.path_for(data, day.day)
     pairs = days.pairs(day)
     if options.reminders:
@@ -279,16 +305,17 @@ def _report(options: argparse.Namespace) -> None:
     clock = SystemClock()
     whole = snapshot.read(copy)
     day = days.select(whole, options.day, clock)
-    labels_path = labels.path_for(data, day.day)
-    labelled = labels.load(labels_path) if labels_path.exists() else None
-    final = {} if labelled is None else labelled.final()
+    labelled = _labels(data, day)
+    final = _final(labelled, day)
+    truth = _truth(data, day)
     monitor_path = options.monitor or data / f"monitor-{day.day.isoformat()}.csv"
     used = report.machine(monitor_path) if options.monitor or monitor_path.exists() else None
     engine = sleeps.summarize(whole, day, clock, () if used is None else used.engine_vram)
-    print(report.markdown(days.summarize(day, final, clock), labelled, used, engine, clock))
+    summary = days.summarize(day, final, clock, truth)
+    print(report.markdown(summary, labelled, used, engine, clock, truth))
     source = HARNESS.report.from_copy.format(copy=copy.name)
     path = data / f"report-{day.day.isoformat()}.html"
-    log.info("the page is %s", report.page(day, final, clock, source, path))
+    log.info("the page is %s", report.page(day, final, clock, source, path, truth))
 
 
 def _replay(options: argparse.Namespace) -> None:
@@ -297,31 +324,63 @@ def _replay(options: argparse.Namespace) -> None:
     whole = snapshot.read(copy)
     clock = SystemClock()
     day = days.select(whole, options.day, clock)
-    labels_path = labels.path_for(data, day.day)
-    final = labels.load(labels_path).final() if labels_path.exists() else {}
+    labelled = _labels(data, day)
+    final = _final(labelled, day)
+    truth = _truth(data, day)
     rows: list[tuple[str, str, days.Day]] = [("as recorded", "", day)]
-    thresholds = options.threshold or ([] if options.engine or options.reminders else [None])
-    for threshold in thresholds:
-        at = day.evaluations[0].threshold if threshold is None else threshold
-        again = replay.Replay(whole, day, threshold=at)
-        rows.append((f"threshold {at:g}", f"threshold-{at:g}", again.run()))
     if options.engine or options.reminders:
-        with engine.running(options.models) as model:
-            if options.engine:
-                again = replay.Replay(whole, day, model, rewrite=True)
-                rows.append(("this engine", "engine", again.run()))
-            real = days.summarize(day, {}, clock).reminders
-            for level in options.reminders or []:
-                extra = fixtures.reminders(_extra(level, real))
-                again = replay.Replay(whole, day, model, rewrite=True, extra=extra)
-                rows.append((f"{level} reminders", f"reminders-{level}", again.run()))
-    print(report.replays([(name, replayed) for name, _, replayed in rows], final, clock))
-    if not final:
+        rows += _judged(options, whole, day, data, clock)
+    else:
+        for threshold in options.threshold or [day.evaluations[0].threshold]:
+            again = replay.Replay(whole, day, threshold=threshold)
+            rows.append((f"threshold {threshold:g}", f"threshold-{threshold:g}", again.run()))
+    # The table counts by the labels of `label`: Remind here's alone would count a few pairs.
+    counted = final if labelled is not None else {}
+    print(report.replays([(name, replayed) for name, _, replayed in rows], counted, clock, truth))
+    if labelled is None:
         log.info("no labels for %s yet: run label", day.day)
     for name, slug, replayed in rows[1:]:
         path = data / f"replay-{day.day.isoformat()}-{slug}.html"
-        report.page(replayed, final, clock, HARNESS.report.replayed.format(name=name), path)
+        source = HARNESS.report.replayed.format(name=name)
+        report.page(replayed, final, clock, source, path, truth)
     log.info("the pages are in %s", data)
+
+
+def _judged(
+    options: argparse.Namespace, whole: Log, day: days.Day, data: Path, clock: Clock
+) -> list[tuple[str, str, days.Day]]:
+    """The day judged by the engine, by this checkout's engine and with invented reminders, at
+    each threshold: from the scores kept in the data folder, the engine starting for the rest."""
+    real = days.summarize(day, {}, clock).reminders
+    runs: list[tuple[str, str, list[tuple[str, str]]]] = []
+    if options.engine:
+        runs.append(("this engine", "engine", []))
+    for level in options.reminders or []:
+        extra = fixtures.reminders(_extra(level, real))
+        runs.append((f"{level} reminders", f"reminders-{level}", extra))
+    rows = []
+    with ExitStack() as stack:
+        kept = scores.Kept(
+            scores.path_for(data, day.day),
+            lambda: stack.enter_context(engine.running(options.models)),
+        )
+        try:
+            if options.engine:
+                kept.engine()  # this checkout's engine, whatever the scores kept
+            for name, slug, extra in runs:
+                for threshold in options.threshold or [THRESHOLD]:
+                    again = replay.Replay(
+                        whole, day, kept, threshold=threshold, rewrite=True, extra=extra
+                    )
+                    if options.threshold:
+                        name_at = f"{name}, threshold {threshold:g}"
+                        slug_at = f"{slug}-threshold-{threshold:g}"
+                        rows.append((name_at, slug_at, again.run()))
+                    else:
+                        rows.append((name, slug, again.run()))
+        finally:
+            kept.save()
+    return rows
 
 
 def _convert(options: argparse.Namespace) -> None:
@@ -352,6 +411,8 @@ def _invented_pairs(day: days.Day, level: int, clock: Clock) -> dict[str, days.P
     pairs = {}
     for number, (condition, action) in enumerate(fixtures.reminders(_extra(level, real)), 1):
         remainder = read(condition, start).remainder
+        if not remainder:  # only a time or situations: never judged, so no pair to label
+            continue
         revision = Revision(-number, -number, 1, condition, action, remainder)
         for context in contexts:
             pair = days.Pair(context, revision)
@@ -363,6 +424,25 @@ def _extra(level: int, real: int) -> int:
     if level < real:
         raise HarnessError(f"the day has {real} reminders already, more than {level}")
     return level - real
+
+
+def _labels(data: Path, day: days.Day) -> labels.Labels | None:
+    path = labels.path_for(data, day.day)
+    return labels.load(path) if path.exists() else None
+
+
+def _final(labelled: labels.Labels | None, day: days.Day) -> dict[str, bool]:
+    """The labels that count: the owner's, then the pairs the owner asked for with Remind here,
+    then Claude's (ADR-0031)."""
+    asked = labels.asked(day)
+    return asked if labelled is None else labelled.final(asked)
+
+
+def _truth(data: Path, day: days.Day) -> Truth:
+    """The day's situations as they were: as the owner checked them with label --calls, else as
+    recorded."""
+    path = calls.path_for(data, day.day)
+    return Truth.of(day.situations, calls.load(path) if path.exists() else None)
 
 
 def _latest_labels(folder: Path) -> Path:

@@ -189,8 +189,8 @@ app.
   revision's situations. The stretches load nothing: `core` reads the
   situations again from the capture.
 - **The harness's log** keeps every answer per place, in order, the
-  requested alerts, which have no evaluation, the engine's sleeps and the
-  stretches with nothing in front.
+  requested alerts, which have no evaluation, the engine's sleeps, the
+  stretches with nothing in front and those of the situations.
 
 ## Keeping and deleting
 

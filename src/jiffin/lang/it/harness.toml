@@ -29,6 +29,26 @@ missed = "Promemoria persi ({count})"
 missed_intro = "Coppie pertinenti, giudicate almeno una volta nel loro orario, che non sono mai arrivate sullo schermo senza essere già state ricordate, con il motivo e il d più alto della giornata."
 reminded = "Taciuti perché già ricordati ({count})"
 reminded_intro = "Coppie pertinenti mai arrivate sullo schermo perché il promemoria era già suonato nella stessa occasione (nella stessa ora, in 0.1) o aveva già una risposta, Rimanda o «Non qui»: non contano come persi."
+# The alerts asked for with «Qui dovevi avvisarmi», which are never the judge's.
+requested = "Chiesti con «Qui dovevi avvisarmi» ({count})"
+requested_intro = "Avvisi chiesti da te dalla scheda di «Qui dovevi avvisarmi»: non sono del giudice, e la loro coppia conta come pertinente."
+# The calls and the absences, with what the owner said of each on the page of label --calls.
+situations = "Chiamate e assenze ({count})"
+situations_intro = "Le chiamate e le assenze che Jiffin ha letto, e quelle che hai aggiunto tu. Ogni sbagliata mette in dubbio un numero: i 5 secondi di una chiamata, i 3 minuti di un'assenza."
+kind = "Tipo"
+start = "Inizio"
+end = "Fine"
+app = "App"
+state = "Stato"
+call = "chiamata"
+absence = "assenza"
+confirmed = "giusta"
+marked_wrong = "segnata sbagliata"
+added = "aggiunta da te"
+unchecked = "da controllare"
+# The units of situations, which the owner added, where a reminder without a remainder never rang.
+units = "Promemoria sulle situazioni mai arrivati ({count})"
+units_intro = "Promemoria senza altro che situazioni, che dovevano suonare in una chiamata o un'assenza che Jiffin non ha letto o ha letto male, con l'ora in cui dovevano."
 
 # Why a relevant pair never reached the screen, by the reason `harness.day` names.
 [report.reasons]
@@ -36,9 +56,16 @@ reminded_intro = "Coppie pertinenti mai arrivate sullo schermo perché il promem
 "same occasion" = "stessa occasione"
 "held back" = "trattenuto (una volta all'ora)"
 "out of time" = "fuori orario"
+"outside its situation" = "fuori dalla sua situazione, letta male"
+"situation not read" = "situazione non letta"
 snoozed = "rimandato"
 silenced = "«Non qui»"
 waited = "in attesa di un posto, poi chiuso"
+
+# Why an alert of the judge rang under the threshold, by the reason `harness.day` names.
+[report.learned]
+"for Remind here" = "sotto la soglia: «Qui dovevi avvisarmi» detto qui"
+"under a lowered threshold" = "sotto la soglia, abbassata da «Qui dovevi avvisarmi»"
 
 # The answer to an alert shown, by the value the store keeps: the button pressed, or the X.
 [report.answers]
@@ -48,15 +75,17 @@ snooze = "rimanda"
 not_here = "non qui"
 closed = "chiuso"
 
-# Every reminder's condition, beside its time understood and its statement (ADR-0008).
+# Every reminder's condition, beside its time and situations understood and its statement
+# (ADR-0008, ADR-0028).
 [statements]
 title = "Affermazioni Jiffin"
 heading = "Le affermazioni dei promemoria"
-intro = "Dalla copia {copy}. Per ogni promemoria, la condizione come l'hai scritta, l'orario che Jiffin ha capito, la condizione senza l'orario e l'affermazione in inglese che il modello giudica. Controlla che l'orario sia quello che volevi e che l'affermazione dica la stessa cosa della condizione senza orario."
+intro = "Dalla copia {copy}. Per ogni promemoria, la condizione come l'hai scritta, l'orario e le situazioni che Jiffin ha capito, la condizione senza di loro e l'affermazione in inglese che il modello giudica. Controlla che orario e situazioni siano quelli che volevi e che l'affermazione dica la stessa cosa della condizione senza di loro."
 state = "Stato"
 condition = "Quando"
 time = "Orario capito"
-remainder = "Senza orario"
+situations = "Situazioni capite"
+remainder = "Senza orario né situazioni"
 action = "Ricordami di"
 statement = "Affermazione"
 build = "Scritta da"
@@ -64,10 +93,32 @@ active = "attivo"
 completed = "completato"
 unclear = "non capito: «{words}»"
 no_time = "nessuno"
-time_only = "solo orario"
+no_situation = "nessuna"
+nothing_left = "niente: solo orario o situazioni"
 no_statement = "nessuna: non va al modello"
 not_written = "non ancora scritta"
 written_by = "motore {engine}, prompt {prompt}"
+# The situations understood, in provisional words until #153 writes them as the app does: one
+# that holds, its end, how long it has lasted; and how long the thing of the condition has.
+ends = "quando finisce «{situation}»"
+lasts = "«{situation}» da almeno {minutes} min"
+lasting = "da almeno {minutes} min"
+call_on = "in chiamata su {app}"
+
+# A situation with its value, by their names in `core.situations`.
+[statements.understood]
+call = "in chiamata"
+"away yes" = "lontano dal PC"
+"away no" = "al PC"
+"power battery" = "a batteria"
+"power plugged" = "con il caricatore"
+"display yes" = "con lo schermo esterno"
+"display no" = "senza schermo esterno"
+"headphones yes" = "con le cuffie"
+"headphones no" = "senza cuffie"
+"network home" = "sulla rete di casa"
+"network office" = "sulla rete dell'ufficio"
+"network offline" = "senza rete"
 
 # The owner's labelling page, a pair at a time: the texts of the page, then those its script
 # writes.
@@ -94,6 +145,42 @@ labelled = "✓ già fatta: puoi cambiare risposta"
 saved = "Salvato."
 not_saved = "Non ho salvato ({error}). La finestra del terminale è ancora aperta?"
 nothing = "Niente da etichettare"
+not_loaded = "Non riesco a caricare i dati ({error})."
+
+# The owner's check of the day's calls and absences (label --calls, ADR-0031): the texts of the
+# page, then those its script writes.
+[calls]
+title = "Chiamate e assenze Jiffin"
+heading = "Chiamate e assenze del {day}"
+intro = "Segna come sbagliata ogni chiamata o assenza che non c'è stata, che Jiffin ha spezzato in due, o che inizia o finisce più di un minuto lontano dall'ora vera. Poi aggiungi quelle che mancano, e alla fine premi «Controllato». Ogni modifica si salva subito."
+meaning = "Per Jiffin sei in chiamata quando un'app usa il microfono; sei assente quando non usi né la tastiera né il puntatore per 3 minuti, senza chiamate e senza niente che suona, o quando il PC è bloccato o in sospensione."
+loading = "Carico…"
+kind = "Tipo"
+app = "App"
+start = "Inizio"
+end = "Fine"
+in_front = "In primo piano prima e dopo"
+mark = "Segna"
+add_heading = "Aggiungi una chiamata o un'assenza che manca"
+add = "Aggiungi"
+check = "Controllato"
+recorded = "Lette da Jiffin ({count})"
+none = "Jiffin non ha letto nessuna chiamata e nessuna assenza in questo giorno."
+call = "chiamata"
+absence = "assenza"
+nothing = "nessuna app"
+wrong = "Sbagliata"
+added = "Aggiunte da te ({count})"
+none_added = "Nessuna, per ora."
+other_app = "un'altra app"
+remove = "Togli"
+remove_confirm = "Tolgo la riga delle {start}–{end}?"
+times_needed = "Scrivi l'ora di inizio e quella di fine."
+ends_before = "La fine viene prima dell'inizio."
+not_checked = "Finché non premi «Controllato», le chiamate e le assenze contano come le ha lette Jiffin."
+checked_at = "Controllato alle {time}: le righe non segnate contano come giuste. Puoi chiudere questa scheda e la finestra del terminale."
+saved = "Salvato."
+not_saved = "Non ho salvato ({error}). La finestra del terminale è ancora aperta?"
 not_loaded = "Non riesco a caricare i dati ({error})."
 
 # The prototype's reminders are one sentence, "quando … ricordami di …": the condition is what

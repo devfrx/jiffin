@@ -36,7 +36,7 @@ from jiffin.core.records import (
     Snooze,
     Waker,
 )
-from jiffin.core.situations import SituationStretch
+from jiffin.core.situations import Situation, SituationStretch
 from jiffin.store import schedules, terms
 from jiffin.store.database import open_database
 
@@ -91,6 +91,9 @@ class Log:
     nothing_in_front: tuple[NothingInFront, ...] = ()
     """The stretches with nothing in front for the reminders, the earliest first: none before
     version 0.3."""
+    situations: tuple[SituationStretch, ...] = ()
+    """The stretches of the situations' values that ended, the earliest first: none before
+    version 0.3 (ADR-0028)."""
 
 
 class Store:
@@ -263,7 +266,23 @@ class Store:
                     "SELECT since, until, startup FROM nothing_in_front ORDER BY since"
                 )
             )
-            return Log(reminders, revisions, evaluations, alerts, answers, left, sleeps, nothing)
+            situations = tuple(
+                SituationStretch(Situation(row[0]), row[1], row[2], row[3])
+                for row in self._db.execute(
+                    "SELECT kind, value, since, until FROM situation ORDER BY since, kind, value"
+                )
+            )
+            return Log(
+                reminders,
+                revisions,
+                evaluations,
+                alerts,
+                answers,
+                left,
+                sleeps,
+                nothing,
+                situations,
+            )
 
     def cleanup(self, now: int) -> None:
         """Delete what the retention rules of ADR-0014 no longer keep, at startup and daily."""

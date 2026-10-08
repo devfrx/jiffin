@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from jiffin.core.clock import SimulatedClock
+from jiffin.core.clock import SimulatedClock, SystemClock
 from jiffin.core.context import Context, Observation, normalize
 from jiffin.core.model import EngineBuild, ModelError
 from jiffin.core.records import (
@@ -22,10 +22,12 @@ from jiffin.core.records import (
     Snooze,
 )
 from jiffin.core.reminders import HOUR_MS, Reminders
+from jiffin.core.situations import Situation, SituationObservation, SituationStretch
 from jiffin.harness import __main__ as harness
 from jiffin.harness import day as days
-from jiffin.harness import engine, fixtures, labels, replay, snapshot
+from jiffin.harness import engine, fixtures, labels, page, replay, snapshot
 from jiffin.harness.folders import REPOSITORY
+from jiffin.lang.harness import HARNESS
 from jiffin.store.store import Log, Store
 
 T0 = 1_791_190_800_000  # 2026-10-05 09:00 UTC
@@ -48,10 +50,11 @@ FIGMA = Context("figma.exe", "Icone - Figma", None)
 
 
 class FakeEngine:
-    """Rewrites a condition by quoting it, judges from `D`, and may be down."""
+    """Rewrites a condition by quoting it, judges from `scores`, and may be down."""
 
-    def __init__(self) -> None:
+    def __init__(self, scores: Mapping[tuple[str, str], float] = D) -> None:
         self.down = False
+        self._scores = scores
 
     def build(self) -> EngineBuild:
         self._answer()
@@ -64,7 +67,9 @@ class FakeEngine:
     def judge(self, context: Context, statements: Mapping[int, str]) -> dict[int, float]:
         self._answer()
         return {
-            key: D.get((context.title, text.removeprefix("The user: ").removesuffix(".")), -3.0)
+            key: self._scores.get(
+                (context.title, text.removeprefix("The user: ").removesuffix(".")), -3.0
+            )
             for key, text in statements.items()
         }
 
@@ -222,14 +227,16 @@ def test_more_reminders_are_judged_by_the_engine_from_the_start(
     recorded: tuple[Log, days.Day],
 ) -> None:
     log, day = recorded
-    extra = fixtures.reminders(3)
+    extra = fixtures.reminders(4)
     grown = replay.Replay(log, day, FakeEngine(), rewrite=True, extra=extra).run()
     judged = {
         grown.revisions[candidate.revision_id].condition
         for evaluation in grown.evaluations
         for candidate in evaluation.candidates
     }
-    assert {condition for condition, _ in extra} <= judged
+    situated = {"quando finisco la call", "quando torno al PC"}  # never judged: no remainder
+    assert {condition for condition, _ in extra} - situated <= judged
+    assert not situated & judged
     assert not any(evaluation.failed for evaluation in grown.evaluations)  # the engine is up
 
 
@@ -392,6 +399,226 @@ def test_a_day_of_0_2_replays_with_its_pauses_its_times_and_yesterdays_rimanda(
     assert signature(replay.Replay(log, day, zone=UTC).run()) == signature(day)
 
 
+# Version 0.3: the situations and the answers per place (ADR-0028, ADR-0029)
+
+TRAINS = Context("vivaldi.exe", "Offerte treni", "treni.it")
+WEATHER = Context("vivaldi.exe", "Meteo", "meteo.it")
+SPORT = Context("vivaldi.exe", "Notizie sportive", "sport.it")
+CALL_ENDS = ("quando finisco la call", "segnare le decisioni")
+ON_TEAMS = ("quando sono in call su Teams", "chiedere la data a Bianchi")
+BACK = ("quando torno al PC", "bere un bicchiere d'acqua")
+MAIL_AFTER_CALL = ("quando finisco la call e leggo la posta", "mandare il riassunto")
+SITUATED = {
+    (CODE.title, VERDI[0]): 2.5,
+    (MAIL.title, "quando leggo la posta"): 1.2,
+    (TRAINS.title, PAUSA[0]): 0.9,
+    (WEATHER.title, PAUSA[0]): 0.5,
+    (SPORT.title, PAUSA[0]): 0.8,
+}
+"""Pause is under the threshold in the trains and the weather, near the cut: Remind here there
+twice lowers its threshold to 0.72, under its d in the sport news."""
+
+
+def a_day_of_situations(path: Path) -> Log:
+    """Version 0.3 through the app's own core, in UTC. Yesterday Verdi rang unanswered, and this
+    morning the owner says Not here on it from the tray list. A Zoom call ends; a Teams call
+    starts and ends; the owner is away for lunch, and comes back; the app closes during a third
+    call, and starts again with the call over. Remind here on Pause in the trains and in the
+    weather, near the cut, lowers its threshold; the weather's is withdrawn in the afternoon."""
+    clock = SimulatedClock(YESTERDAY, UTC)
+    core = Reminders(FakeEngine(SITUATED), clock, lambda view: None, lambda view: None)
+    answers: dict[str, list[tuple[str, int]]] = {
+        CALL_ENDS[0]: [("close", 3_000), ("close", 3_000)],
+        MAIL_AFTER_CALL[0]: [("done", 4_000)],
+        BACK[0]: [("done", 2_000)],
+        PAUSA[0]: [("close", 2_000)] * 4,
+    }
+    yesterdays: list[int] = []
+
+    def owner(timeline: replay.Timeline, alert: Alert) -> None:
+        replay.passive(timeline, alert)
+        if alert.revision.condition == VERDI[0]:
+            yesterdays.append(alert.id)
+        planned = answers.get(alert.revision.condition)
+        if planned and alert.shown_at is not None:
+            what, after = planned.pop(0)
+            timeline.at(alert.shown_at + after, lambda core: getattr(core, what)(alert.id))
+
+    timeline = replay.Timeline(core, clock, owner)
+
+    def see(at: int, context: Context | None) -> None:
+        timeline.at(at, replay.observe(Observation(at, context)))
+
+    def situation(at: int, kind: Situation, *values: str) -> None:
+        observation = SituationObservation(at, kind, frozenset(values))
+        timeline.at(at, replay.observe(observation))
+
+    def closed(at: int) -> None:
+        for kind in (Situation.CALL, Situation.AWAY, Situation.POWER):
+            timeline.at(at, replay.observe(SituationObservation(at, kind, None)))
+
+    def said(at: int, what: str, reminder_id: int, context: Context) -> None:
+        timeline.at(at, lambda core: getattr(core, what)(reminder_id, context))
+
+    for condition, action in (VERDI, PAUSA, CALL_ENDS, ON_TEAMS, BACK, MAIL_AFTER_CALL):
+        timeline.at(YESTERDAY, replay.new_reminder(condition, action))
+    situation(YESTERDAY, Situation.POWER, "plugged")
+    situation(YESTERDAY, Situation.AWAY, "no")
+    see(YESTERDAY + 4 * MINUTE, CODE)  # Verdi rings, and vanishes unanswered
+    see(YESTERDAY + 10 * MINUTE, None)
+    see(T0, MAIL)
+    timeline.at(T0 + 30 * MINUTE, lambda core: core.not_here(yesterdays[0]))  # the tray list
+    see(T0 + 40 * MINUTE, CODE)  # Verdi keeps quiet
+    situation(T0 + 60 * MINUTE, Situation.CALL, "zoom.exe")
+    situation(T0 + 90 * MINUTE, Situation.CALL)  # the call ends
+    see(T0 + 100 * MINUTE, MAIL)  # the mail after the call
+    situation(T0 + 120 * MINUTE, Situation.CALL, "ms-teams.exe")
+    situation(T0 + 140 * MINUTE, Situation.CALL)
+    see(T0 + 150 * MINUTE, TRAINS)
+    said(T0 + 151 * MINUTE, "remind_here", 2, TRAINS)
+    see(T0 + 165 * MINUTE, WEATHER)
+    said(T0 + 166 * MINUTE, "remind_here", 2, WEATHER)
+    see(T0 + 180 * MINUTE, None)  # lunch
+    situation(T0 + 180 * MINUTE, Situation.AWAY, "yes")
+    situation(T0 + 195 * MINUTE, Situation.AWAY, "no")
+    see(T0 + 195 * MINUTE, SPORT)  # back: Pause rings under its lowered threshold
+    see(T0 + 205 * MINUTE, None)
+    see(T0 + 210 * MINUTE, TRAINS)  # Pause rings for Remind here, in a new occasion
+    situation(T0 + 240 * MINUTE, Situation.CALL, "zoom.exe")
+    see(T0 + 250 * MINUTE, None)
+    closed(T0 + 250 * MINUTE)  # the app closes during the call
+    situation(T0 + 260 * MINUTE, Situation.POWER, "plugged")
+    situation(T0 + 260 * MINUTE, Situation.AWAY, "no")
+    situation(T0 + 260 * MINUTE, Situation.CALL)
+    see(T0 + 260 * MINUTE, MAIL)  # no end of a call: it was not read
+    said(T0 + 330 * MINUTE, "withdraw", 2, WEATHER)
+    see(T0 + 340 * MINUTE, None)
+    see(T0 + 345 * MINUTE, SPORT)  # Pause's threshold is back at 0.97: quiet
+    see(T0 + 360 * MINUTE, None)
+    timeline.run(T0 + 7 * HOUR_MS)
+    store = Store.open(path)
+    store.save(timeline.records)
+    log = store.log()
+    store.close()
+    return log
+
+
+@pytest.fixture(scope="module")
+def situated(tmp_path_factory: pytest.TempPathFactory) -> tuple[Log, days.Day]:
+    log = a_day_of_situations(tmp_path_factory.mktemp("situated") / "jiffin.db")
+    return log, days.select(log, None, SimulatedClock(T0, UTC))
+
+
+def asked(day: days.Day) -> tuple[list[Any], list[Any]]:
+    """The alerts asked for with Remind here, and the answers per place said during the day.
+
+    A replay starts with an empty cache, so a Not here on yesterday's alert, in a place not
+    judged yet that day, has no d there: no threshold reads the d of a Not here."""
+    names = {revision.reminder_id: revision.action for revision in day.revisions.values()}
+    begin = day.evaluations[0].context_since
+    return (
+        [(a.revision.condition, a.context, a.created_at, a.answer) for a in day.requested],
+        [
+            (names[a.reminder_id], a.context, a.here, a.d if a.here is Here.YES else None, a.at)
+            for a in day.answers
+            if a.at > begin
+        ],
+    )
+
+
+def test_the_day_of_situations_holds_what_version_0_3_adds(
+    situated: tuple[Log, days.Day],
+) -> None:
+    _, day = situated
+    rang = {(alert.revision.condition, alert.d is None) for alert in day.alerts}
+    assert rang == {
+        (CALL_ENDS[0], True),
+        (ON_TEAMS[0], True),
+        (BACK[0], True),
+        (MAIL_AFTER_CALL[0], False),
+        (PAUSA[0], False),
+    }
+    assert [alert.context for alert in day.alerts if alert.revision.condition == PAUSA[0]] == [
+        SPORT,
+        TRAINS,
+    ]
+    assert [alert.context for alert in day.requested] == [TRAINS, WEATHER]
+    assert [answer.here for answer in day.answers] == [Here.NO, Here.YES, Here.YES, Here.WITHDRAWN]
+    calls = [s for s in day.situations if s.situation is Situation.CALL]
+    assert [(s.value, s.until - s.since) for s in calls] == [
+        ("zoom.exe", 30 * MINUTE),
+        ("ms-teams.exe", 20 * MINUTE),
+        ("zoom.exe", 10 * MINUTE),  # cut by the app's close
+    ]
+    assert sum(alert.revision.condition == CALL_ENDS[0] for alert in day.alerts) == 2
+    assert all(
+        candidate.outcome is not Outcome.ALERT
+        for evaluation in day.evaluations
+        if evaluation.context == CODE
+        for candidate in evaluation.candidates
+    )  # Verdi said Not here this morning, on yesterday's alert
+
+
+def uncached(day: days.Day) -> tuple[list[Any], list[Any]]:
+    """`signature`, without whether each score came from the cache: a replay starts with an empty
+    cache, and Verdi's place was judged yesterday too (see `CHAT`)."""
+    evaluations, alerts = signature(day)
+    return [
+        (*evaluation[:5], [(name, d, outcome) for name, d, _, outcome in evaluation[5]])
+        for evaluation in evaluations
+    ], alerts
+
+
+def test_a_day_of_0_3_replays_with_its_situations_and_its_answers_per_place(
+    situated: tuple[Log, days.Day],
+) -> None:
+    log, day = situated
+    again = replay.Replay(log, day, zone=UTC).run()
+    assert uncached(again) == uncached(day)
+    assert asked(again) == asked(day)
+    assert again.situations == day.situations
+
+
+def test_the_situations_come_back_as_the_capture_observed_them() -> None:
+    zoom = SituationStretch(Situation.CALL, "zoom.exe", 10_000, 50_000)
+    chrome = SituationStretch(Situation.CALL, "chrome.exe", 20_000, 80_000)
+    plugged = SituationStretch(Situation.POWER, "plugged", 0, 30_000)
+    battery = SituationStretch(Situation.POWER, "battery", 30_000, 80_000)
+    again = SituationStretch(Situation.POWER, "plugged", 90_000, 95_000)
+    seen = replay.situation_observations([zoom, chrome, plugged, battery, again])
+    assert [(o.at, o.situation.value, o.values) for o in seen] == [
+        (0, "power", frozenset({"plugged"})),
+        (10_000, "call", frozenset({"zoom.exe"})),
+        (20_000, "call", frozenset({"zoom.exe", "chrome.exe"})),
+        (30_000, "power", frozenset({"battery"})),
+        (50_000, "call", frozenset({"chrome.exe"})),
+        (80_000, "call", None),  # power stopped being read then: the app closed
+        (80_000, "power", None),
+        (90_000, "power", frozenset({"plugged"})),
+        (95_000, "power", None),
+    ]
+
+
+def test_a_call_that_ends_while_the_app_runs_is_an_end() -> None:
+    zoom = SituationStretch(Situation.CALL, "zoom.exe", 10_000, 50_000)
+    plugged = SituationStretch(Situation.POWER, "plugged", 0, 90_000)
+    seen = replay.situation_observations([zoom, plugged])
+    assert (50_000, frozenset()) in [(o.at, o.values) for o in seen]
+
+
+def test_a_remind_here_rings_again_in_a_replay_at_another_threshold(
+    situated: tuple[Log, days.Day],
+) -> None:
+    """The offsets come from the answers as `core` computes them, relative to the threshold of
+    the replay: at 1.6 the Remind here in the weather is no longer near the cut (0.5 is more
+    than 1 under it), so Pause's threshold does not go down, and the sport news keep quiet."""
+    log, day = situated
+    higher = replay.Replay(log, day, threshold=1.6, zone=UTC).run()
+    pause = [alert.context for alert in higher.alerts if alert.revision.condition == PAUSA[0]]
+    assert pause == [TRAINS]  # for the Remind here said there, under any threshold
+    assert [alert.context for alert in higher.requested] == [TRAINS, WEATHER]
+
+
 # The commands
 
 
@@ -433,12 +660,36 @@ def test_replay_at_thresholds_with_the_engine_and_with_more_reminders(
     rows = [line.split(" | ")[0] for line in lines if line.startswith("| ")]
     assert rows[1:] == [
         "| as recorded",
-        "| threshold 0.8",
-        "| threshold 1.3",
-        "| this engine",
-        "| 6 reminders",
-        "| 9 reminders",
+        "| this engine, threshold 0.8",
+        "| this engine, threshold 1.3",
+        "| 6 reminders, threshold 0.8",
+        "| 6 reminders, threshold 1.3",
+        "| 9 reminders, threshold 0.8",
+        "| 9 reminders, threshold 1.3",
     ]
+    assert (data / "replay-2026-10-05-reminders-9-threshold-1.3.html").exists()
+    assert (data / "scores-2026-10-05.json").exists()
+
+
+def test_the_engine_starts_only_for_the_scores_not_kept(
+    data: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(engine, "running", fake_engine)
+    arguments = ["replay", "--data", str(data), "--reminders", "6"]
+    assert harness.main(arguments) == 0
+    first = capsys.readouterr().out
+
+    @contextmanager
+    def no_engine(models: Path) -> Iterator[FakeEngine]:
+        raise AssertionError("the engine started")
+        yield FakeEngine()
+
+    monkeypatch.setattr(engine, "running", no_engine)
+    assert harness.main(arguments) == 0
+    assert capsys.readouterr().out == first
+    assert harness.main([*arguments, "--threshold", "0.5,1.5"]) == 0  # at other thresholds too
+    rows = [line for line in capsys.readouterr().out.splitlines() if line.startswith("| 6 rem")]
+    assert len(rows) == 2 and rows[0] != rows[1]
 
 
 def test_more_reminders_than_the_day_has_are_needed(
@@ -449,12 +700,14 @@ def test_more_reminders_than_the_day_has_are_needed(
     assert "has 4 reminders already, more than 2" in capsys.readouterr().err
 
 
-def test_label_adds_the_pairs_of_the_invented_reminders(data: Path) -> None:
-    assert harness.main(["label", "--data", str(data), "--reminders", "6"]) == 0
+def test_label_adds_the_pairs_of_the_invented_reminders_the_engine_judges(data: Path) -> None:
+    assert harness.main(["label", "--data", str(data), "--reminders", "8"]) == 0
     labelled = labels.load(labels.path_for(data, date(2026, 10, 5)))
-    conditions = {pair["remainder"] for pair in labelled.pairs}
-    assert {condition for condition, _ in fixtures.reminders(2)} <= conditions
-    assert fixtures.reminders(3)[2][0] not in conditions  # 4 of the day and 2 invented make 6
+    remainders = {pair["remainder"] for pair in labelled.pairs}
+    invented = [condition for condition, _ in fixtures.reminders(6)]
+    assert invented[1] in remainders and invented[3] in remainders
+    assert "" not in remainders  # the first and the third are on situations only: never judged
+    assert invented[5] not in remainders  # 4 of the day and 4 invented make 8
 
 
 def test_the_pairs_of_an_invented_reminder_are_keyed_by_its_remainder(
@@ -465,6 +718,141 @@ def test_the_pairs_of_an_invented_reminder_are_keyed_by_its_remainder(
     assert harness.main(["label", "--data", str(data), "--reminders", "5"]) == 0
     labelled = labels.load(labels.path_for(data, date(2026, 10, 5)))
     assert "quando apro Figma" in {pair["remainder"] for pair in labelled.pairs}
+
+
+def test_the_owner_checks_the_calls_and_the_report_counts_by_the_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The day of situations: the owner marks the Teams call wrong, and adds a Zoom call while
+    the mail was in front, whose end "quando finisco la call" should have rung for."""
+    database = tmp_path / "jiffin.db"
+    a_day_of_situations(database)
+    data = tmp_path / "prove"
+    data.mkdir()
+    snapshot.snapshot(database, data, datetime(2026, 10, 5, 18, tzinfo=UTC))
+    served: list[page.PageServer] = []
+    monkeypatch.setattr(page, "serve", lambda server, open_browser: served.append(server))
+    assert harness.main(["label", "--data", str(data), "--calls", "--no-browser"]) == 0
+    (server,) = served
+    server.server_close()
+    assert isinstance(server, page.CallsServer)
+    owners = server.calls
+    assert [(s["value"], s["before"], s["after"]) for s in owners.stretches] == [
+        ("zoom.exe", CODE.app, CODE.app),
+        ("ms-teams.exe", MAIL.app, MAIL.app),
+        ("yes", TRAINS.app, TRAINS.app),  # lunch
+        ("zoom.exe", TRAINS.app, TRAINS.app),  # cut by the app's close
+    ]
+    capsys.readouterr()
+    assert harness.main(["report", "--data", str(data)]) == 0
+    summary = capsys.readouterr().out
+    assert (
+        "Calls: 3 recorded; absences: 1 recorded. "
+        "Not checked by the owner yet (label --calls): they count as recorded."
+    ) in summary
+    assert "Asked for with Remind here: 2 alerts, never the judge's." in summary
+    assert (
+        "Shown under the threshold, by why: for Remind here 1, under a lowered threshold 1."
+    ) in summary
+    shown = (data / "report-2026-10-05.html").read_text(encoding="utf-8").split("<h2>")[1]
+    (trains,) = (row for row in shown.split("<tr>") if TRAINS.title in row and PAUSA[0] in row)
+    assert f'<span class="yes">{HARNESS.report.right}</span>' in trains  # Remind here's label
+
+    clock = SystemClock()
+    owners.mark(owners.stretches[1]["key"], True)
+    start, end = (f"{clock.local(T0 + minutes * MINUTE):%H:%M}" for minutes in (270, 290))
+    owners.add("call", "zoom.exe", start, end, clock)
+    owners.check(clock.local(T0 + 8 * HOUR_MS))
+    assert harness.main(["report", "--data", str(data)]) == 0
+    assert (
+        "Calls: 3 recorded, 1 marked wrong, 1 added; absences: 1 recorded, 0 marked wrong, "
+        "0 added. Checked by the owner."
+    ) in capsys.readouterr().out
+    detail = (data / "report-2026-10-05.html").read_text(encoding="utf-8")
+    texts = HARNESS.report
+    assert detail.count(texts.marked_wrong) == 1 and detail.count(texts.added) == 1
+    assert texts.requested.format(count=2) in detail
+    missed = detail.split(texts.units.format(count=1))[1]
+    assert f'<td class="number">{end}</td>' in missed and CALL_ENDS[0] in missed
+    assert harness.main(["replay", "--data", str(data)]) == 0  # by the owner's truth too
+
+
+def test_a_not_here_said_today_on_yesterdays_alert_counts_from_then(tmp_path: Path) -> None:
+    """The mail's reminder for tonight after 22 rang at 23:30 and went unanswered. It rings once
+    in its window, which runs past midnight, so at 00:10 it keeps quiet; at 00:20 the owner says
+    Not here on it from the tray list. The replay starts the day knowing that alert."""
+    clock = SimulatedClock(T0 - 11 * HOUR_MS, UTC)  # 2026-10-04 22:00
+    core = Reminders(FakeEngine(SITUATED), clock, lambda view: None, lambda view: None)
+    rang: list[int] = []
+
+    def owner(timeline: replay.Timeline, alert: Alert) -> None:
+        replay.passive(timeline, alert)
+        rang.append(alert.id)
+
+    def see(at: int, context: Context | None) -> None:
+        timeline.at(at, replay.observe(Observation(at, context)))
+
+    timeline = replay.Timeline(core, clock, owner)
+    tonight = replay.new_reminder("quando leggo la posta stasera dopo le 22", "rispondere")
+    timeline.at(clock.now(), tonight)
+    late = T0 - 9 * HOUR_MS - 30 * MINUTE  # 23:30
+    see(late, MAIL)
+    see(late + 10 * MINUTE, None)
+    morning = T0 - 9 * HOUR_MS + 10 * MINUTE  # 00:10 of the 5th
+    see(morning, MAIL)
+    timeline.at(morning + 10 * MINUTE, lambda core: core.not_here(rang[0]))
+    see(morning + 20 * MINUTE, None)
+    timeline.run(morning + 30 * MINUTE)
+    store = Store.open(tmp_path / "jiffin.db")
+    store.save(timeline.records)
+    log = store.log()
+    store.close()
+    day = days.select(log, None, SimulatedClock(T0, UTC))
+    assert (len(rang), day.alerts) == (1, ())  # quiet at 00:10, in the same unit
+    again = replay.Replay(log, day, zone=UTC).run()
+    assert uncached(again) == uncached(day)
+
+
+def test_the_replay_hears_only_the_situations_of_the_run_under_way(tmp_path: Path) -> None:
+    """Yesterday a call ended with nothing in front, so "quando finisco la call" did not ring,
+    and the app closed. Today the app starts again and hears the situations from its start: the
+    replay of today must not hear yesterday's end either, or it would ring for it."""
+    store = Store.open(tmp_path / "jiffin.db")
+    clock = SimulatedClock(YESTERDAY, UTC)
+    core = Reminders(FakeEngine(SITUATED), clock, lambda view: None, lambda view: None)
+    timeline = replay.Timeline(core, clock, replay.passive)
+
+    def situation(at: int, kind: Situation, values: frozenset[str] | None) -> None:
+        timeline.at(at, replay.observe(SituationObservation(at, kind, values)))
+
+    def starts(at: int) -> None:
+        for kind, value in ((Situation.AWAY, "no"), (Situation.POWER, "plugged")):
+            situation(at, kind, frozenset({value}))
+
+    for condition, action in (CALL_ENDS, MAIL_AFTER_CALL):
+        timeline.at(YESTERDAY, replay.new_reminder(condition, action))
+    starts(YESTERDAY)
+    situation(YESTERDAY + 10 * MINUTE, Situation.CALL, frozenset({"zoom.exe"}))
+    situation(YESTERDAY + 40 * MINUTE, Situation.CALL, frozenset())  # nothing in front
+    for kind in (Situation.AWAY, Situation.POWER, Situation.CALL):
+        situation(YESTERDAY + 60 * MINUTE, kind, None)  # the app closes
+    timeline.run(YESTERDAY + 60 * MINUTE)
+    store.save(timeline.records)
+    clock.advance(T0 - 5 * MINUTE - clock.now())
+    core = Reminders(
+        FakeEngine(SITUATED), clock, lambda view: None, lambda view: None, store.load()
+    )
+    timeline = replay.Timeline(core, clock, replay.passive)
+    starts(clock.now())
+    timeline.at(T0, replay.observe(Observation(T0, MAIL)))
+    timeline.at(T0 + 10 * MINUTE, replay.observe(Observation(T0 + 10 * MINUTE, None)))
+    timeline.run(T0 + 20 * MINUTE)
+    store.save(timeline.records)
+    log = store.log()
+    store.close()
+    day = days.select(log, None, SimulatedClock(T0, UTC))
+    assert day.alerts == ()
+    assert uncached(replay.Replay(log, day, zone=UTC).run()) == uncached(day)
 
 
 def test_a_replay_runs_again_from_the_start(recorded: tuple[Log, days.Day]) -> None:

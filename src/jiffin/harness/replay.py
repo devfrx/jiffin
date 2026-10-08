@@ -1,14 +1,16 @@
 """`replay`: a day of the log again through `core`, on simulated time (ADR-0017).
 
 The day's evaluated contexts come back as observations, each at the moment it came to the
-foreground, and the clock moves to each deadline in turn, so every evaluation happens at its
-exact time (pipeline.md). `core` starts from the state the log had when the day began; the
-reminders come, change and go as the log recorded them; the owner answers the alerts the log
-also had, after the same time on screen, and every other alert leaves the screen after 10 s.
-What changes is one thing at a time: the threshold, the reminders or the engine. Replayed at its
-own threshold with its own scores, a day gives its alerts back, those of the reminders with only
-a time too, which ring without being judged. From version 0.2 on, `core` judges with the return
-pause each evaluation recorded; a log of 0.1 is replayed with the default one.
+foreground, and the situations as the capture observed them, and the clock moves to each
+deadline in turn, so every evaluation happens at its exact time (pipeline.md). `core` starts
+from the state the log had when the day began; the reminders come, change and go as the log
+recorded them; the owner answers the alerts the log also had, after the same time on screen,
+says Remind here and withdraws answers when the log says, and every other alert leaves the
+screen after 10 s. What changes is one thing at a time: the threshold, the reminders or the
+engine. Replayed at its own threshold with its own scores, a day gives its alerts back, those of
+the reminders without a remainder too, which ring without being judged. From version 0.2 on,
+`core` judges with the return pause each evaluation recorded; a log of 0.1 is replayed with the
+default one.
 
 What the log does not keep is inferred from what it does:
 - when a context left, from version 0.2 on; before, a context seen twice in a row was left in
@@ -16,7 +18,9 @@ What the log does not keep is inferred from what it does:
 - a reminder's new text starts when it was made, from version 0.2 on; before, when the context
   of its first evaluation came to the foreground;
 - which Snooze answered an alert, from version 0.2 on; before, from when the reminder was last
-  judged snoozed and first judged free after it.
+  judged snoozed and first judged free after it;
+- when a situation stopped being read, from the stretches of the situations that always have a
+  value while read: one of them that ends with no other starting then.
 """
 
 import heapq
@@ -45,8 +49,10 @@ from jiffin.core.records import (
     Snooze,
 )
 from jiffin.core.reminders import THRESHOLD, Reminders, snooze_end
-from jiffin.harness.day import Day
+from jiffin.core.situations import Situation, SituationObservation, SituationStretch
+from jiffin.harness.day import Day, bounds
 from jiffin.harness.errors import HarnessError
+from jiffin.harness.truth import ALWAYS_VALUED, unread
 from jiffin.store.store import Log
 
 VANISH_MS = 10_000
@@ -194,6 +200,25 @@ def observations(evaluations: Iterable[Evaluation], left: Iterable[Left] = ()) -
     return found
 
 
+def situation_observations(stretches: Iterable[SituationStretch]) -> list[SituationObservation]:
+    """What the capture observed of the situations, from the stretches they gave: at each start
+    and end, the values of the situation then (ADR-0028). `core` counts the 5 s again, so they
+    give the same stretches. A situation not read any more ends no stretch as an end: it is not
+    read where one that always has a value ended with no other starting then, as at the app's
+    close."""
+    kinds: dict[Situation, list[SituationStretch]] = {}
+    for stretch in stretches:
+        kinds.setdefault(stretch.situation, []).append(stretch)
+    not_read = unread(stretch for found in kinds.values() for stretch in found)
+    seen: list[SituationObservation] = []
+    for kind, found in kinds.items():
+        for at in sorted({s.since for s in found} | {s.until for s in found}):
+            values = frozenset(s.value for s in found if s.since <= at < s.until)
+            read = bool(values) or (kind not in ALWAYS_VALUED and at not in not_read)
+            seen.append(SituationObservation(at, kind, values if read else None))
+    return sorted(seen, key=lambda observation: (observation.at, observation.situation))
+
+
 def new_reminder(condition: str, action: str) -> Command:
     def create(core: Reminders) -> None:
         core.create(condition, action)
@@ -201,7 +226,7 @@ def new_reminder(condition: str, action: str) -> Command:
     return create
 
 
-def observe(observation: Observation) -> Command:
+def observe(observation: Observation | SituationObservation) -> Command:
     return lambda core: core.observe(observation)
 
 
@@ -217,8 +242,9 @@ class Replay:
 
     Without `model` the scores are those the log keeps; with one, the engine judges and
     `rewrite` has it write every statement again. `extra` adds reminders, as (condition,
-    action), from the start of the day; `answers` replays the owner's answers. The times of the
-    reminders are read in `zone`: this machine's by default, where the app wrote its log.
+    action), from the start of the day; `answers` replays the owner's answers, to the alerts and
+    per place. The times of the reminders are read in `zone`: this machine's by default, where
+    the app wrote its log.
     """
 
     def __init__(
@@ -245,11 +271,12 @@ class Replay:
         self._seen = observations(day.evaluations, log.left)
         self._begin = self._seen[0].at - 1
         self._until = max(
-            *(evaluation.at for evaluation in day.evaluations),
-            *(alert.created_at for alert in day.alerts),
+            [evaluation.at for evaluation in day.evaluations]
+            + [alert.created_at for alert in (*day.alerts, *day.requested)]
         )
-        """The last evaluation, or a later alert of a reminder with only a time, which rings at
+        """The last evaluation, or a later alert of a reminder without a remainder, which rings at
         a deadline without one."""
+        self._situations = situation_observations(self._stretches())
         self._made_known = any(
             evaluation.return_pause is not None for evaluation in day.evaluations
         )
@@ -262,11 +289,12 @@ class Replay:
         """The replay's ids of the reminders the day created, by the log's ids."""
         self._recorded = {
             (a.reminder_id, a.context, a.created_at): a
-            for a in day.alerts
+            for a in (*day.alerts, *day.requested)
             if a.answer is not None and a.shown_at is not None and a.answered_at is not None
         }
         """The answered alerts, by reminder, context and when they were made: a reminder may
         alert twice in one stable context, before and after a snooze."""
+        self._unseen = self._unseen_at_start()
 
     def run(self) -> Day:
         """The day replayed; each run starts over."""
@@ -289,17 +317,19 @@ class Replay:
 
     def _start(self) -> Snapshot:
         reminders = []
-        for reminder in self._log.reminders:
-            if reminder.created_at < self._begin and not self._gone(reminder):
-                first = self._revisions(reminder)[0][1]
-                snoozed = self._snoozed_at_start(reminder)
-                reminders.append(
-                    replace(reminder, revision=first, completed_at=None, snoozed_until=snoozed)
-                )
+        for reminder in self._before():
+            first = self._revisions(reminder)[0][1]
+            snoozed = self._snoozed_at_start(reminder)
+            reminders.append(
+                replace(reminder, revision=first, completed_at=None, snoozed_until=snoozed)
+            )
         return Snapshot(
             reminders=tuple(reminders),
             answers=self._answers_at_start(),
             last_alerts=self._last_alerts(),
+            unseen=tuple(
+                replace(alert, answer=None, answered_at=None, snooze=None) for alert in self._unseen
+            ),
             last_ids=LastIds(
                 reminder=max((r.id for r in self._log.reminders), default=0),
                 revision=max(self._log.revisions, default=0),
@@ -308,8 +338,45 @@ class Replay:
             ),
         )
 
+    def _before(self) -> list[Reminder]:
+        """The reminders active when the day began."""
+        return [
+            reminder
+            for reminder in self._log.reminders
+            if reminder.created_at < self._begin and not self._gone(reminder)
+        ]
+
     def _gone(self, reminder: Reminder) -> bool:
         return reminder.completed_at is not None and reminder.completed_at < self._begin
+
+    def _stretches(self) -> list[SituationStretch]:
+        """The stretches of the situations from the start of the app's run under way when the
+        day began, which read them all from its start, to the day's last moment replayed."""
+        runs = [s.since for s in self._log.nothing_in_front if s.startup and s.since <= self._begin]
+        start = max(runs, default=None)
+        return [
+            stretch
+            for stretch in self._log.situations
+            if (start is None or stretch.since >= start) and stretch.since <= self._until
+        ]
+
+    def _unseen_at_start(self) -> list[Alert]:
+        """The alerts on the tray list when the day began, as the log has them: of each reminder
+        active then, its last alert before the day, if it was shown and not answered by then
+        (lifecycles.md). The newest first."""
+        active = {reminder.id for reminder in self._before()}
+        last: dict[int, Alert] = {}
+        for alert in self._log.alerts:  # the oldest first
+            if alert.created_at < self._begin and alert.reminder_id in active:
+                last[alert.reminder_id] = alert
+        return sorted(
+            (a for a in last.values() if a.shown_at is not None and not self._answered_before(a)),
+            key=lambda alert: alert.created_at,
+            reverse=True,
+        )
+
+    def _answered_before(self, alert: Alert) -> bool:
+        return alert.answered_at is not None and alert.answered_at < self._begin
 
     def _revisions(self, reminder: Reminder) -> list[tuple[int, Revision]]:
         """Its revisions over the day, each with when it took effect, the one in force when the
@@ -379,8 +446,7 @@ class Replay:
 
     def _answers_at_start(self) -> tuple[ContextAnswer, ...]:
         """What counted in each place when the day began: the last answer said there before it,
-        unless it was withdrawn (ADR-0029). During the day, the Not here of its alerts come again
-        with their answers; its other answers are not replayed."""
+        unless it was withdrawn (ADR-0029). The answers of the day come again at their time."""
         said: dict[tuple[int, Context], ContextAnswer] = {}
         for answer in self._log.answers:
             if answer.at < self._begin:
@@ -389,10 +455,12 @@ class Replay:
         return tuple(answer for answer in said.values() if answer.here is not Here.WITHDRAWN)
 
     def _last_alerts(self) -> tuple[tuple[int, int, int], ...]:
-        """For each reminder, its last alert before the day that counts: not answered Not here."""
+        """For each reminder, its last alert before the day that counts: not answered Not here by
+        then. One answered Not here during the day stops counting then, as `core` hears it."""
         last: dict[int, Alert] = {}
         for alert in self._log.alerts:
-            if alert.created_at < self._begin and alert.answer is not Answer.NOT_HERE:
+            silenced = alert.answer is Answer.NOT_HERE and self._answered_before(alert)
+            if alert.created_at < self._begin and not silenced:
                 kept = last.get(alert.reminder_id)
                 if kept is None or alert.created_at >= kept.created_at:
                     last[alert.reminder_id] = alert
@@ -413,7 +481,27 @@ class Replay:
             if reminder.completed_at is not None:
                 # A millisecond late, so that a replayed Done completes it first, as it did.
                 commands.append((reminder.completed_at + 1, self._complete(reminder.id)))
+        commands += [(observation.at, observe(observation)) for observation in self._situations]
         commands += [(observation.at, observe(observation)) for observation in self._seen]
+        if self._answers:
+            commands += self._said()
+        return commands
+
+    def _said(self) -> list[tuple[int, Command]]:
+        """What the owner said during the day that no alert of the day brings back: Remind here
+        and the withdrawals per place (ADR-0029), and the answers to alerts from before the day,
+        on the tray list. A Not here comes with its alert."""
+        commands: list[tuple[int, Command]] = []
+        for answer in self._log.answers:
+            if not self._begin <= answer.at <= self._until:
+                continue
+            if answer.here is Here.YES:
+                commands.append((answer.at, self._remind_here(answer.reminder_id, answer.context)))
+            elif answer.here is Here.WITHDRAWN:
+                commands.append((answer.at, self._withdraw(answer.reminder_id, answer.context)))
+        for alert in self._unseen:
+            if alert.answered_at is not None and alert.answered_at <= self._until:
+                commands.append((alert.answered_at, self._reply(alert.id, alert)))
         return commands
 
     def _pauses(self) -> list[tuple[int, Command]]:
@@ -446,6 +534,12 @@ class Replay:
 
     def _complete(self, log_id: int) -> Command:
         return lambda core: core.complete(self._ids.get(log_id, log_id))
+
+    def _remind_here(self, log_id: int, context: Context) -> Command:
+        return lambda core: core.remind_here(self._ids.get(log_id, log_id), context)
+
+    def _withdraw(self, log_id: int, context: Context) -> Command:
+        return lambda core: core.withdraw(self._ids.get(log_id, log_id), context)
 
     # The owner
 
@@ -504,13 +598,41 @@ class Replay:
     # The replayed day
 
     def _result(self, timeline: Timeline, start: Snapshot) -> Day:
+        """The replayed day, as `day.select` gives a day of the log: the alerts made in it, and
+        the answers from the log's first."""
         revisions = {reminder.revision.id: reminder.revision for reminder in start.reminders}
+        reminders = {reminder.id: reminder for reminder in start.reminders}
         alerts: dict[int, Alert] = {}
+        answers = [answer for answer in self._log.answers if answer.at < self._begin]
+        left: list[Left] = []
+        stretches: list[SituationStretch] = []
         for record in timeline.records:
-            if isinstance(record, Reminder):
-                revisions[record.revision.id] = record.revision
-            elif isinstance(record, Alert):
-                alerts[record.id] = record
+            match record:
+                case Reminder():
+                    revisions[record.revision.id] = record.revision
+                    reminders[record.id] = record
+                case Alert() if record.created_at >= self._begin:  # not those of the tray list
+                    alerts[record.id] = record
+                case ContextAnswer():
+                    answers.append(record)
+                case Left():
+                    left.append(record)
+                case SituationStretch():
+                    stretches.append(record)
+        start_of_day, end_of_day = bounds(self._day.day, self._calendar)
         return Day(
-            self._day.day, tuple(timeline.evaluations.values()), tuple(alerts.values()), revisions
+            self._day.day,
+            tuple(timeline.evaluations.values()),
+            tuple(alert for alert in alerts.values() if not alert.requested),
+            revisions,
+            requested=tuple(alert for alert in alerts.values() if alert.requested),
+            answers=tuple(answers),
+            situations=tuple(
+                sorted(
+                    (s for s in stretches if s.until > start_of_day and s.since < end_of_day),
+                    key=lambda s: (s.since, s.situation, s.value),
+                )
+            ),
+            left=tuple(left),
+            reminders=tuple(reminders.values()),
         )

@@ -1,3 +1,4 @@
+import re
 from collections.abc import Mapping
 from dataclasses import replace
 from datetime import UTC, date, datetime
@@ -20,9 +21,11 @@ from jiffin.core.records import (
     Waker,
 )
 from jiffin.core.reminders import Reminders
+from jiffin.core.situations import YES, Situation, SituationStretch
 from jiffin.harness import __main__ as harness
 from jiffin.harness import day as days
 from jiffin.harness import labels, monitor, report, sleeps, snapshot, statements
+from jiffin.harness.truth import Truth
 from jiffin.lang.harness import HARNESS
 from jiffin.store.store import Log, Store
 
@@ -185,6 +188,30 @@ def test_the_statements_page_shows_the_time_understood_and_the_remainder(tmp_pat
     assert "non capito: «verso sera»" in text
 
 
+def test_the_statements_page_shows_the_situations_understood(tmp_path: Path) -> None:
+    clock = SimulatedClock(T0, UTC)
+    core = Reminders(FakeModel(), clock, lambda view: None, lambda view: None)
+    core.create("quando finisco la call", "scrivere il riassunto")
+    core.create("quando torno e apro la posta", "rispondere a Rossi")
+    core.create("quando sono in call su Teams da più di 20 minuti", "bere")
+    core.create("se sono a batteria e leggo la posta", "attaccare il caricatore")
+    core.create("quando sono su YouTube da più di 20 minuti", "tornare al lavoro")
+    core.create("alle 15 se sto facendo una videochiamata", "chiamare Rossi")
+    store = Store.open(tmp_path / "jiffin.db")
+    store.save(core.take_records())
+    log = store.log()
+    store.close()
+    text = statements.page(log, tmp_path / "log.db", tmp_path, clock).read_text(encoding="utf-8")
+    cells = [cell.strip() for cell in re.findall(r"<td>(.*?)</td>", text, re.DOTALL)]
+    assert "quando finisce «in chiamata»" in cells
+    assert "quando finisce «lontano dal PC»" in cells
+    assert "«in chiamata su Microsoft Teams» da almeno 20 min" in cells
+    assert "a batteria" in cells and "da almeno 20 min" in cells
+    assert text.count("niente: solo orario o situazioni") == 2  # the first and the third
+    # A time understood, a situation not: the words not understood are told all the same.
+    assert "non capito: «videochiamata»" in text
+
+
 def test_the_summary_counts_the_alerts_with_only_a_time_apart(tmp_path: Path) -> None:
     summary = days.Summary(
         day=date(2026, 10, 5),
@@ -218,6 +245,63 @@ def test_the_summary_counts_the_alerts_with_only_a_time_apart(tmp_path: Path) ->
         "2 of reminders with only a time, right when their time is read right "
         "(the statements page shows it)."
     ) in text
+
+
+def test_the_summary_counts_the_alerts_on_situations_apart(tmp_path: Path) -> None:
+    summary = days.Summary(
+        day=date(2026, 10, 5),
+        evaluations=10,
+        judged=5,
+        failed=0,
+        hours=1.0,
+        reminders=3,
+        pauses=(),
+        shown=10,
+        time_only=1,
+        delays=(5.0,),
+        pairs=20,
+        labelled=20,
+        relevant=5,
+        missed={},
+        reminded={},
+        alerted=8,
+        false_alarms=3,
+        unlabelled=0,
+        situated=2,
+        situated_pairs=2,
+        situated_wrong=1,
+        misread=1,
+    )
+    labelled = labels.Labels(tmp_path / "labels.json", summary.day, [])
+    text = report.markdown(summary, labelled, None, sleeps.NOT_RECORDED, SimulatedClock(T0, UTC))
+    assert (
+        "Alerts shown: 10; 7 of them on 6 pairs: 4 right, 2 wrong, 1 of them on a situation "
+        "read wrong, 0 not labelled; 1 of reminders with only a time, right when their time is "
+        "read right (the statements page shows it); 2 of reminders without a remainder on "
+        "situations, on 2 pairs of a reminder and a unit of its situations: 1 right, 1 on a "
+        "situation read wrong."
+    ) in text
+
+
+def test_the_report_says_when_the_situations_were_not_recorded_or_held_no_call() -> None:
+    clock = SimulatedClock(T0, UTC)
+    icons = Revision(10, 1, 1, ICONS, "esportare le icone", ICONS, "Figma.", BUILD)
+    evaluation = Evaluation(1, T0 + 20_000, FIGMA, T0, 0.97, BUILD, ())
+    summary = days.summarize(
+        days.select(Log((), {10: icons}, (evaluation,), (), (), ()), None, clock), {}, clock
+    )
+    before = report.markdown(summary, None, None, sleeps.NOT_RECORDED, clock, Truth.of((), None))
+    assert (
+        "Situations: not recorded before 0.3; the reminders on them were never in their situation."
+    ) in before
+    recorded = replace(sleeps.NOT_RECORDED, recorded=True)
+    lunch = SituationStretch(Situation.AWAY, YES, T0, T0 + 900_000)
+    text = report.markdown(summary, None, None, recorded, clock, Truth.of((lunch,), None))
+    assert (
+        "Calls: 0 recorded; absences: 1 recorded. "
+        "Not checked by the owner yet (label --calls): they count as recorded."
+    ) in text
+    assert "No call in the day: the end of a call is not verified (ADR-0031)." in text
 
 
 def test_the_report_tells_the_pairs_kept_quiet_as_already_reminded_apart(tmp_path: Path) -> None:
