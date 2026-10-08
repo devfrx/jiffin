@@ -8,7 +8,7 @@ from PySide6.QtGui import QGuiApplication
 from pytestqt.qtbot import QtBot
 
 from jiffin.ui import win32
-from jiffin.ui.hotkey import KEY, MODIFIERS, Hotkey
+from jiffin.ui.hotkey import HERE, MODIFIERS, NEW, Hotkeys
 
 _kernel32 = ctypes.WinDLL("kernel32")
 _kernel32.GetCurrentThreadId.restype = wintypes.DWORD
@@ -25,15 +25,16 @@ TAKEN = 1409
 
 
 class Keys:
-    """What the hotkey asks of Windows, recorded instead of done, and what Windows answers."""
+    """What the shortcuts ask of Windows, recorded instead of done, and what Windows answers."""
 
     def __init__(self) -> None:
         self.calls: list[tuple[object, ...]] = []
-        self.error = 0
+        self.error: dict[int, int] = {}
+        """By key; 0 for the others."""
 
     def register(self, hotkey_id: int, modifiers: int, key: int) -> int:
         self.calls.append(("register", hotkey_id, modifiers, key))
-        return self.error
+        return self.error.get(key, 0)
 
     def unregister(self, hotkey_id: int) -> None:
         self.calls.append(("unregister", hotkey_id))
@@ -49,13 +50,13 @@ def keys(monkeypatch: pytest.MonkeyPatch) -> Keys:
 
 @pytest.fixture
 def presses(qapp: QGuiApplication, keys: Keys) -> Iterator[list[str]]:
-    """The shortcut, installed on the interface thread; each press is recorded."""
+    """The two shortcuts, installed on the interface thread; each press is recorded."""
     pressed: list[str] = []
-    hotkey = Hotkey(lambda: pressed.append("pressed"))
-    qapp.installNativeEventFilter(hotkey)
-    hotkey.register()
+    hotkeys = Hotkeys({NEW: lambda: pressed.append("new"), HERE: lambda: pressed.append("here")})
+    qapp.installNativeEventFilter(hotkeys)
+    hotkeys.register()
     yield pressed
-    qapp.removeNativeEventFilter(hotkey)
+    qapp.removeNativeEventFilter(hotkeys)
 
 
 def post(wparam: int) -> None:
@@ -64,40 +65,49 @@ def post(wparam: int) -> None:
     assert _user32.PostThreadMessageW(thread, win32.WM_HOTKEY, wparam, 0)
 
 
-def test_the_shortcut_is_win_shift_n(keys: Keys) -> None:
-    hotkey = Hotkey(lambda: None)
-    hotkey.register()
-    assert hotkey.registered
-    assert keys.calls == [("register", 1, win32.MOD_WIN | win32.MOD_SHIFT, ord("N"))]
-    assert (MODIFIERS, KEY) == (win32.MOD_WIN | win32.MOD_SHIFT, ord("N"))
-    hotkey.close()
-    assert keys.calls[1:] == [("unregister", 1)]
-    assert not hotkey.registered
+def test_the_shortcuts_are_win_shift_n_and_win_shift_q(keys: Keys) -> None:
+    hotkeys = Hotkeys({NEW: lambda: None, HERE: lambda: None})
+    hotkeys.register()
+    assert hotkeys.registered == {NEW, HERE}
+    win_shift = win32.MOD_WIN | win32.MOD_SHIFT
+    assert keys.calls == [
+        ("register", ord("N"), win_shift, ord("N")),
+        ("register", ord("Q"), win_shift, ord("Q")),
+    ]
+    assert MODIFIERS == win_shift
+    hotkeys.close()
+    assert keys.calls[2:] == [("unregister", ord("N")), ("unregister", ord("Q"))]
+    assert not hotkeys.registered
 
 
-def test_a_shortcut_another_app_holds_is_reported(
+def test_a_shortcut_another_app_holds_is_reported_and_the_other_works(
     keys: Keys, caplog: pytest.LogCaptureFixture
 ) -> None:
-    keys.error = TAKEN
-    hotkey = Hotkey(lambda: None)
+    keys.error = {HERE: TAKEN}
+    hotkeys = Hotkeys({NEW: lambda: None, HERE: lambda: None})
     with caplog.at_level(logging.WARNING):
-        hotkey.register()
-    assert not hotkey.registered
+        hotkeys.register()
+    assert hotkeys.registered == {NEW}
+    assert "Win+Shift+Q" in caplog.text
     assert "1409" in caplog.text
-    hotkey.close()
-    assert keys.calls == [("register", 1, MODIFIERS, KEY)]
+    hotkeys.close()
+    assert keys.calls[2:] == [("unregister", NEW)]
 
 
-def test_each_press_calls_back_on_the_interface_thread(qtbot: QtBot, presses: list[str]) -> None:
-    post(1)
-    qtbot.waitUntil(lambda: presses == ["pressed"])
-    post(1)
-    qtbot.waitUntil(lambda: presses == ["pressed", "pressed"])
+def test_each_press_calls_its_function_on_the_interface_thread(
+    qtbot: QtBot, presses: list[str]
+) -> None:
+    post(NEW)
+    qtbot.waitUntil(lambda: presses == ["new"])
+    post(HERE)
+    qtbot.waitUntil(lambda: presses == ["new", "here"])
+    post(HERE)
+    qtbot.waitUntil(lambda: presses == ["new", "here", "here"])
 
 
 def test_another_shortcut_of_the_thread_is_not_ours(qtbot: QtBot, presses: list[str]) -> None:
-    post(2)
     post(1)
-    qtbot.waitUntil(lambda: presses == ["pressed"])
+    post(NEW)
+    qtbot.waitUntil(lambda: presses == ["new"])
     qtbot.wait(100)
-    assert presses == ["pressed"]
+    assert presses == ["new"]

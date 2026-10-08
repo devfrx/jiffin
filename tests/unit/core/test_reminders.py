@@ -1201,17 +1201,19 @@ def test_remind_here_for_a_window_left_holds_from_the_next_time_there() -> None:
     assert not scene.alert().requested
 
 
-def test_remind_here_during_a_pause_holds_until_it_ends() -> None:
+def test_remind_here_during_a_pause_rings_at_once_as_asked() -> None:
+    """The pause holds the alerts that come uninvited (ADR-0024): this one was asked for."""
     scene = Scene()
     reminder = scene.create("quando apro Figma")
     scene.model.says(FIGMA, "quando apro Figma", 0.5)
     scene.stay(FIGMA)
     scene.reminders.pause(Pause.HOUR)
+    scene.wait(MINUTE_MS)
     scene.reminders.remind_here(reminder.id, FIGMA)
-    assert scene.view.visible == ()
+    assert scene.alert().requested
     scene.reminders.resume()
     scene.wait(DEBOUNCE_MS)
-    assert scene.outcomes() == [Outcome.ALERT]
+    assert scene.outcomes() == [Outcome.SAME_OCCASION]
 
 
 def test_remind_here_on_a_reminder_with_only_a_time_just_rings() -> None:

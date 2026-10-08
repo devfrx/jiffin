@@ -366,6 +366,28 @@ def test_alerts_stack_from_the_top_in_the_order_they_came(qtbot: QtBot, screen: 
     qtbot.waitUntil(stacked)
 
 
+def test_the_card_of_remind_here_goes_on_top_and_the_alerts_move_under_it_and_back(
+    qtbot: QtBot, screen: Screen
+) -> None:
+    card = QQuickWindow()
+    card.resize(540, 200)
+    screen.overlay.above(card)
+    assert (card.x(), card.y()) == top_centre(card)  # put in place before it shows
+    screen.show(alert(1), alert(2))
+    first, second = screen.window(1), screen.window(2)
+    card.show()
+    qtbot.waitUntil(lambda: first.y() == card.y() + card.height() + GAP)
+    assert second.y() == first.y() + first.height() + GAP
+    # An alert that comes while the card shows goes under it too.
+    screen.show(alert(1), alert(2), alert(3))
+    third = screen.window(3)
+    assert third.y() == second.y() + second.height() + GAP
+    card.hide()
+    qtbot.waitUntil(lambda: (first.x(), first.y()) == top_centre(first))
+    assert second.y() == first.y() + first.height() + GAP
+    card.destroy()
+
+
 def test_the_alerts_below_move_up_once_one_has_left(qtbot: QtBot, screen: Screen) -> None:
     screen.show(alert(1), alert(2), alert(3))
     screen.click(1, TEXTS.alert.done)

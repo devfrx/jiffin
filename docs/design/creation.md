@@ -1,7 +1,7 @@
 # Creating and editing a reminder
 
 How a reminder is written, in `jiffin.ui`. `ui/hotkey.py` registers the
-global shortcut, `ui/creation.py` holds the window's state, and
+global shortcuts, `ui/creation.py` holds the window's state, and
 `qml/CreationWindow.qml` draws it with our own `FluentTextBox`,
 `FluentCheckBox` and `FluentButton`. The behaviour comes from decision ticket
 [#12](https://github.com/devfrx/jiffin/issues/12), the shortcut from
@@ -14,16 +14,22 @@ global shortcut, `ui/creation.py` holds the window's state, and
 [#92](https://github.com/devfrx/jiffin/issues/92); the
 [mockup](mockups/creation.html) shows it in light and dark.
 
-## The shortcut
+## The shortcuts
 
 - **Win+Shift+N**, chosen by the owner in #43: N for "Nuovo". Apps rarely use
   Win combinations, and `RegisterHotKey` found it free on the owner's machine.
+  Its sibling **Win+Shift+Q**, Q for "qui", chosen in
+  [#126](https://github.com/devfrx/jiffin/issues/126), opens the card of
+  Remind here ([overlay](overlay.md)), as the tray list's row does.
 - Qt has no global shortcuts. `RegisterHotKey` has Windows post `WM_HOTKEY`
   to the interface thread whatever app has the focus, and a native event
-  filter picks it up; holding the keys down posts it once. The thread that
-  gets it may bring its own window to the front.
-- When another app holds the keys, the shortcut is not registered and the log
-  says so.
+  filter picks it up, one for both keys, each registered with its own code as
+  its id; holding the keys down posts it once. The thread that gets it may
+  bring its own window to the front.
+- When another app holds the keys, that shortcut is not registered and the log
+  says so; the other one works. Without Win+Shift+N the first run says that New
+  in the tray list writes a reminder, and without Win+Shift+Q the tray list's
+  row still opens the card.
 
 ## The window
 

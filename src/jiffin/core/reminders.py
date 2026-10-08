@@ -529,14 +529,15 @@ class Reminders:
         """Remind here, "qui dovevi avvisarmi" (ADR-0029): the reminder is true in this exact
         context until its text changes, and takes the place of a Not here said there. If the
         context is still in front it rings at once, as asked: also when it rang already in its
-        unit, was snoozed or out of its time. Otherwise the yes holds from the next time there.
-        A reminder with only a time just rings: there is nothing to learn."""
+        unit, was snoozed or out of its time, and during a pause, which holds only the alerts
+        that come uninvited (ADR-0024). Otherwise the yes holds from the next time there. A
+        reminder with only a time just rings: there is nothing to learn."""
         reminder = self._reminders.get(reminder_id)
         if reminder is None or reminder.completed_at is not None:
             return
         if reminder.revision.remainder:
             self._say(reminder_id, context, Here.YES)
-        if self._paused_until is None and context == self._front:
+        if context == self._front:
             self._ring_requested(reminder, context)
         self._publish()
 

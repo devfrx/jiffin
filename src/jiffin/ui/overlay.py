@@ -4,6 +4,7 @@ each with Snooze's menu, a window of its own (#83).
 `core` says which alerts are on screen; the overlay gives each one a window, stacked from the
 top in the order they came, and the others move up once one has left. An alert answered here
 never comes back, even if a view from before the answer arrives after its window has left.
+While the card of Remind here shows, it is at the top and the alerts under it (ADR-0029).
 
 Alerts and menus come uninvited, so they are kept out of screen capture while they show
 (ADR-0024). A menu never takes the focus, and hears of no click elsewhere: while one is open the
@@ -51,6 +52,8 @@ class Overlay(QObject):
         self._view = AlertsView((), 0, ())
         self._finished: set[int] = set()
         """Alerts answered or vanished here, until `core` stops showing them."""
+        self._above: QQuickWindow | None = None
+        """The card of Remind here."""
         self._watch = QTimer(self, interval=WATCH_MS)
         self._watch.timeout.connect(self._watched)
         self._pressed = False
@@ -71,7 +74,7 @@ class Overlay(QObject):
             # The slot goes with its window, after the bindings of the window and of its menu,
             # which goes with it: none reads a null slot.
             slot.setParent(window)
-            window.heightChanged.connect(self._layout)
+            window.heightChanged.connect(self.layout)
             slot.leaving.connect(lambda slot=slot: self._leaving(slot))
             slot.changed.connect(lambda slot=slot: self._menu(slot))
             glass.add(int(window.winId()))
@@ -99,7 +102,7 @@ class Overlay(QObject):
                 return  # a window is still leaving: the alert comes once it has left
             slot.present(alert)
             self._order.append(slot)
-            self._layout()
+            self.layout()
             self._appear(self._windows[slot])
 
     def _leaving(self, slot: AlertSlot) -> None:
@@ -109,12 +112,28 @@ class Overlay(QObject):
     def _left(self, slot: AlertSlot) -> None:
         self._vanish(self._windows[slot])
         self._order.remove(slot)
-        self._layout()
+        self.layout()
         self._place()
 
-    def _layout(self) -> None:
+    def above(self, window: QQuickWindow) -> None:
+        """Hold the card of Remind here at the top centre: while it shows, the alerts on screen
+        move down under it, and back up once it hides."""
+        self._above = window
+        window.heightChanged.connect(self.layout)
+        window.visibleChanged.connect(self.layout)
+        self.layout()
+
+    def layout(self) -> None:
+        """Put the windows in place: at each alert that comes or leaves, and before the card
+        shows, since the work area may have moved."""
         screen = QGuiApplication.primaryScreen().availableGeometry()
         y = screen.y() + TOP
+        above = self._above
+        if above is not None:
+            # Also while hidden, so that it shows in its place.
+            above.setPosition(screen.x() + (screen.width() - above.width()) // 2, y)
+            if above.isVisible():
+                y += above.height() + GAP
         for slot in self._order:
             window = self._windows[slot]
             window.setPosition(screen.x() + (screen.width() - window.width()) // 2, y)

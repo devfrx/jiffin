@@ -20,12 +20,13 @@ from typing import Protocol
 from jiffin.client.supervisor import State, Status, Supervisor
 from jiffin.core.alerts import AlertsView
 from jiffin.core.clock import Clock
-from jiffin.core.context import Observation
+from jiffin.core.context import Context, Observation
 from jiffin.core.records import Snooze
 from jiffin.core.reminders import (
     LONGEST_RETURN_PAUSE_MS,
     RETURN_PAUSE_MS,
     SHORTEST_RETURN_PAUSE_MS,
+    HereView,
     Pause,
     Reminders,
     RemindersView,
@@ -333,10 +334,12 @@ class Worker:
 
 class QueuedCore:
     """`core.Reminders` as the interface sees it: each command goes on the worker's queue, and the
-    interface does not wait for it (ADR-0012)."""
+    interface does not wait for it (ADR-0012). What the card of Remind here shows goes to
+    `on_here`, on the worker thread, as `core`'s views do."""
 
-    def __init__(self, worker: Worker) -> None:
+    def __init__(self, worker: Worker, on_here: Callable[[HereView], None]) -> None:
         self._worker = worker
+        self._on_here = on_here
 
     def done(self, alert_id: int) -> None:
         self._worker.command(lambda core: core.done(alert_id))
@@ -367,3 +370,15 @@ class QueuedCore:
 
     def delete(self, reminder_id: int) -> None:
         self._worker.command(lambda core: core.delete(reminder_id))
+
+    def here(self) -> None:
+        self._worker.command(lambda core: self._on_here(core.here()))
+
+    def remind_here(self, reminder_id: int, context: Context) -> None:
+        self._worker.command(lambda core: core.remind_here(reminder_id, context))
+
+    def withdraw(self, reminder_id: int, context: Context) -> None:
+        self._worker.command(lambda core: core.withdraw(reminder_id, context))
+
+    def withdraw_all(self, reminder_id: int) -> None:
+        self._worker.command(lambda core: core.withdraw_all(reminder_id))

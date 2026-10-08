@@ -96,9 +96,10 @@ its time. It counts in its unit and starts a true stretch at its time, ended at
 once unless its context is the stable one, so that coming back right after the
 card rings no second alert. "In front" is the last context in front for the
 reminders: Jiffin's windows, which the capture observes as no context, do not
-take it away; during the pause nothing is in front, and the yes rings at its
-end like any alert. A context no longer in front waits for the next time
-there.
+take it away, nor does a pause, which holds only the alerts that come
+uninvited ([ADR-0024](../adr/0024-hold-and-hide-alerts.md)): a Remind here
+during a pause rings at once. A context no longer in front waits for the next
+time there.
 
 ## Driving `Reminders`
 

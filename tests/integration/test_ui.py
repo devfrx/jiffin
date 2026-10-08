@@ -1,12 +1,13 @@
 """The interface on the real screen, while the user types in another app: the alerts never
-take the focus (#31, ADR-0009), and the shortcut brings the creation window to the front (#43).
+take the focus (#31, ADR-0009), and the shortcuts bring the creation window (#43) and the card
+of Remind here (ADR-0029) to the front, which gives the focus back when it closes.
 
 These tests run only on the owner's machine. `uv run pytest -m integration
 tests/integration/test_ui.py` opens a window with a text box in front of everything, then
 for about two minutes shows alerts, types in the box, moves the mouse over the alerts and
-clicks their buttons, and presses Win+Shift+N to write a reminder. Leave the computer alone
-meanwhile, and any window or dialog that shows up too: a click anywhere moves the focus, which
-is what these tests watch.
+clicks their buttons, presses Win+Shift+N to write a reminder, and Win+Shift+Q to pick one.
+Leave the computer alone meanwhile, and any window or dialog that shows up too: a click
+anywhere moves the focus, which is what these tests watch.
 """
 
 import ctypes
@@ -18,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from PySide6.QtCore import QPointF
+from PySide6.QtCore import QPointF, QTimer
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlProperty, qmlContext
 from PySide6.QtQuick import QQuickItem, QQuickWindow
@@ -26,9 +27,10 @@ from pytestqt.qtbot import QtBot
 
 from jiffin.core.alerts import AlertsView
 from jiffin.core.context import Context
-from jiffin.core.records import Alert, Revision, Snooze
-from jiffin.core.reminders import Pause
+from jiffin.core.records import Alert, Outcome, Reminder, Revision, Snooze
+from jiffin.core.reminders import HereReminder, HereView, Pause
 from jiffin.lang.texts import TEXTS
+from jiffin.ui import hotkey
 from jiffin.ui.alert import AlertSlot
 from jiffin.ui.first_run import ModelFile
 from jiffin.ui.interface import Interface
@@ -132,7 +134,7 @@ for _name, (_result, _arguments) in _USER32.items():
 
 _INPUT_MOUSE, _INPUT_KEYBOARD = 0, 1
 _KEYEVENTF_KEYUP, _KEYEVENTF_UNICODE = 0x0002, 0x0004
-_VK_TAB, _VK_RETURN, _VK_SHIFT, _VK_LWIN = 0x09, 0x0D, 0x10, 0x5B
+_VK_TAB, _VK_RETURN, _VK_SHIFT, _VK_DOWN, _VK_LWIN = 0x09, 0x0D, 0x10, 0x28, 0x5B
 _MOUSEEVENTF_MOVE, _MOUSEEVENTF_LEFTDOWN, _MOUSEEVENTF_LEFTUP = 0x0001, 0x0002, 0x0004
 _MOUSEEVENTF_VIRTUALDESK, _MOUSEEVENTF_ABSOLUTE = 0x4000, 0x8000
 _SM_XVIRTUALSCREEN, _SM_YVIRTUALSCREEN = 76, 77
@@ -285,11 +287,28 @@ class Desk:
 
 class Core:
     """What the interface asks of `core`, in order: the answers given on screen, (what, alert
-    id[, snooze]), and the reminders changed there, (what, reminder id or texts)."""
+    id[, snooze]), and the reminders changed there, (what, reminder id or texts). The card of
+    Remind here gets `view`, on the next turn of the loop, as from the worker."""
 
     def __init__(self) -> None:
         self.given: list[tuple[object, ...]] = []
         self.made: list[tuple[object, ...]] = []
+        self.view = HereView(None)
+        self.interface: Interface | None = None
+
+    def here(self) -> None:
+        interface, view = self.interface, self.view
+        assert interface is not None
+        QTimer.singleShot(0, lambda: interface.show_here(view))
+
+    def remind_here(self, reminder_id: int, context: Context) -> None:
+        self.given.append(("remind_here", reminder_id, context))
+
+    def withdraw(self, reminder_id: int, context: Context) -> None:
+        self.made.append(("withdraw", reminder_id, context))
+
+    def withdraw_all(self, reminder_id: int) -> None:
+        self.made.append(("withdraw_all", reminder_id))
 
     def done(self, alert_id: int) -> None:
         self.given.append(("done", alert_id))
@@ -354,6 +373,7 @@ class Screen:
         self.core = Core()
         model = ModelFile("model.gguf", "https://example.org/model.gguf", 1, "0" * 64, tmp)
         self.interface = Interface(app, self.core, Upkeep(), model)
+        self.core.interface = self.interface
 
     def show(self, *alert_ids: int) -> None:
         alerts = tuple(alert(alert_id) for alert_id in alert_ids)
@@ -376,6 +396,13 @@ class Screen:
                 assert isinstance(window, QQuickWindow)
                 return window
         raise LookupError("no creation window")
+
+    def card(self) -> QQuickWindow:
+        for window in QGuiApplication.topLevelWindows():
+            if window.title() == TEXTS.remind_here.title:
+                assert isinstance(window, QQuickWindow)
+                return window
+        raise LookupError("no card of Remind here")
 
 
 def alert(alert_id: int) -> Alert:
@@ -552,7 +579,7 @@ def test_three_alerts_vanish_on_their_own_and_leave_the_focus_alone(
 def test_the_shortcut_brings_the_creation_window_over_another_app(
     qtbot: QtBot, screen: Screen, desk: Desk
 ) -> None:
-    assert screen.interface.hotkey.registered, "another app holds Win+Shift+N"
+    assert hotkey.NEW in screen.interface.hotkeys.registered, "another app holds Win+Shift+N"
     window = screen.creation()
     desk.type("prima ", "before the shortcut")
     press(_VK_LWIN, _VK_SHIFT, ord("N"))
@@ -568,6 +595,38 @@ def test_the_shortcut_brings_the_creation_window_over_another_app(
     qtbot.wait(300)
     desk.check("creation window closed")
     desk.type("dopo ", "after the creation window")
+    qtbot.wait(200)
+    assert desk.moves == []
+    assert desk.text() == desk.typed
+
+
+@pytest.mark.integration
+def test_the_shortcut_brings_the_card_of_remind_here_over_another_app_and_gives_it_back(
+    qtbot: QtBot, screen: Screen, desk: Desk
+) -> None:
+    assert hotkey.HERE in screen.interface.hotkeys.registered, "another app holds Win+Shift+Q"
+    place = Context("figma.exe", "Icone - Figma", None)
+    first, second = alert(1), alert(2)
+    screen.core.view = HereView(
+        place,
+        (
+            HereReminder(Reminder(1, 0, first.revision), None),
+            HereReminder(Reminder(2, 0, second.revision), Outcome.SNOOZED),
+        ),
+    )
+    desk.type("prima ", "before the shortcut")
+    press(_VK_LWIN, _VK_SHIFT, ord("Q"))
+    card = screen.card()
+    qtbot.waitUntil(lambda: foreground() == int(card.winId()))
+    press(_VK_DOWN)
+    press(_VK_DOWN)
+    press(_VK_RETURN)
+    qtbot.waitUntil(lambda: not card.isVisible())
+    assert screen.core.given[-1] == ("remind_here", 2, place)
+    qtbot.waitUntil(lambda: foreground() == desk.window)
+    qtbot.wait(300)
+    desk.check("card closed")
+    desk.type("dopo ", "after the card")
     qtbot.wait(200)
     assert desk.moves == []
     assert desk.text() == desk.typed

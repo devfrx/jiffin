@@ -18,7 +18,14 @@ from jiffin.core.clock import SimulatedClock
 from jiffin.core.context import Context
 from jiffin.core.meanings import read
 from jiffin.core.records import Alert, Here, Reminder, Revision, Snooze
-from jiffin.core.reminders import HOUR_MS, MINUTE_MS, ActiveReminder, Place, RemindersView
+from jiffin.core.reminders import (
+    HOUR_MS,
+    MINUTE_MS,
+    ActiveReminder,
+    HereView,
+    Place,
+    RemindersView,
+)
 from jiffin.lang.texts import TEXTS
 from jiffin.ui import tray_list, win32
 from jiffin.ui.first_run import FirstRun, ModelFile, ModelState
@@ -26,6 +33,7 @@ from jiffin.ui.glass import Glass
 from jiffin.ui.look import Look, Settings
 from jiffin.ui.places import Places
 from jiffin.ui.preferences import Preferences
+from jiffin.ui.remind_here import RemindHere
 from jiffin.ui.rows import Rows
 from jiffin.ui.tray_list import MARGIN, REOPEN_MS, TrayList
 
@@ -79,6 +87,37 @@ class Commands:
 
     def seen(self) -> None:
         self.sent.append(("seen",))
+
+    def withdraw(self, reminder_id: int, context: Context) -> None:
+        self.sent.append(("withdraw", reminder_id, context))
+
+    def withdraw_all(self, reminder_id: int) -> None:
+        self.sent.append(("withdraw_all", reminder_id))
+
+
+class Asked:
+    """What the card of Remind here asked of `core`: how many times what it shows, and each
+    Remind here."""
+
+    def __init__(self) -> None:
+        self.times = 0
+        self.reminded: list[tuple[int, Context]] = []
+
+    def here(self) -> None:
+        self.times += 1
+
+    def remind_here(self, reminder_id: int, context: Context) -> None:
+        self.reminded.append((reminder_id, context))
+
+
+class Stacked:
+    """The overlay, for the card: nothing to stack it over in these tests."""
+
+    def above(self, window: QQuickWindow) -> None:
+        pass
+
+    def layout(self) -> None:
+        pass
 
 
 class Writer:
@@ -236,10 +275,15 @@ class Screen:
             Glass(self.look),
             Places(lambda places: None),
         )
+        self.asked = Asked()
+        self.remind_here = RemindHere(
+            self.engine, self.asked, Stacked(), Glass(self.look), self.clock
+        )
         self.list = TrayList(
             self.engine,
             self.commands,
             self.writer,
+            self.remind_here,
             self._retry,
             self._resume,
             self.first_run,
@@ -296,10 +340,12 @@ class Screen:
         return [item for item in shown(self.window) if accessible(item, "name") == name]
 
     def click(self, name: str, row: str | None = None) -> None:
+        self.click_item(self.button(name, row))
+
+    def click_item(self, button: QQuickItem) -> None:
         """Click the button once the window's scene holds it. The scene takes the window's new
         height through the event queue, and QTest's click skips the queue: after a row grows,
         it would land below the scene, on nothing."""
-        button = self.button(name, row)
 
         def centre() -> QPointF:
             return button.mapToScene(QPointF(button.width() / 2, button.height() / 2))
@@ -509,12 +555,127 @@ def test_the_active_reminders_show_newest_first_with_their_state(screen: Screen)
         "Rimandato: torna tra 12 min",
         "Rispondere a Giulia",
         "Quando apro la posta",
-        "Taciuto in 2 posti",
         "Pagare l'F24",
         "Se sono sul sito della banca",
-        "Rimandato: torna alle 11:00 · Taciuto in 1 posto",
+        "Rimandato: torna alle 11:00",
         PAUSE,
     ]
+    # What they learned, under them, opens their places (ADR-0029).
+    assert len(screen.named("Taciuto in 2 posti")) == 1
+    assert len(screen.named("Taciuto in 1 posto")) == 1
+
+
+MAIL = Context("vivaldi.exe", "Preventivi", "mail.google.com/mail/u/0")
+ROSSI = Context("code.exe", "changelog.md - rossi", None)
+TEAMS = Context("ms-teams.exe", "Chat con Marco", None)
+
+
+LEARNED = "Taciuto in 1 posto · Chiesto in 2 posti · Più attento"
+PLACES = ["changelog.md - rossi", "Chat con Marco", "Preventivi · mail.google.com"]
+
+
+def learned() -> ActiveReminder:
+    """A reminder Remind here asked in two places, the last first, and Not here silenced in one,
+    whose threshold went down (ADR-0029)."""
+    figma = active(1, "quando lavoro al progetto Rossi", "aggiornare il changelog")
+    places = (Place(ROSSI, Here.YES), Place(TEAMS, Here.NO), Place(MAIL, Here.YES))
+    return replace(figma, places=places, attentive=True)
+
+
+def open_places(qtbot: QtBot, screen: Screen) -> None:
+    """A click on what the reminder learned; its places are in place once the rows under them
+    have moved down, through the event queue."""
+    screen.click(LEARNED)
+    qtbot.waitUntil(lambda: screen.lines()[-4:-1] == PLACES)
+
+
+def test_the_row_at_the_top_writes_the_place_core_gives_each_time_the_list_opens(
+    screen: Screen,
+) -> None:
+    screen.open()
+    assert screen.asked.times == 1
+    [row] = screen.named(TEXTS.remind_here.title)
+    assert accessible(row, "description") == ""  # no place yet: only its name
+    screen.remind_here.show(HereView(MAIL))
+    assert accessible(row, "description") == "Preventivi · mail.google.com"
+    texts = [item.property("text") for item in items(row) if item.inherits("QQuickText")]
+    assert texts[1:3] == ["Qui dovevi avvisarmi", "Preventivi · mail.google.com"]
+    screen.press(Qt.Key.Key_Escape)
+    screen.open()
+    assert screen.asked.times == 2
+
+
+def test_the_row_at_the_top_opens_the_card_and_closes_the_list(screen: Screen) -> None:
+    screen.open()
+    screen.click(TEXTS.remind_here.title)
+    assert not screen.window.isVisible()
+    assert screen.asked.times == 2  # the list's, then the card's
+    screen.remind_here.show(HereView(MAIL))
+    assert screen.window_titled(TEXTS.remind_here.title).isVisible()
+
+
+def test_what_a_reminder_learned_shows_under_it_and_opens_its_places(
+    qtbot: QtBot, screen: Screen
+) -> None:
+    screen.list.show_reminders(RemindersView((learned(),)))
+    screen.open()
+    assert len(screen.named(LEARNED)) == 1
+    assert "Preventivi · mail.google.com" not in screen.lines()
+    # The last answered first, each with its bell, struck where Not here silenced it.
+    open_places(qtbot, screen)
+    bells = [
+        str(item.property("text"))
+        for item in shown(screen.window)
+        if item.inherits("QQuickText") and str(item.property("text")) in ("", "")
+    ]
+    assert bells[1:] == ["", "", ""]  # after the row of Remind here's
+    assert [
+        accessible(button, "description") for button in screen.named(TEXTS.tray_list.forget)
+    ] == PLACES
+    screen.click(LEARNED)
+    assert "Chat con Marco" not in screen.lines()
+
+
+def test_a_places_x_forgets_it_there_and_dimentica_tutto_forgets_everything(
+    qtbot: QtBot, screen: Screen
+) -> None:
+    screen.list.show_reminders(RemindersView((learned(),)))
+    screen.open()
+    open_places(qtbot, screen)
+    screen.click_item(screen.named(TEXTS.tray_list.forget)[1])
+    assert screen.commands.sent == [("withdraw", 1, TEAMS)]
+    screen.click(TEXTS.tray_list.forget_all)
+    assert screen.commands.sent == [("withdraw", 1, TEAMS), ("withdraw_all", 1)]
+    # What `core` says next: the place gone, the line and the places with it.
+    screen.list.show_reminders(RemindersView((replace(learned(), places=(), attentive=False),)))
+    assert screen.named(TEXTS.tray_list.forget_all) == []
+    assert screen.lines()[-3:-1] == ["Aggiornare il changelog", "Quando lavoro al progetto Rossi"]
+
+
+def test_the_places_close_when_the_list_opens_again(qtbot: QtBot, screen: Screen) -> None:
+    screen.list.show_reminders(RemindersView((learned(),)))
+    screen.open()
+    open_places(qtbot, screen)
+    assert len(screen.named(TEXTS.tray_list.forget)) == 3
+    screen.press(Qt.Key.Key_Escape)
+    screen.open()
+    assert screen.named(TEXTS.tray_list.forget) == []
+
+
+def test_the_learned_line_and_the_places_are_reached_by_tab(screen: Screen) -> None:
+    screen.list.show_reminders(RemindersView((learned(),)))
+    screen.open()
+    for _ in range(4):
+        screen.press(Qt.Key.Key_Tab)
+    assert screen.focused() == (LEARNED, "Aggiornare il changelog")
+    screen.press(Qt.Key.Key_Return)
+    screen.press(Qt.Key.Key_Tab)
+    assert screen.focused() == (TEXTS.tray_list.forget, "changelog.md - rossi")
+    for _ in range(3):
+        screen.press(Qt.Key.Key_Tab)
+    assert screen.focused() == (TEXTS.tray_list.forget_all, "Aggiornare il changelog")
+    screen.press(Qt.Key.Key_Space)
+    assert screen.commands.sent[-1] == ("withdraw_all", 1)
 
 
 def test_a_reminder_shows_its_condition_without_the_time_and_the_time_written_for_today(
@@ -856,7 +1017,7 @@ def test_esc_closes_the_menu_before_the_list(screen: Screen) -> None:
 def test_the_menu_by_keyboard(screen: Screen) -> None:
     screen.list.show_alerts(AlertsView((), 0, (unseen(8, F24, at(1, 9, 31)),)))
     screen.open()
-    for _ in range(3):
+    for _ in range(4):
         screen.press(Qt.Key.Key_Tab)
     assert screen.focused() == (TEXTS.alert.snooze, "")
     # Opened by the keyboard, on its first item, with WinUI's focus ring.
@@ -880,7 +1041,7 @@ def test_tab_moving_on_closes_the_menu(screen: Screen) -> None:
     screen.list.show_alerts(AlertsView((), 0, (unseen(8, F24, at(1, 9, 31)),)))
     screen.list.show_reminders(RemindersView((active(1, "quando apro Figma", "esportare"),)))
     screen.open()
-    for _ in range(3):
+    for _ in range(4):
         screen.press(Qt.Key.Key_Tab)
     screen.press(Qt.Key.Key_Space)
     assert screen.menu.isVisible()
@@ -979,7 +1140,7 @@ def test_elimina_asks_by_keyboard_too_and_annulla_comes_first(screen: Screen) ->
         RemindersView((active(1, "quando apro Figma", "esportare le icone"),))
     )
     screen.open()
-    for _ in range(4):
+    for _ in range(5):
         screen.press(Qt.Key.Key_Tab)
     assert screen.focused() == (TEXTS.tray_list.delete, "Esportare le icone")
     screen.press(Qt.Key.Key_Return)
@@ -1012,11 +1173,12 @@ def test_tab_goes_from_button_to_button_and_keeps_its_place_while_rows_come(
     screen.list.show_reminders(RemindersView((figma,)))
     screen.open()
     order = []
-    for _ in range(7):
+    for _ in range(8):
         screen.press(Qt.Key.Key_Tab)
         order.append(screen.focused())
     assert order == [
         (TEXTS.tray_list.new, ""),
+        (TEXTS.remind_here.title, ""),
         (TEXTS.alert.done, ""),
         (TEXTS.alert.snooze, ""),
         (TEXTS.tray_list.complete, "Esportare le icone"),
@@ -1039,7 +1201,7 @@ def test_a_long_list_scrolls_to_the_button_tab_reaches(screen: Screen) -> None:
     screen.open()
     area = QGuiApplication.primaryScreen().availableGeometry()
     assert screen.window.height() == area.height() - 2 * MARGIN
-    for _ in range(1 + 3 * 40):
+    for _ in range(2 + 3 * 40):
         screen.press(Qt.Key.Key_Tab)
     assert screen.focused() == (TEXTS.tray_list.delete, "Chiudere il ticket 1")
     button = screen.window.activeFocusItem()
@@ -1236,6 +1398,7 @@ def test_the_list_goes_with_the_engine_and_no_binding_reads_it_gone(
         engine,
         Commands(),
         Writer(),
+        RemindHere(engine, Asked(), Stacked(), Glass(look), clock),
         lambda: None,
         lambda: None,
         first_run,

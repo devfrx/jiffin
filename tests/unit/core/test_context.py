@@ -75,3 +75,19 @@ def test_without_an_address_the_context_is_app_and_title() -> None:
     unreadable = normalize("chrome.exe", "Progetto Rossi - Google Chrome", None)
     assert unreadable == Context("chrome.exe", "Progetto Rossi", None)
     assert unreadable != normalize("chrome.exe", "Progetto Rossi", "github.com/rossi")
+
+
+@pytest.mark.parametrize(
+    ("address", "site"),
+    [
+        ("meet.google.com/abc-defg-hij", "meet.google.com"),
+        ("localhost:8080/call", "localhost"),
+        ("[::1]:8443/call", "::1"),
+        ("Teams.Microsoft.com/v2", "teams.microsoft.com"),
+        ("[::1/call", None),
+        (None, None),
+    ],
+    ids=["path", "port", "ipv6", "upper case", "refused", "no address"],
+)
+def test_the_site_is_the_host_of_the_address(address: str | None, site: str | None) -> None:
+    assert Context("chrome.exe", "Chiamata", address).site == site

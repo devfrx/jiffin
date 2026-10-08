@@ -1,7 +1,11 @@
-"""The tray list: the pause from the tray, what keeps Jiffin from working fully, the alerts that
-vanished unanswered, the active reminders and the return pause (#12, #43, #84, ADR-0010,
-ADR-0024). The model file on its way is one of the first: its line shows the download or the
-problem, and Details opens the first-run window.
+"""The tray list: the row of Remind here, the pause from the tray, what keeps Jiffin from working
+fully, the alerts that vanished unanswered, the active reminders and the return pause (#12, #43,
+#84, ADR-0010, ADR-0024). The model file on its way is one of the first: its line shows the
+download or the problem, and Details opens the first-run window.
+
+The row at the top opens the card of Remind here, with the place under it, asked of `core` each
+time the list opens (ADR-0029). Under a reminder that learned something, a line says so and
+opens the places of its answers, each with an X that forgets it, then Forget all.
 
 A card on the alerts' material, at the bottom right of the screen over the tray. The tray icon
 opens it, and it takes the focus; Esc, its X or a click elsewhere closes it. It drags, and opens
@@ -33,16 +37,18 @@ from PySide6.QtQuick import QQuickWindow
 
 from jiffin.core.alerts import AlertsView
 from jiffin.core.clock import Clock
-from jiffin.core.records import Alert, Revision, Snooze
-from jiffin.core.reminders import MINUTE_MS, ActiveReminder, RemindersView
+from jiffin.core.context import Context
+from jiffin.core.records import Alert, Here, Revision, Snooze
+from jiffin.core.reminders import MINUTE_MS, ActiveReminder, Place, RemindersView
 from jiffin.core.schedule import jiffin_day
 from jiffin.core.units import ended, next_occasion
 from jiffin.ui import catalog  # noqa: F401  # Catalog, which Texts.qml reads
 from jiffin.ui.first_run import FirstRun
 from jiffin.ui.glass import Glass
 from jiffin.ui.preferences import Preferences
+from jiffin.ui.remind_here import RemindHere
 from jiffin.ui.rows import Row, Rows
-from jiffin.ui.words import appeared, dated, sentence, when
+from jiffin.ui.words import appeared, dated, place, sentence, when
 
 QML_IMPORT_NAME = "Jiffin"
 QML_IMPORT_MAJOR_VERSION = 1
@@ -66,6 +72,8 @@ class Commands(Protocol):
     def complete(self, reminder_id: int) -> None: ...
     def delete(self, reminder_id: int) -> None: ...
     def seen(self) -> None: ...
+    def withdraw(self, reminder_id: int, context: Context) -> None: ...
+    def withdraw_all(self, reminder_id: int) -> None: ...
 
 
 class Writer(Protocol):
@@ -106,6 +114,7 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         engine: QQmlEngine,
         commands: Commands,
         writer: Writer,
+        remind_here: RemindHere,
         retry: Callable[[], None],
         resume: Callable[[], None],
         first_run: FirstRun,
@@ -118,6 +127,7 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         super().__init__(engine)
         self._commands = commands
         self._writer = writer
+        self._remind_here = remind_here
         self._retry = retry
         self._resume = resume
         self._first_run = first_run
@@ -152,9 +162,15 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
                 "returnsAt",
                 "returnsTomorrow",
                 "silences",
+                "requests",
+                "attentive",
+                "places",
             ),
             self,
         )
+        self._places: dict[int, tuple[Place, ...]] = {}
+        """Each active reminder's places, as its row shows them: an X forgets one by its
+        index."""
         self._closed = QElapsedTimer()
         self._refresh = QTimer(self, interval=REFRESH_MS)
         self._refresh.timeout.connect(self._fill)
@@ -163,7 +179,12 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         if self._component.isError():
             raise RuntimeError(self._component.errorString())
         window = self._component.createWithInitialProperties(
-            {"trayList": self, "firstRun": first_run, "preferences": preferences}
+            {
+                "trayList": self,
+                "remindHere": remind_here,
+                "firstRun": first_run,
+                "preferences": preferences,
+            }
         )
         if not isinstance(window, QQuickWindow):
             raise TypeError(f"no tray list window: {self._component.errorString()}")
@@ -284,6 +305,24 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
     def done(self, alert_id: int) -> None:
         self._commands.done(alert_id)
 
+    @Slot()
+    def remindHere(self) -> None:
+        """The row at the top: the card of Remind here, for the place under it."""
+        self.close()
+        self._remind_here.open()
+
+    @Slot(int, int)
+    def forget(self, reminder_id: int, index: int) -> None:
+        """A place's X: what the reminder learned there is forgotten (ADR-0029)."""
+        places = self._places.get(reminder_id, ())
+        if 0 <= index < len(places):
+            self._commands.withdraw(reminder_id, places[index].context)
+
+    @Slot(int)
+    def forgetAll(self, reminder_id: int) -> None:
+        """Forget all, under the places: everything the reminder learned."""
+        self._commands.withdraw_all(reminder_id)
+
     @Slot(int)
     def toggleMenu(self, alert_id: int) -> None:
         """Snooze on an unseen alert: its menu opens, or closes on a second click."""
@@ -376,6 +415,7 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         self._fresh = set()
         self._see()
         self._fill()
+        self._remind_here.ask()
         area = QGuiApplication.primaryScreen().availableGeometry()
         self._max_height = area.height() - 2 * MARGIN
         self._area_bottom = area.y() + area.height()
@@ -408,6 +448,7 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         self._unseen.replace(
             [self._unseen_row(alert, local.date()) for alert in self._alerts.unseen]
         )
+        self._places = {active.reminder.id: active.places for active in self._reminders.active}
         self._active.replace(
             [self._active_row(active, now, local) for active in self._reminders.active]
         )
@@ -423,7 +464,8 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
 
     def _active_row(self, active: ActiveReminder, now: int, local: datetime) -> Row:
         """The condition without its time, and the time written for today's Jiffin day
-        (ADR-0020); a period over says so (ADR-0021)."""
+        (ADR-0020); a period over says so (ADR-0021). Then what it learned, and where, the last
+        answered first (ADR-0029)."""
         reminder = active.reminder
         revision = reminder.revision
         schedule = revision.schedule
@@ -445,6 +487,12 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
             "returnsAt": "" if later is None else f"{later:%H:%M}",
             "returnsTomorrow": later is not None and later.date() > local.date(),
             "silences": active.silences,
+            "requests": sum(answer.here is Here.YES for answer in active.places),
+            "attentive": active.attentive,
+            "places": [
+                {"line": place(answer.context), "requested": answer.here is Here.YES}
+                for answer in active.places
+            ],
         }
 
     def _answer(self, answer: Callable[[int], None]) -> None:

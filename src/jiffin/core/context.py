@@ -2,6 +2,7 @@
 
 import re
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 BROWSER_SUFFIXES = {
     "vivaldi.exe": " - Vivaldi",
@@ -28,6 +29,17 @@ class Context:
     title: str
     address: str | None
     """Only in the supported browsers, and None when the address bar cannot be read."""
+
+    @property
+    def site(self) -> str | None:
+        """The host of the address: "meet.google.com"; None without an address, or for a host
+        the rules of addresses refuse."""
+        if self.address is None:
+            return None
+        try:
+            return urlsplit(f"//{self.address}").hostname
+        except ValueError:
+            return None
 
 
 @dataclass(frozen=True, slots=True)

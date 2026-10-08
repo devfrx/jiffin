@@ -85,7 +85,7 @@ class Jiffin:
         self._fetch = ModelFetch(model, folders.models, relay.model.emit, self._worker.model_ready)
         self.interface = Interface(
             app,
-            QueuedCore(self._worker),
+            QueuedCore(self._worker, relay.here.emit),
             self,
             ModelFile(model.name, model.url, model.size, model.sha256, folders.models),
             clock,
@@ -109,7 +109,7 @@ class Jiffin:
 
     def close(self) -> None:
         """Once Qt has quit."""
-        self.interface.hotkey.close()
+        self.interface.close()
         self._worker.close()
 
     # The interface's upkeep

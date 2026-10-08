@@ -25,7 +25,6 @@ import os
 import threading
 from collections.abc import Callable, Mapping
 from typing import Protocol
-from urllib.parse import urlsplit
 
 import comtypes
 
@@ -354,16 +353,6 @@ def _either(value: bool | None, yes: str, no: str) -> frozenset[str] | None:
     return None if value is None else frozenset({yes if value else no})
 
 
-def _site(address: str | None) -> str | None:
-    """The host of a context's address, as the site of a call: "meet.google.com"."""
-    if address is None:
-        return None
-    try:
-        return urlsplit(f"//{address}").hostname
-    except ValueError:  # a host the rules of addresses refuse
-        return None
-
-
 class Situations:
     """What Windows tells of the situations, as observations (ADR-0028); all of it runs on the
     context thread, which makes it. Each situation goes out at `start`, all at one time, and
@@ -536,7 +525,7 @@ class Situations:
             or context.app not in (self._capturing or ())
         ):
             return
-        site = _site(context.address)
+        site = context.site
         if site is not None and self._tabs.records(window, context.app):
             self._sites[context.app] = site
 

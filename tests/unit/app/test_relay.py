@@ -7,7 +7,7 @@ from pytestqt.qtbot import QtBot
 from jiffin.app.relay import Relay, engine_line
 from jiffin.client.supervisor import State, Status, StopReason
 from jiffin.core.alerts import AlertsView
-from jiffin.core.reminders import RemindersView
+from jiffin.core.reminders import HereView, RemindersView
 from jiffin.ui.first_run import FirstRun, ModelState
 from jiffin.ui.interface import Interface
 from jiffin.ui.tray_list import TrayList
@@ -24,6 +24,9 @@ class Shown:
 
     def show_reminders(self, view: RemindersView) -> None:
         self._got("reminders", view)
+
+    def show_here(self, view: HereView) -> None:
+        self._got("here", view)
 
     def show_unreadable(self, apps: frozenset[str]) -> None:
         self._got("unreadable", apps)
@@ -42,12 +45,13 @@ def test_what_other_threads_say_reaches_the_interface_on_its_thread(qtbot: QtBot
     shown = Shown()
     relay = Relay()
     relay.deliver(cast(Interface, shown))
-    alerts, reminders = AlertsView((), 0, ()), RemindersView(())
+    alerts, reminders, here = AlertsView((), 0, ()), RemindersView(()), HereView(None)
     model = ModelState(FirstRun.Stage.CHECKING, 1, 2)
 
     def speak() -> None:
         relay.alerts.emit(alerts)
         relay.reminders.emit(reminders)
+        relay.here.emit(here)
         relay.unreadable.emit(frozenset({"chrome.exe"}))
         relay.engine.emit(Status(State.RESTARTING))
         relay.model.emit(model)
@@ -55,11 +59,12 @@ def test_what_other_threads_say_reaches_the_interface_on_its_thread(qtbot: QtBot
     thread = threading.Thread(target=speak, name="worker")
     thread.start()
     thread.join()
-    qtbot.waitUntil(lambda: len(shown.got) == 5)
+    qtbot.waitUntil(lambda: len(shown.got) == 6)
     main = threading.main_thread().name
     assert shown.got == [
         ("alerts", alerts, main),
         ("reminders", reminders, main),
+        ("here", here, main),
         ("unreadable", frozenset({"chrome.exe"}), main),
         ("engine", TrayList.Engine.RESTARTING, main),
         ("model", model, main),

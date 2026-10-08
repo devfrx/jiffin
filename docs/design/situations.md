@@ -156,8 +156,8 @@ hold together, from when the last of them began to:
 - **Not here** on its alert keeps it quiet in that context; it may ring in the
   next stable one, if its unit still holds. **Remind here** rings a reminder
   outside its situation too, as asked, and the card names why it was quiet.
-- **During the pause** nothing rings; an end that came meanwhile rings at its
-  end, due from the return.
+- **During the pause** nothing rings but a Remind here; an end that came
+  meanwhile rings at its end, due from the return.
 
 ## The lexicon
 

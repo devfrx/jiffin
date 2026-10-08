@@ -127,6 +127,12 @@ QtObject {
     readonly property string removeQuestion: Catalog.text("tray_list.delete_question")
     readonly property string retry: Catalog.text("command.retry")
     readonly property string change: Catalog.text("tray_list.change")
+    readonly property string forget: Catalog.text("tray_list.forget")
+    readonly property string forgetAll: Catalog.text("tray_list.forget_all")
+    // Remind here (ADR-0029): the row at the top of the tray list, and the card it opens.
+    readonly property string remindHere: Catalog.text("remind_here.title")
+    readonly property string remindHereQuestion: Catalog.text("remind_here.question")
+    readonly property string noPlace: Catalog.text("remind_here.no_place")
     // What the engine's trouble means, by TrayList.Engine; WORKING says nothing.
     readonly property var engineTrouble: ["", Catalog.text("engine.restarting"), Catalog.text("engine.failures"), Catalog.text("engine.model"), Catalog.text("engine.gpu_memory"), Catalog.text("engine.mismatch")]
 
@@ -147,10 +153,16 @@ QtObject {
         return Catalog.past(when);
     }
 
-    // Under an active reminder, when useful: its period over (#91), "il 20 ottobre", its snooze,
-    // and the places Not here silenced it in.
-    function status(endedOn: string, returnsIn: int, returnsAt: string, tomorrow: bool, silences: int): string {
-        return Catalog.status(endedOn, returnsIn, returnsAt, tomorrow, silences);
+    // Under an active reminder, when useful: its period over (#91), "il 20 ottobre", and its
+    // snooze.
+    function status(endedOn: string, returnsIn: int, returnsAt: string, tomorrow: bool): string {
+        return Catalog.status(endedOn, returnsIn, returnsAt, tomorrow);
+    }
+
+    // Under an active reminder, what it learned (ADR-0029): "Taciuto in 2 posti · Chiesto in 1
+    // posto · Più attento"; empty when nothing.
+    function learned(silences: int, requests: int, attentive: bool): string {
+        return Catalog.learned(silences, requests, attentive);
     }
 
     // At the top of the tray list while Jiffin is paused (ADR-0024): "In pausa fino alle 15:30.",

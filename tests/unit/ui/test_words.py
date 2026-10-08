@@ -5,6 +5,7 @@ from datetime import date, datetime, time
 
 import pytest
 
+from jiffin.core.context import Context
 from jiffin.core.meanings import read
 from jiffin.core.schedule import (
     EVERY_DAY,
@@ -21,7 +22,7 @@ from jiffin.core.schedule import (
     Weekdays,
     YearDay,
 )
-from jiffin.ui.words import alert_line, appeared, dated, passed, when
+from jiffin.ui.words import alert_line, appeared, dated, passed, place, when
 
 
 def at(day: int, hour: int, minute: int = 0) -> datetime:
@@ -488,3 +489,18 @@ def test_a_day_in_a_line_takes_its_article_and_its_year_only_when_not_this_one(
     day: date, words: str
 ) -> None:
     assert dated(day, FRIDAY) == words
+
+
+@pytest.mark.parametrize(
+    ("context", "line"),
+    [
+        (Context("olk.exe", "Preventivi - Outlook", None), "Preventivi - Outlook"),
+        (Context("vivaldi.exe", "Preventivi", "mail.google.com/mail/u/0"), "Preventivi · mail.google.com"),
+        (Context("chrome.exe", "Nuova scheda", None), "Nuova scheda"),
+        (Context("figma.exe", "", None), "figma.exe"),
+    ],
+    ids=["window", "browser", "address unread", "no title"],
+)  # fmt: skip
+def test_a_place_is_its_title_with_the_site_in_a_browser(context: Context, line: str) -> None:
+    """ADR-0029: the card of Remind here and the tray list name a place by what shows on it."""
+    assert place(context) == line

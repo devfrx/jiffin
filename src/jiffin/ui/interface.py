@@ -1,6 +1,6 @@
 """The pieces of the interface that share one QML engine: the look, the glass, the windows'
-places, the overlay, the creation window and its shortcut, the tray icon and its list, the
-settings window and the first-run window."""
+places, the overlay, the card of Remind here, the creation window, their shortcuts, the tray icon
+and its list, the settings window and the first-run window."""
 
 from collections.abc import Mapping
 from typing import Protocol
@@ -11,21 +11,23 @@ from PySide6.QtQuick import QQuickWindow
 
 from jiffin.core.alerts import AlertsView
 from jiffin.core.clock import Clock, SystemClock
-from jiffin.core.reminders import Pause, RemindersView
+from jiffin.core.reminders import HereView, Pause, RemindersView
+from jiffin.ui import hotkey
 from jiffin.ui.alert import Answers
 from jiffin.ui.creation import Changes, Creation
 from jiffin.ui.first_run import FirstRun, ModelFile, ModelState
 from jiffin.ui.glass import Glass
-from jiffin.ui.hotkey import Hotkey
+from jiffin.ui.hotkey import Hotkeys
 from jiffin.ui.look import Look, Material
 from jiffin.ui.overlay import Overlay
 from jiffin.ui.places import Places
 from jiffin.ui.preferences import Preferences
+from jiffin.ui.remind_here import RemindHere, Requests
 from jiffin.ui.tray import Tray
 from jiffin.ui.tray_list import Commands, TrayList
 
 
-class Core(Answers, Changes, Commands, Protocol):
+class Core(Answers, Changes, Commands, Requests, Protocol):
     """What the interface asks of `core.Reminders`, through the worker's queue."""
 
 
@@ -70,7 +72,7 @@ class Interface:
     the kept material on `look.material`, the kept places on `places` and the kept return pause
     on `preferences.return_pause` before anything shows.
     The `show_` methods take, on this thread, what `core`, the context capture, the engine and the
-    model file say."""
+    model file say. `close` once Qt has quit."""
 
     def __init__(
         self,
@@ -93,6 +95,7 @@ class Interface:
         self.look.provide(self.engine)
         self.places = Places(upkeep.keep_places)
         self.overlay = Overlay(self.engine, core, self.glass, clock)
+        self.remind_here = RemindHere(self.engine, core, self.overlay, self.glass, clock)
         self.creation = Creation(self.engine, core, self.glass, self.places, clock)
         self.first_run = FirstRun(
             self.engine, model, upkeep.fetch_model, self.glass, self.places, clock
@@ -109,6 +112,7 @@ class Interface:
             self.engine,
             core,
             self.creation,
+            self.remind_here,
             upkeep.restart_engine,
             upkeep.resume,
             self.first_run,
@@ -125,10 +129,15 @@ class Interface:
             upkeep.resume,
         )
         self.tray.install()
-        self.hotkey = Hotkey(self.creation.new)
-        app.installNativeEventFilter(self.hotkey)
-        self.hotkey.register()
-        self.first_run.shortcut = self.hotkey.registered
+        # If another app holds Win+Shift+Q, the tray list's row still opens the card.
+        self.hotkeys = Hotkeys({hotkey.NEW: self.creation.new, hotkey.HERE: self.remind_here.open})
+        app.installNativeEventFilter(self.hotkeys)
+        self.hotkeys.register()
+        self.first_run.shortcut = hotkey.NEW in self.hotkeys.registered
+
+    def close(self) -> None:
+        """The shortcuts go back to Windows."""
+        self.hotkeys.close()
 
     def show_alerts(self, view: AlertsView) -> None:
         self.overlay.show(view)
@@ -138,6 +147,10 @@ class Interface:
     def show_reminders(self, view: RemindersView) -> None:
         self.tray_list.show_reminders(view)
         self.tray.show_reminders(view)
+
+    def show_here(self, view: HereView) -> None:
+        """`core`'s answer to the card of Remind here, or to the tray list's row."""
+        self.remind_here.show(view)
 
     def show_unreadable(self, apps: frozenset[str]) -> None:
         self.tray_list.show_unreadable(apps)
