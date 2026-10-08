@@ -7,7 +7,27 @@ import pytest
 from jiffin.harness import __main__ as harness
 from jiffin.harness import gpu, monitor
 from jiffin.harness.errors import HarnessError
-from jiffin.harness.monitor import Process, group_of, usage
+from jiffin.harness.monitor import Process, gpu_usage, group_of, usage
+
+MIB = 1 << 20
+
+
+class Counters:
+    """Windows' counters, as the engine and the app would hold the GPU's memory."""
+
+    def __init__(self) -> None:
+        self.closed = False
+
+    def read(self) -> dict[int, gpu.Usage]:
+        return {1: gpu.Usage(300 * MIB, 20 * MIB), 2: gpu.Usage(3_100 * MIB, 90 * MIB)}
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class NoCounters:
+    def __init__(self) -> None:
+        raise HarnessError("the GPU's counters cannot add a counter: PDH error 0xC0000BB8")
 
 
 @pytest.mark.parametrize(
@@ -55,34 +75,79 @@ def test_a_reused_process_id_never_gives_negative_time() -> None:
     assert usage_row["app_cpu"] == 0.0
 
 
+def test_the_gpu_memory_of_the_app_and_its_engine_is_summed_over_their_processes() -> None:
+    running = [
+        Process(1, "app", 0.0, 0),
+        Process(2, "engine", 0.0, 0),  # a checkout's launcher, which holds nothing
+        Process(3, "engine", 0.0, 0),  # and the interpreter it started
+        Process(4, "browsers", 0.0, 0),
+    ]
+    memory = {
+        1: gpu.Usage(150 * MIB, 40 * MIB),
+        3: gpu.Usage(3_247 * MIB, 101 * MIB),
+        4: gpu.Usage(900 * MIB, 300 * MIB),  # the browsers' are not read
+        9: gpu.Usage(6_000 * MIB, 0),  # nor a game's
+    }
+    assert gpu_usage(running, memory) == {
+        "app_gpu_dedicated_mib": 150,
+        "app_gpu_shared_mib": 40,
+        "engine_gpu_dedicated_mib": 3_247,
+        "engine_gpu_shared_mib": 101,
+    }
+
+
 def test_the_monitor_appends_rows_of_numbers_to_the_days_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(gpu, "memory", lambda: gpu.Memory(used_mib=3300, free_mib=4892))
+    opened: list[Counters] = []
+
+    def counters() -> Counters:
+        opened.append(Counters())
+        return opened[-1]
+
+    monkeypatch.setattr(gpu, "Counters", counters)
     monkeypatch.setattr(psutil, "sensors_battery", lambda: None)
-    readings = iter([[Process(1, "app", float(n), 64 << 20)] for n in range(10)])
+    readings = iter(
+        [[Process(1, "app", float(n), 64 * MIB), Process(2, "engine", 0.0, 0)] for n in range(10)]
+    )
     path = monitor.run(tmp_path, every=0.01, read=lambda: next(readings), rows=2)
     path = monitor.run(tmp_path, every=0.01, read=lambda: next(readings), rows=1)
+    assert [counters.closed for counters in opened] == [True, True]
     with path.open(encoding="utf-8") as file:
         rows = list(csv.DictReader(file))
     assert path.name.startswith("monitor-") and path.suffix == ".csv"
     assert len(rows) == 3  # one header only, though the monitor ran twice
     assert set(rows[0]) == set(monitor.COLUMNS)
     assert rows[0]["app_ram_mib"] == "64"
-    assert rows[0]["vram_used_mib"] == "3300"
+    assert (rows[0]["app_gpu_dedicated_mib"], rows[0]["app_gpu_shared_mib"]) == ("300", "20")
+    assert (rows[0]["engine_gpu_dedicated_mib"], rows[0]["engine_gpu_shared_mib"]) == ("3100", "90")
     assert rows[0]["battery_percent"] == rows[0]["plugged"] == ""
 
 
-def test_a_missing_gpu_leaves_its_column_empty(
+def test_without_the_gpus_counters_their_columns_stay_empty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(gpu, "Counters", NoCounters)
+    path = monitor.run(tmp_path, every=0.01, read=list, rows=2)
+    with path.open(encoding="utf-8") as file:
+        rows = list(csv.DictReader(file))
+    assert [row[column] for row in rows for column in monitor.GPU_COLUMNS] == [""] * 8
+    assert caplog.text.count("PDH error") == 1  # said once, not every row
+
+
+def test_a_row_the_counters_cannot_read_leaves_its_gpu_columns_empty(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def no_gpu() -> gpu.Memory:
-        raise HarnessError("nvidia-smi cannot tell the GPU's memory")
+    class Failing(Counters):
+        def read(self) -> dict[int, gpu.Usage]:
+            raise HarnessError("the GPU's counters cannot collect: PDH error 0x800007D5")
 
-    monkeypatch.setattr(gpu, "memory", no_gpu)
+    monkeypatch.setattr(gpu, "Counters", Failing)
     path = monitor.run(tmp_path, every=0.01, read=list, rows=1)
     with path.open(encoding="utf-8") as file:
-        assert next(csv.DictReader(file))["vram_used_mib"] == ""
+        row = next(csv.DictReader(file))
+    assert [row[column] for column in monitor.GPU_COLUMNS] == [""] * 4
+    assert row["app_cpu"] == "0.0"
 
 
 def test_the_command_writes_into_the_data_folder(

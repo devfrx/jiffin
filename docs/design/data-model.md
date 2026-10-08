@@ -116,6 +116,11 @@ erDiagram
         text woken_by "context, statement, judgement or retry"
         int ready_at "null without a model"
     }
+    nothing_in_front {
+        int since PK
+        int until "null while nothing is in front"
+        int startup "the stretch the app starts with"
+    }
     judgement {
         int context PK
         int revision PK "cascade"
@@ -172,12 +177,20 @@ new:
   starts and replaced when it ends, so a sleep under way when the app dies
   keeps its start.
 
+Migration 0004 adds **`nothing_in_front`**: a row per stretch with nothing in
+front for the reminders (no context, or the pause), written and replaced like
+a sleep, for the harness to check that the engine slept
+([ADR-0031](../adr/0031-acceptance-thresholds-v0-3.md)). `startup` marks the
+stretch `core` begins with, until the capture's first window: a new run of the
+app.
+
 - **What loads**, besides 0.2's: the answer that counts in each place, the
   last one there unless it was withdrawn, the last answered last; and each
   revision's situations. The stretches load nothing: `core` reads the
   situations again from the capture.
-- **The harness's log** keeps every answer per place, in order, and the
-  requested alerts, which have no evaluation.
+- **The harness's log** keeps every answer per place, in order, the
+  requested alerts, which have no evaluation, the engine's sleeps and the
+  stretches with nothing in front.
 
 ## Keeping and deleting
 
@@ -185,8 +198,8 @@ new:
   ([ADR-0014](../adr/0014-feedback-data-retention.md)): evaluations older than
   30 days, with their candidates; unanswered alerts older than 30 days; cache
   entries unused for 30 days; stretches of situations that ended, and sleeps
-  of the engine that began, more than 30 days ago; contexts no row uses any
-  more. Then `PRAGMA optimize` and a `TRUNCATE` checkpoint.
+  of the engine and stretches with nothing in front that began, more than 30
+  days ago; contexts no row uses any more. Then `PRAGMA optimize` and a `TRUNCATE` checkpoint.
 - **The answers per place** stay until their reminder is deleted, the
   withdrawals too: the last of a place counts, the others serve the replay.
 - **Deleting a reminder** cascades to its revisions, and through them to its

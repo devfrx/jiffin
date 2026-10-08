@@ -214,7 +214,7 @@ def test_version_0_2_migrates_to_0_3_keeping_every_row(tmp_path: Path) -> None:
     alerts = rows(path, f"SELECT {ALERT_0_2} FROM alert ORDER BY id")
     revisions = rows(path, "SELECT * FROM revision ORDER BY id")
     Store.open(path).close()
-    assert rows(path, "PRAGMA user_version") == [(3,)]
+    assert rows(path, "PRAGMA user_version") == [(4,)]  # 0003 and 0004
     assert not list(tmp_path.glob("*backup*"))
     for table, kept in before.items():
         assert rows(path, f"SELECT * FROM {table} ORDER BY 1, 2") == kept, table
@@ -243,6 +243,7 @@ def test_version_0_2_migrates_to_0_3_keeping_every_row(tmp_path: Path) -> None:
     assert "silence" not in tables
     assert rows(path, "SELECT count(*) FROM situation") == [(0,)]
     assert rows(path, "SELECT count(*) FROM engine_sleep") == [(0,)]
+    assert rows(path, "SELECT count(*) FROM nothing_in_front") == [(0,)]
     indexes = {row[0] for row in rows(path, "SELECT name FROM sqlite_schema WHERE type = 'index'")}
     assert {
         "candidate_revision",

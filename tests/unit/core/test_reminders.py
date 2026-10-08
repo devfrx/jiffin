@@ -18,6 +18,7 @@ from jiffin.core.records import (
     Here,
     LastIds,
     Left,
+    NothingInFront,
     Outcome,
     Record,
     Reminder,
@@ -559,6 +560,54 @@ def test_the_context_that_comes_back_when_the_pause_ends_needs_the_model_soon() 
     scene.reminders.pause(Pause.HOUR)
     scene.reminders.resume()
     assert scene.need() is Need.SOON
+
+
+def test_each_stretch_with_nothing_in_front_is_recorded_when_it_starts_and_when_it_ends() -> None:
+    scene = Scene()  # nothing is in front until the capture says
+    scene.wait(1_000)
+    scene.stay(FIGMA, MINUTE_MS)
+    scene.stay(None, MINUTE_MS)
+    scene.stay(BANK, 1_000)  # a quick switch ends it too: the log of the contexts misses it
+    scene.stay(None)
+    left = START + 1_000 + MINUTE_MS
+    assert scene.saved(NothingInFront) == [
+        NothingInFront(START, startup=True),
+        NothingInFront(START, START + 1_000, startup=True),
+        NothingInFront(left),
+        NothingInFront(left, left + MINUTE_MS),
+        NothingInFront(left + MINUTE_MS + 1_000),
+    ]
+
+
+def test_a_pause_is_nothing_in_front_until_resume_with_a_context_there() -> None:
+    scene = Scene()
+    scene.stay(FIGMA, MINUTE_MS)
+    scene.reminders.pause(Pause.TOMORROW)
+    scene.wait(MINUTE_MS)  # in the same window
+    scene.reminders.resume()
+    scene.reminders.pause(Pause.HOUR)
+    scene.stay(BANK, MINUTE_MS)  # paused: nothing in front for the reminders
+    scene.reminders.resume()
+    paused = START + MINUTE_MS
+    assert scene.saved(NothingInFront)[2:] == [
+        NothingInFront(paused),
+        NothingInFront(paused, paused + MINUTE_MS),
+        NothingInFront(paused + MINUTE_MS),
+        NothingInFront(paused + MINUTE_MS, paused + 2 * MINUTE_MS),
+    ]
+
+
+def test_a_pause_that_ends_with_nothing_seen_goes_on_until_a_context_comes() -> None:
+    scene = Scene()
+    scene.stay(FIGMA, MINUTE_MS)
+    paused = scene.clock.now()
+    scene.reminders.pause(Pause.HOUR)
+    scene.stay(None)
+    scene.until(paused + HOUR_MS)
+    assert scene.saved(NothingInFront)[2:] == [NothingInFront(paused)]
+    scene.wait(MINUTE_MS)
+    scene.stay(FIGMA)
+    assert scene.saved(NothingInFront)[3:] == [NothingInFront(paused, paused + HOUR_MS + MINUTE_MS)]
 
 
 # Occasions

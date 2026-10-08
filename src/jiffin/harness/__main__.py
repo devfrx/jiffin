@@ -22,6 +22,7 @@ from jiffin.harness import (
     replay,
     report,
     sample,
+    sleeps,
     snapshot,
     statements,
 )
@@ -276,13 +277,15 @@ def _report(options: argparse.Namespace) -> None:
     data = folders.data_folder(options.data)
     copy = options.copy or snapshot.latest(data)
     clock = SystemClock()
-    day = days.select(snapshot.read(copy), options.day, clock)
+    whole = snapshot.read(copy)
+    day = days.select(whole, options.day, clock)
     labels_path = labels.path_for(data, day.day)
     labelled = labels.load(labels_path) if labels_path.exists() else None
     final = {} if labelled is None else labelled.final()
     monitor_path = options.monitor or data / f"monitor-{day.day.isoformat()}.csv"
     used = report.machine(monitor_path) if options.monitor or monitor_path.exists() else None
-    print(report.markdown(days.summarize(day, final, clock), labelled, used))
+    engine = sleeps.summarize(whole, day, clock, () if used is None else used.engine_vram)
+    print(report.markdown(days.summarize(day, final, clock), labelled, used, engine, clock))
     source = HARNESS.report.from_copy.format(copy=copy.name)
     path = data / f"report-{day.day.isoformat()}.html"
     log.info("the page is %s", report.page(day, final, clock, source, path))

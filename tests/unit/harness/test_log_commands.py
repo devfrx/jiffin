@@ -5,14 +5,24 @@ from pathlib import Path
 
 import pytest
 
-from jiffin.core.clock import SimulatedClock
+from jiffin.core.clock import SimulatedClock, SystemClock
 from jiffin.core.context import Context, Observation
 from jiffin.core.model import EngineBuild
-from jiffin.core.records import Alert, Answer, Candidate, Evaluation, Outcome, Revision
+from jiffin.core.records import (
+    Alert,
+    Answer,
+    Candidate,
+    EngineSleep,
+    Evaluation,
+    Outcome,
+    Revision,
+    SleepReason,
+    Waker,
+)
 from jiffin.core.reminders import Reminders
 from jiffin.harness import __main__ as harness
 from jiffin.harness import day as days
-from jiffin.harness import labels, report, snapshot, statements
+from jiffin.harness import labels, monitor, report, sleeps, snapshot, statements
 from jiffin.lang.harness import HARNESS
 from jiffin.store.store import Log, Store
 
@@ -107,7 +117,7 @@ def test_a_day_goes_from_a_copy_to_its_report(
     assert "## Day 2026-10-05" in summary
     assert "3 evaluations in 0.1 hours" in summary
     assert "3 reminders judged, with a return pause of 2 min." in summary
-    assert "| Measure | Value | Threshold (ADR-0022) | Within |" in summary
+    assert "| Measure | Value | Threshold (ADR-0031) | Within |" in summary
     assert (
         "| Delay from when the alert became due, p95 | 20.0 s (p50 20.0 s) | at most 30 s | yes |"
         in summary
@@ -196,7 +206,8 @@ def test_the_summary_counts_the_alerts_with_only_a_time_apart(tmp_path: Path) ->
         false_alarms=11,
         unlabelled=0,
     )
-    text = report.markdown(summary, labels.Labels(tmp_path / "labels.json", summary.day, []), None)
+    labelled = labels.Labels(tmp_path / "labels.json", summary.day, [])
+    text = report.markdown(summary, labelled, None, sleeps.NOT_RECORDED, SimulatedClock(T0, UTC))
     assert "3 reminders judged, with a return pause of 2 min, then 10 s." in text
     assert (
         "| False alarms in the day, once per pair | 11 | target 10, cap 20 "
@@ -221,7 +232,8 @@ def test_the_report_tells_the_pairs_kept_quiet_as_already_reminded_apart(tmp_pat
     day = days.select(Log((), {10: icons, 20: rent}, (evaluation,), (), (), ()), None, clock)
     relevant = {days.key(FIGMA, ICONS): True, days.key(FIGMA, RENT): True}
     labelled = labels.Labels(tmp_path / "labels.json", day.day, [])
-    text = report.markdown(days.summarize(day, relevant, clock), labelled, None)
+    summary = days.summarize(day, relevant, clock)
+    text = report.markdown(summary, labelled, None, sleeps.NOT_RECORDED, clock)
     assert (
         "| Missed reminders: relevant pairs never shown, unless kept quiet as already reminded "
         "| 50% (1 of 2) | at most 20% | no |"
@@ -232,6 +244,54 @@ def test_the_report_tells_the_pairs_kept_quiet_as_already_reminded_apart(tmp_pat
     missed, kept = page.read_text(encoding="utf-8").split("<h2>Taciuti")
     assert RENT in missed and ICONS not in missed
     assert ICONS in kept and "stessa occasione" in kept
+
+
+def test_the_engines_thresholds_say_no_when_they_are_missed(tmp_path: Path) -> None:
+    clock = SimulatedClock(T0, UTC)
+    icons = Revision(10, 1, 1, ICONS, "esportare le icone", ICONS, "Figma.", BUILD)
+    candidate = Candidate(10, 0.1, False, Outcome.BELOW_THRESHOLD)
+    evaluation = Evaluation(1, T0 + 20_000, FIGMA, T0, 0.97, BUILD, (candidate,))
+    summary = days.summarize(
+        days.select(Log((), {10: icons}, (evaluation,), (), (), ()), None, clock), {}, clock
+    )
+    used = report.Machine(1, 5_000, 0, (), 1_000, 1.0, 0.0, None, None)
+    late = sleeps.Wake(T0, Waker.CONTEXT, 7.5, 2.5)
+    written = sleeps.Wake(T0 + 60_000, Waker.STATEMENT, 3.0, 0.0)
+    error = sleeps.SleepError(T0 + 400_000, SleepReason.IDLE)
+    engine = sleeps.Sleeps(
+        True, {SleepReason.IDLE: 2}, (late, written), 1, (error,), 0, 60_000, 300, 4, 3_247
+    )
+    text = report.markdown(summary, None, used, engine, clock)
+    assert (
+        "| Late wakes: the engine ready after the 5 s of the context waiting for it "
+        "| 1, by at most 2.5 s | at most 1, by at most 2 s | no |"
+    ) in text
+    assert (
+        "| Sleep errors: awake 5 min 10 s after core's last request, or 10 s after nothing came "
+        "in front | 1 | none | no |"
+    ) in text
+    assert (
+        "| Dedicated VRAM of the engine asleep, after its first 10 s, peak | 300 MiB in 4 rows "
+        "| at most 204.8 MiB (0.2 GiB) | no |"
+    ) in text
+    assert (
+        "| Dedicated VRAM of the app and its engine, peak | 5,000 MiB (shared 0 MiB) "
+        "| at most 4,096 MiB | no |"
+    ) in text
+    assert "The engine slept 2 times (2 after 5 minutes idle)" in text
+    assert (
+        "Wakes for a statement, which delay no alert: 1; the creation window waited "
+        "3.0 · 3.0 · 3.0 s (min · median · max) for the engine."
+    ) in text
+    assert "Wakes that ended without the model: 1." in text
+    assert "Late: 10:00:00 by 2.5 s." in text
+    assert (
+        "Sleep errors, when the engine should have been asleep: 10:06:40 after 5 minutes idle."
+    ) in text
+    twice = replace(engine, wakes=(replace(late, late=1.0), replace(late, late=1.5)))
+    assert "| 2, by at most 1.5 s | at most 1, by at most 2 s | no |" in report.markdown(
+        summary, None, used, twice, clock
+    )
 
 
 def test_the_report_names_each_answer_in_the_owners_words(tmp_path: Path) -> None:
@@ -250,21 +310,27 @@ def test_the_report_names_each_answer_in_the_owners_words(tmp_path: Path) -> Non
         )
 
 
+def monitor_rows(data: Path, *rows: str, header: str = ",".join(monitor.COLUMNS)) -> None:
+    (data / "monitor-2026-10-05.csv").write_text("\n".join([header, *rows]) + "\n", "utf-8")
+
+
 def test_the_report_reads_the_monitors_rows(
     database: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     data = tmp_path / "prove"
     run("snapshot", "--data", str(data), "--database", str(database))
-    rows = [
-        "at,app_cpu,app_ram_mib,engine_cpu,engine_ram_mib,browsers_cpu,browsers_ram_mib,vram_used_mib,battery_percent,plugged",
-        "2026-10-05T12:00:05+02:00,0.5,300,1.0,900,2.0,1500,3300,90,1",
-        "2026-10-05T12:00:10+02:00,0.3,320,0.2,950,1.0,1500,3350,80,0",
-    ]
-    (data / "monitor-2026-10-05.csv").write_text("\n".join(rows) + "\n", encoding="utf-8")
+    monitor_rows(
+        data,
+        "2026-10-05T12:00:05+02:00,0.5,300,1.0,900,2.0,1500,150,40,3247,101,90,1",
+        "2026-10-05T12:00:10+02:00,0.3,320,0.2,950,1.0,1500,160,30,3250,90,80,0",
+    )
     capsys.readouterr()
     assert run("report", "--data", str(data)) == 0
     summary = capsys.readouterr().out
-    assert "| VRAM of the whole GPU, peak | 3,350 MiB | at most 4,096 MiB | yes |" in summary
+    assert (
+        "| Dedicated VRAM of the app and its engine, peak | 3,410 MiB (shared 141 MiB) "
+        "| at most 4,096 MiB | yes |"
+    ) in summary
     assert (
         "| RAM of the app and its engine, peak | 1,270 MiB | at most 1,907 MiB (2 GB) | yes |"
         in summary
@@ -274,3 +340,66 @@ def test_the_report_reads_the_monitors_rows(
         in summary
     )
     assert "| Battery | 90% to 80%, 50% of the time unplugged | reported |  |" in summary
+
+
+def test_the_rows_of_a_monitor_before_0_3_have_no_vram_of_each_process(
+    database: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data = tmp_path / "prove"
+    run("snapshot", "--data", str(data), "--database", str(database))
+    monitor_rows(
+        data,
+        "2026-10-05T12:00:05+02:00,0.5,300,1.0,900,2.0,1500,3300,90,1",
+        header="at,app_cpu,app_ram_mib,engine_cpu,engine_ram_mib,browsers_cpu,browsers_ram_mib,"
+        "vram_used_mib,battery_percent,plugged",
+    )
+    capsys.readouterr()
+    assert run("report", "--data", str(data)) == 0
+    summary = capsys.readouterr().out
+    assert (
+        "| Dedicated VRAM of the app and its engine, peak | not in the monitor's rows "
+        "| at most 4,096 MiB |  |"
+    ) in summary
+    assert "| RAM of the app and its engine, peak | 1,200 MiB |" in summary
+
+
+def test_the_engines_sleeps_and_wakes_go_into_the_report(
+    database: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The day of `a_day`, with the engine asleep from 200 s to 300 s, when the window of the
+    mail woke it; its evaluation came at 305 s, and the engine was ready at 306 s."""
+    store = Store.open(database)
+    slept = EngineSleep(T0 + 200_000, SleepReason.IDLE, T0 + 300_000, Waker.CONTEXT, T0 + 306_000)
+    store.save([slept])
+    store.close()
+    data = tmp_path / "prove"
+    run("snapshot", "--data", str(data), "--database", str(database))
+    monitor_rows(
+        data,
+        "2026-10-05T12:01:40+02:00,0.5,300,1.0,900,2.0,1500,150,40,3247,101,100,1",
+        "2026-10-05T12:03:25+02:00,0.5,300,1.0,900,2.0,1500,150,40,900,101,100,1",  # falling
+        "2026-10-05T12:04:10+02:00,0.5,300,1.0,900,2.0,1500,150,40,98,101,100,1",
+        "2026-10-05T12:05:10+02:00,0.5,300,1.0,900,2.0,1500,150,40,3250,101,100,1",
+    )
+    capsys.readouterr()
+    assert run("report", "--data", str(data)) == 0
+    summary = capsys.readouterr().out
+    assert (
+        "| Late wakes: the engine ready after the 5 s of the context waiting for it "
+        "| 1, by at most 1.0 s | at most 1, by at most 2 s | yes |"
+    ) in summary
+    assert (
+        "| Sleep errors: awake 5 min 10 s after core's last request, or 10 s after nothing came "
+        "in front | 0 | none | yes |"
+    ) in summary
+    assert (
+        "| Dedicated VRAM of the engine asleep, after its first 10 s, peak | 98 MiB in 1 row "
+        "| at most 204.8 MiB (0.2 GiB) | yes |"
+    ) in summary
+    assert (
+        "The engine slept 1 time (1 after 5 minutes idle): asleep 0.0 of the 0.1 hours from the "
+        "first context evaluated to the last evaluation (31%)."
+    ) in summary
+    assert "Wakes: 1 (1 for a context), ready in 6.0 · 6.0 · 6.0 s (min · median · max)." in summary
+    assert f"Late: {SystemClock().local(T0 + 300_000):%H:%M:%S} by 1.0 s." in summary
+    assert "The engine's dedicated VRAM awake peaked at 3,250 MiB." in summary

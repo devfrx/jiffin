@@ -388,6 +388,18 @@ def test_the_engine_sleeps_while_nothing_is_in_front(scene: Scene) -> None:
     assert slept == [(START, "nothing_in_front", None)]
 
 
+def test_the_stretches_with_nothing_in_front_are_saved_for_the_harness(scene: Scene) -> None:
+    scene.advance(1_000)
+    scene.enter(FIGMA)
+    scene.settle()
+    scene.advance(60_000)
+    scene.enter(None)
+    scene.settle()
+    with closing(sqlite3.connect(scene.database)) as db:
+        stretches = db.execute("SELECT since, until FROM nothing_in_front ORDER BY since")
+        assert stretches.fetchall() == [(START, START + 1_000), (START + 61_000, None)]
+
+
 def test_a_context_wakes_the_engine_before_its_5_s_and_is_judged_once(scene: Scene) -> None:
     scene.worker.model_ready()
     scene.core.create("quando apro Figma", "esportare le icone", False)
