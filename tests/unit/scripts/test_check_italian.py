@@ -81,6 +81,14 @@ def test_the_examples_and_the_names_a_file_may_hold_pass(check: ModuleType) -> N
     name = 'LABELS = "etichette.json"\n'
     assert found(check, "src/jiffin/harness/folders.py", name) == []
     assert found(check, str(CORE), name) == [(1, "etichette")]
+    mark = 'MARK = "Registrazione con microfono"\n'  # Chromium's, on a tab
+    assert found(check, "src/jiffin/platform/address.py", mark) == []
+    assert found(check, str(CORE), mark) == [(1, "con"), (1, "microfono")]
+
+
+def test_the_letters_of_a_hexadecimal_number_are_no_words(check: ModuleType) -> None:
+    key = 'KEY = GUID("{1DA5D803-D492-4EDD-8C23-E0C0FFEE7F0E}")  # da 0x8FA2\n'
+    assert found(check, str(CORE), key) == [(1, "da")]  # the comment's word only
 
 
 def test_the_answers_of_0_2_are_no_names_in_the_code_after_migration_0003(

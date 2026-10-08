@@ -1,8 +1,11 @@
 """Win32 without Qt: the foreground window, its program and title, whether it is in full screen,
-WinEvent hooks (ADR-0005), and Windows' notices of the session and the power (ADR-0021).
+WinEvent hooks (ADR-0005), Windows' notices of the session and the power (ADR-0021), and the
+states the situations read: the time since the last input, the power source and the displays
+(ADR-0028).
 
 Nothing here needs a permission. Signatures are transcribed from the Windows SDK headers
-`winuser.h`, `processthreadsapi.h`, `winbase.h`, `libloaderapi.h` and `wtsapi32.h`.
+`winuser.h`, `processthreadsapi.h`, `winbase.h`, `libloaderapi.h`, `sysinfoapi.h`, `wingdi.h`
+and `wtsapi32.h`.
 """
 
 import ctypes
@@ -34,6 +37,14 @@ _WS_DLGFRAME, _WS_THICKFRAME = 0x00400000, 0x00040000
 _WS_EX_TOOLWINDOW = 0x00000080
 _PATH_CHARS = 32_768
 _CLASS_CHARS = 256
+WM_APP = 0x8000
+"""The first message an app may define for itself."""
+_ERROR_INSUFFICIENT_BUFFER = 122
+_QDC_ONLY_ACTIVE_PATHS = 0x2
+_OWN_PANELS = frozenset((0x80000000, 6, 11, 13))
+"""DISPLAYCONFIG_OUTPUT_TECHNOLOGY_INTERNAL, _LVDS, _DISPLAYPORT_EMBEDDED and _UDI_EMBEDDED: the
+connections of a PC's own panel."""
+_AC_OFFLINE = 0
 _FRAME_HOST = "applicationframehost.exe"
 _UWP_CORE_WINDOW = "Windows.UI.Core."
 """The class prefix of the window a UWP app draws in, inside ApplicationFrameHost's frame."""
@@ -69,7 +80,69 @@ _EnumChildProc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARA
 _WindowProc = ctypes.WINFUNCTYPE(
     wintypes.LPARAM, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM
 )
+_TimerProc = ctypes.WINFUNCTYPE(None, wintypes.HWND, wintypes.UINT, ctypes.c_size_t, wintypes.DWORD)
 _Message = POINTER(wintypes.MSG)
+
+
+class _LastInputInfo(ctypes.Structure):
+    _fields_ = (("cbSize", wintypes.UINT), ("dwTime", wintypes.DWORD))
+
+
+class _PowerStatus(ctypes.Structure):
+    _fields_ = (
+        ("ACLineStatus", ctypes.c_ubyte),
+        ("BatteryFlag", ctypes.c_ubyte),
+        ("BatteryLifePercent", ctypes.c_ubyte),
+        ("SystemStatusFlag", ctypes.c_ubyte),
+        ("BatteryLifeTime", wintypes.DWORD),
+        ("BatteryFullLifeTime", wintypes.DWORD),
+    )
+
+
+class _Luid(ctypes.Structure):
+    _fields_ = (("LowPart", wintypes.DWORD), ("HighPart", wintypes.LONG))
+
+
+class _PathSource(ctypes.Structure):
+    _fields_ = (
+        ("adapterId", _Luid),
+        ("id", ctypes.c_uint32),
+        ("modeInfoIdx", ctypes.c_uint32),
+        ("statusFlags", ctypes.c_uint32),
+    )
+
+
+class _PathTarget(ctypes.Structure):
+    _fields_ = (
+        ("adapterId", _Luid),
+        ("id", ctypes.c_uint32),
+        ("modeInfoIdx", ctypes.c_uint32),
+        ("outputTechnology", ctypes.c_uint32),
+        ("rotation", ctypes.c_uint32),
+        ("scaling", ctypes.c_uint32),
+        ("refreshRate", ctypes.c_uint32 * 2),
+        ("scanLineOrdering", ctypes.c_uint32),
+        ("targetAvailable", wintypes.BOOL),
+        ("statusFlags", ctypes.c_uint32),
+    )
+
+
+class _PathInfo(ctypes.Structure):
+    _fields_ = (
+        ("sourceInfo", _PathSource),
+        ("targetInfo", _PathTarget),
+        ("flags", ctypes.c_uint32),
+    )
+
+
+class _ModeInfo(ctypes.Structure):
+    _fields_ = (
+        ("infoType", ctypes.c_uint32),
+        ("id", ctypes.c_uint32),
+        ("adapterId", _Luid),
+        # The union of a target's, a source's or a desktop image's mode: never read.
+        ("mode", ctypes.c_uint64 * 6),
+    )
 
 
 class _WindowClass(ctypes.Structure):
@@ -159,8 +232,28 @@ _USER32: dict[str, tuple[Any, list[Any]]] = {
     ),
     "RegisterSuspendResumeNotification": (wintypes.HANDLE, [wintypes.HANDLE, wintypes.DWORD]),
     "UnregisterSuspendResumeNotification": (wintypes.BOOL, [wintypes.HANDLE]),
+    "GetLastInputInfo": (wintypes.BOOL, [POINTER(_LastInputInfo)]),
+    "SetTimer": (ctypes.c_size_t, [wintypes.HWND, ctypes.c_size_t, wintypes.UINT, _TimerProc]),
+    "KillTimer": (wintypes.BOOL, [wintypes.HWND, ctypes.c_size_t]),
+    "GetDisplayConfigBufferSizes": (
+        wintypes.LONG,
+        [ctypes.c_uint32, POINTER(ctypes.c_uint32), POINTER(ctypes.c_uint32)],
+    ),
+    "QueryDisplayConfig": (
+        wintypes.LONG,
+        [
+            ctypes.c_uint32,
+            POINTER(ctypes.c_uint32),
+            POINTER(_PathInfo),
+            POINTER(ctypes.c_uint32),
+            POINTER(_ModeInfo),
+            ctypes.c_void_p,
+        ],
+    ),
 }
 _KERNEL32: dict[str, tuple[Any, list[Any]]] = {
+    "GetTickCount64": (ctypes.c_ulonglong, []),
+    "GetSystemPowerStatus": (wintypes.BOOL, [POINTER(_PowerStatus)]),
     "OpenProcess": (wintypes.HANDLE, [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]),
     "QueryFullProcessImageNameW": (
         wintypes.BOOL,
@@ -223,6 +316,24 @@ class Hook:
         if self._handle is not None:
             _user32.UnhookWinEvent(self._handle)
             self._handle = None
+
+
+class Timer:
+    """A timer of the thread that makes it: Windows calls `handler()` every `period_ms`, from
+    inside that thread's message loop. `close` it on the same thread."""
+
+    def __init__(self, period_ms: int, handler: Callable[[], None]) -> None:
+        # ctypes frees a callback nobody references: it lives as long as the timer.
+        self._callback = _TimerProc(lambda _hwnd, _message, _id, _time: handler())
+        timer = _user32.SetTimer(None, 0, period_ms, self._callback)
+        if not timer:
+            raise ctypes.WinError(ctypes.get_last_error())
+        self._id: int | None = timer
+
+    def close(self) -> None:
+        if self._id is not None:
+            _user32.KillTimer(None, self._id)
+            self._id = None
 
 
 class Notice(Enum):
@@ -303,20 +414,82 @@ def make_queue() -> None:
     _user32.PeekMessageW(ctypes.byref(message), None, 0, 0, _PM_NOREMOVE)
 
 
-def run_messages() -> None:
-    """Run the calling thread's message loop, and the hooks' handlers with it, until WM_QUIT."""
+def run_messages(on_message: Callable[[int], None] | None = None) -> None:
+    """Run the calling thread's message loop, and the hooks' and timers' handlers with it, until
+    WM_QUIT. A message posted to the thread from WM_APP on goes to `on_message`."""
     message = wintypes.MSG()
     while result := _user32.GetMessageW(ctypes.byref(message), None, 0, 0):
         if result == -1:
             raise ctypes.WinError(ctypes.get_last_error())
+        if not message.hWnd and message.message >= WM_APP:
+            if on_message is not None:
+                on_message(message.message)
+            continue
         _user32.TranslateMessage(ctypes.byref(message))
         _user32.DispatchMessageW(ctypes.byref(message))
 
 
 def post_quit(thread: int) -> None:
     """End the message loop of another thread, given its native id."""
-    if not _user32.PostThreadMessageW(thread, _WM_QUIT, 0, 0):
+    post(thread, _WM_QUIT)
+
+
+def post(thread: int, message: int) -> None:
+    """Post a message to another thread's loop, given its native id: from any thread, without
+    waiting."""
+    if not _user32.PostThreadMessageW(thread, message, 0, 0):
         raise ctypes.WinError(ctypes.get_last_error())
+
+
+def idle_ms() -> int:
+    """How long ago the last key or mouse of this session came.
+
+    Windows keeps that time as a 32-bit count of milliseconds, which wraps after 49.7 days: the
+    difference is taken over 32 bits too.
+    """
+    info = _LastInputInfo(cbSize=ctypes.sizeof(_LastInputInfo))
+    if not _user32.GetLastInputInfo(ctypes.byref(info)):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return int((_kernel32.GetTickCount64() - info.dwTime) & 0xFFFFFFFF)
+
+
+def plugged_in() -> bool:
+    """Whether the PC runs on the mains: also a PC without a battery, or one whose power Windows
+    cannot tell, so that the power always has a value."""
+    status = _PowerStatus()
+    if not _kernel32.GetSystemPowerStatus(ctypes.byref(status)):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return bool(status.ACLineStatus != _AC_OFFLINE)
+
+
+def external_display() -> bool:
+    """Whether a display other than the PC's own panel shows the desktop: its connection is not
+    an internal one, as a laptop's panel is. The displays change between asking how many
+    there are and reading them: then they are read again."""
+    while True:
+        paths, modes = ctypes.c_uint32(), ctypes.c_uint32()
+        error = _user32.GetDisplayConfigBufferSizes(
+            _QDC_ONLY_ACTIVE_PATHS, ctypes.byref(paths), ctypes.byref(modes)
+        )
+        if error:
+            raise ctypes.WinError(error)
+        path_info = (_PathInfo * paths.value)()
+        mode_info = (_ModeInfo * modes.value)()
+        error = _user32.QueryDisplayConfig(
+            _QDC_ONLY_ACTIVE_PATHS,
+            ctypes.byref(paths),
+            path_info,
+            ctypes.byref(modes),
+            mode_info,
+            None,
+        )
+        if error == _ERROR_INSUFFICIENT_BUFFER:
+            continue
+        if error:
+            raise ctypes.WinError(error)
+        return any(
+            path.targetInfo.outputTechnology not in _OWN_PANELS for path in path_info[: paths.value]
+        )
 
 
 def foreground() -> int | None:
@@ -358,6 +531,12 @@ def program(hwnd: int) -> str | None:
         hosted = _hosted_process(hwnd, pid)
         if hosted is not None:
             path = _image(hosted) or path
+    return None if path is None else PureWindowsPath(path).name
+
+
+def program_of(pid: int) -> str | None:
+    """The file name of a process's program, as `discord.exe`; None when it cannot be opened."""
+    path = _image(pid)
     return None if path is None else PureWindowsPath(path).name
 
 

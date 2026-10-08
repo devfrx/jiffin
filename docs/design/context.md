@@ -3,9 +3,11 @@
 How the app sees what is in the foreground: the app, the window title and, in
 the browsers, the address
 ([ADR-0004](../adr/0004-context-identity.md),
-[ADR-0005](../adr/0005-browser-address-ui-automation.md)). The code is
-`platform/`: `capture.py` is the context thread and its observations,
-`address.py` reads the address bars through UI Automation, and `win32.py`
+[ADR-0005](../adr/0005-browser-address-ui-automation.md)); and the situations
+around it ([below](#the-situations)). The code is `platform/`: `capture.py` is
+the context thread and its observations, `address.py` reads the address bars
+and the tabs through UI Automation, `audio.py`, `media.py` and `network.py`
+read Core Audio, Windows' media controls and the networks, and `win32.py`
 calls Windows.
 
 ## The context thread
@@ -141,6 +143,105 @@ bar, is not read at all. One read clears it. Only tab
 windows count, those whose title ends with the browser's suffix: a dialog, an
 installed web app or DevTools has no bar. The tray gets the set of unreadable
 browsers whenever it changes.
+
+## The situations
+
+The same thread reads the situations of
+[ADR-0028](../adr/0028-read-the-situations-in-core.md), in `Situations`: each
+goes out at start, all at one time, and then only when its values changed.
+`core` counts the 5 s a change must last ([situations.md](situations.md#over-time)).
+
+```mermaid
+sequenceDiagram
+    participant W as Windows
+    participant C as context thread
+    participant K as worker thread
+
+    C->>W: start Core Audio, the media controls and the Network List Manager
+    C->>K: SituationObservation of each situation, at one time
+    par a change of a source with events
+        W-->>C: Core Audio or the networks changed: one message wakes the loop
+        C->>W: read that source again
+    and every second
+        C->>W: the time since the last input, what plays, the power, the displays
+    and the context in front changed, or a notice came
+        C->>W: in a browser that captures, the name of its tab in front
+    end
+    C->>K: SituationObservation(at, situation, values), for each that changed
+```
+
+| Situation | Where it comes from | Read | A read |
+|---|---|---|---|
+| `call` | Core Audio's capture sessions: the processes whose stream from a microphone runs, never the system's sounds nor Jiffin, by their program in lower case | at Core Audio's events | 2.7 ms; the first 7.4 ms |
+| `headphones` | the form of the default output: headphones or a headset | at Core Audio's events | 3.9 ms |
+| `network` | the Network List Manager: the ids of the networks connected, and their labels | at its events | 2 ms |
+| `playback` | Windows' media controls (GSMTC, WinRT through `ctypes`): the apps whose session plays | every second | 0.06 ms |
+| `power` | `GetSystemPowerStatus`: on the mains, or not | every second | 2.6 µs |
+| `display` | `QueryDisplayConfig`: a display not connected as the PC's own panel | every second | 0.38 ms |
+| `away` | `GetLastInputInfo`, the notices of lock and sleep, the call and what plays | every second, at a notice | 1.6 µs |
+
+Measured on the owner's laptop on 2026-10-08. The media controls start in
+47 ms, the Network List Manager in 26 ms.
+
+- **Events where a read costs, a tick where it does not.** Core Audio and the
+  Network List Manager call back on threads of their own, often many times
+  for one change: each call only posts a message to the loop, and not again
+  until the loop has taken it; the loop reads that source again. The time
+  since the last input has no event, and the others cost less to read every
+  second than to follow. Core Audio's sessions send their events only to a
+  thread in the multithreaded apartment, as the context thread is, and only
+  once their manager has counted them.
+- **What plays comes from Windows' media controls,** not from Core Audio's
+  output sessions. An app whose output runs silent, a tab's WebAudio, a game,
+  Discord, would keep `playback` on with Core Audio: `away` would never come,
+  and "quando torno" never ring, a mistake nobody sees. The media controls
+  miss the players that do not use them, a game, some music players: `away`
+  then comes in front of them and the return rings, a mistake that shows. The
+  values are the ids Windows gives those apps, `spotify.exe`, `vivaldi.<id>`;
+  never a title or a track.
+- **Away** comes at once with a lock or a sleep, until both are over;
+  otherwise after 3 minutes (`AWAY_MS`) without a key, the mouse, a call or
+  anything playing. A call and something playing count as input: after a call
+  listened to for 10 minutes, the 3 minutes start at its end, or its end would
+  read as a return.
+- **A call in a browser.** Core Audio sees the whole browser. While Chrome or
+  Brave captures and its tab window is in front, the capture reads the name of
+  the selected tab: Chromium adds "Microphone recording", "Camera and
+  microphone recording" or "Desktop content shared" to a tab that records or
+  shares the screen, translated (English and Italian are known). Then the
+  call's value is the site of the context's address, its host, and it stays
+  while the browser captures, in front of other tabs and windows too; a tab
+  that records, in front, moves it. The tab in front is the one whose name
+  bears the window's title, alone or before its marks: Chromium's strip tells
+  UI Automation of no selected tab (its views answer no selection), and a
+  page's own tabs are not named so. The list that holds the tabs is kept per
+  window; a window whose tabs do not bear its title is searched again only
+  once the title changes, and a mark that comes a moment after the capture is
+  read at the next second. Vivaldi's tabs tell what plays and what is shared,
+  never what records (its interface's code, 8.2): its calls count whole, as
+  those of a private window, of a window in full screen or of an address not
+  read do.
+- **The network** is known by the id the Network List Manager keeps for each
+  network joined, never by its name. Its label, home or office, comes from the
+  settings ([#153](https://github.com/devfrx/jiffin/issues/153)); until then a
+  network gives no value, and `offline` comes when none is connected.
+- **A device built again is no failure.** A Bluetooth headset that connects
+  builds its microphone again, and the session manager kept from before then
+  refuses every call (`AUDCLNT_E_DEVICE_INVALIDATED`): the reader makes a new
+  one and follows the sessions again; a microphone that goes away while it is
+  read is passed over until its next change, and an output built again while
+  it is read is read once more. Seen on the owner's laptop on 2026-10-08,
+  where it left Core Audio unread for a minute before.
+- **A source that fails,** to start or to read, gives its situations no value
+  (None): the log says it once, by the error's code, and the source starts
+  again a minute later (`RETRY_MS`); a state read every second reads again at
+  the next. Otherwise away, power, display and headphones always have a
+  value: the harness takes the end of one of them, with nothing after it, for
+  the app's close ([#155](https://github.com/devfrx/jiffin/issues/155)). At the
+  close, the worker observes every situation as not read, all at the time of
+  the context's last None.
+- **The log** gets each change: programs and labels by name, a call's sites
+  only by their count, never a network's id.
 
 ## Measured
 

@@ -59,7 +59,7 @@ flowchart LR
 |---|---|---|
 | interface | Qt, the QML windows, the tray icon, the shortcut, the relay | Qt's events, and the relay's slots |
 | worker | `core`, the one connection to the database, the supervisor and through it the engine process | its queue, and its deadlines |
-| context | the message loop, the WinEvent hooks, the window of Windows' notices and the COM apartment of the capture ([context](context.md)) | Windows |
+| context | the message loop, the WinEvent hooks, the window of Windows' notices, the timer, the readers of the situations and the COM apartment of the capture ([context](context.md)) | Windows, and the wakes of Core Audio and of the networks |
 | model file | one call to `model_file.ensure` at a time ([first run](first-run.md)) | the start, Retry, and a network problem tried again |
 | engine stdout, stderr | the engine's pipes ([engine](engine.md)) | the engine process |
 

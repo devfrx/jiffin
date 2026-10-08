@@ -111,9 +111,8 @@ there.
   handles the deadlines already due first, so a late `poll()` loses nothing,
   and a change of a situation before a context that becomes stable at the same
   moment. When the app closes, the worker observes "no context", so the context
-  in front leaves with it. The capture of the situations, and their end with
-  the app (each observed as not read), come with
-  [#147](https://github.com/devfrx/jiffin/issues/147).
+  in front leaves with it, and each situation as not read, at the same time:
+  their stretches end with the app ([context](context.md#the-situations)).
 - **The engine's sleep.** After every event the worker reads `need` and
   passes it to the engine's supervisor
   ([ADR-0027](../adr/0027-light-sleep-of-the-engine.md),

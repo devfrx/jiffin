@@ -30,6 +30,7 @@ from jiffin.core.reminders import (
     Reminders,
     RemindersView,
 )
+from jiffin.core.situations import Situation, SituationObservation
 from jiffin.store.store import Json, Store
 
 log = logging.getLogger(__name__)
@@ -131,7 +132,7 @@ class Worker:
         on_alerts: Callable[[AlertsView], None],
         on_reminders: Callable[[RemindersView], None],
         on_engine: Callable[[Status], None],
-        capture: Callable[[Callable[[Observation], None]], Source],
+        capture: Callable[[Callable[[Observation | SituationObservation], None]], Source],
         *,
         engine: Sequence[str] | None = None,
     ) -> None:
@@ -173,8 +174,8 @@ class Worker:
         """Run `command` on `core`."""
         self._queue.put(lambda: command(self._core))
 
-    def observe(self, observation: Observation) -> None:
-        """What the context capture saw."""
+    def observe(self, observation: Observation | SituationObservation) -> None:
+        """What the context capture saw: the window in front, or a situation."""
         self.command(lambda core: core.observe(observation))
 
     def model_ready(self) -> None:
@@ -317,8 +318,13 @@ class Worker:
     def _shut(self) -> None:
         try:
             self._capture.close()
-            # Nothing is in front any more: the context in front leaves with the app (ADR-0021).
-            self._core.observe(Observation(self._clock.now(), None))
+            # Nothing is in front any more, and no situation is read: the context in front and
+            # the stretches of the situations leave with the app, all at one time, as the
+            # harness finds the app's close (ADR-0021, ADR-0028).
+            at = self._clock.now()
+            self._core.observe(Observation(at, None))
+            for situation in Situation:
+                self._core.observe(SituationObservation(at, situation, None))
             self._save()
             self._supervisor.close()
         finally:
