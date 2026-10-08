@@ -164,7 +164,7 @@ def page(day: days.Day, labels: Mapping[str, bool], clock: Clock, source: str, p
             "d": "" if alert.d is None else f"{alert.d:.2f}",
             "time_only": alert.evaluation_id is None,
             "label": labels.get(days.Pair(alert.context, alert.revision).key),
-            "answer": "" if alert.answer is None else alert.answer.value,
+            "answer": "" if alert.answer is None else HARNESS.report.answers[alert.answer.value],
             "delay": f"{(alert.shown_at - alert.due_at) / 1000:.0f} s",
         }
         for alert in day.alerts

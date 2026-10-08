@@ -9,8 +9,9 @@ the latest migration.
 ```mermaid
 erDiagram
     reminder ||--|{ revision : "versions of its text"
-    reminder ||--o{ silence : "Not here"
-    context ||--o{ silence : "silenced in"
+    reminder ||--o{ context_answer : "answered per place"
+    context ||--o{ context_answer : "answered in"
+    engine_build |o--o{ context_answer : "scored its d"
     engine_build |o--o{ revision : "wrote the statement"
     revision ||--o{ candidate : "judged as"
     evaluation ||--o{ candidate : "judged"
@@ -42,6 +43,7 @@ erDiagram
         int written_at "when its time counts from"
         int perennial "Ogni volta"
         int created_at "null for later revisions of 0.1"
+        text situations "JSON terms, [] without"
     }
     context {
         int id PK
@@ -87,13 +89,32 @@ erDiagram
         int shown_at
         int vanished_at
         int seen_at
-        text answer "fatto, rimanda, non_qui, chiuso; utile in 0.1"
-        text snooze "which Rimanda"
+        text answer "done, snooze, not_here, closed; useful in 0.1"
+        text snooze "which Snooze"
         int answered_at
+        int requested "asked for with Remind here"
     }
-    silence {
-        int reminder PK "cascade"
-        int context PK
+    context_answer {
+        int id PK "the last of a place counts"
+        int reminder FK "cascade"
+        int context FK
+        text here "not_here, remind_here or withdrawn"
+        real d "null when the cache had none"
+        int engine_build FK "of the d"
+        int at
+    }
+    situation {
+        text kind "call, away, power, display, headphones, network, playback"
+        text value "a state, never a text"
+        int since
+        int until
+    }
+    engine_sleep {
+        int slept_at PK
+        text reason "idle or nothing_in_front"
+        int woken_at "null while asleep"
+        text woken_by "context, statement, judgement or retry"
+        int ready_at "null without a model"
     }
     judgement {
         int context PK
@@ -126,15 +147,50 @@ when a condition was written across a Edit that does not change it, as
 - **The harness's log** keeps the alerts of reminders with only a time, which
   have no evaluation, and when each evaluated context left.
 
+## Version 0.3
+
+Migration 0003 stores the answers in English
+([ADR-0026](../adr/0026-italian-in-language-files.md)): the rebuild of
+`alert` translates those of 0.1 and 0.2 with a `CASE`, and adds `requested`,
+the alerts asked for with Remind here
+([ADR-0029](../adr/0029-learn-from-answers-per-place.md)). `candidate` is
+rebuilt for `outside_situation`, and `revision` gains its situations, the
+terms as `store/terms.py`'s JSON, `[]` before 0.3
+([ADR-0028](../adr/0028-read-the-situations-in-core.md)). Three tables are
+new:
+
+- **`context_answer`** takes the place of `silence`: a row for every answer
+  per place and every withdrawal, a change of text included. Each silence
+  became a Not here with the d, the build and the time of the last alert its
+  reminder had answered Not here in that context; one whose alert was gone
+  takes the time of its reminder.
+- **`situation`**: a row per stretch of a value of a situation, once it
+  ended. The values are states (an app's executable, a site, `yes`, `home`),
+  never texts.
+- **`engine_sleep`**: a row per light sleep of the engine
+  ([ADR-0027](../adr/0027-light-sleep-of-the-engine.md)), written when it
+  starts and replaced when it ends, so a sleep under way when the app dies
+  keeps its start.
+
+- **What loads**, besides 0.2's: the answer that counts in each place, the
+  last one there unless it was withdrawn, the last answered last; and each
+  revision's situations. The stretches load nothing: `core` reads the
+  situations again from the capture.
+- **The harness's log** keeps every answer per place, in order, and the
+  requested alerts, which have no evaluation.
+
 ## Keeping and deleting
 
 - **Cleanup**, at startup and daily, in one transaction
   ([ADR-0014](../adr/0014-feedback-data-retention.md)): evaluations older than
   30 days, with their candidates; unanswered alerts older than 30 days; cache
-  entries unused for 30 days; contexts no row uses any more. Then
-  `PRAGMA optimize` and a `TRUNCATE` checkpoint.
+  entries unused for 30 days; stretches of situations that ended, and sleeps
+  of the engine that began, more than 30 days ago; contexts no row uses any
+  more. Then `PRAGMA optimize` and a `TRUNCATE` checkpoint.
+- **The answers per place** stay until their reminder is deleted, the
+  withdrawals too: the last of a place counts, the others serve the replay.
 - **Deleting a reminder** cascades to its revisions, and through them to its
-  candidates, alerts and cache entries, and to its silences. Then the
+  candidates, alerts and cache entries, and to its answers per place. Then the
   evaluations it leaves without candidates and the unused contexts go, and a
   `TRUNCATE` checkpoint follows, so that nothing about it stays in the WAL.
 - A context is one row whatever its address: `context_identity` indexes the

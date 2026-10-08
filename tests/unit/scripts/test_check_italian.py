@@ -78,8 +78,20 @@ def test_the_examples_and_the_names_a_file_may_hold_pass(check: ModuleType) -> N
     examples = 'SAMPLES = (("quando apro Teams", "bere"),)\n'
     assert found(check, "src/jiffin/ui/__main__.py", examples) == []
     assert found(check, "src/jiffin/engine/prompts.py", examples) == []
-    records = 'DONE = "fatto"\nNOT_HERE = "non_qui"\nOTHER = "rimandato"\n'
-    assert found(check, "src/jiffin/core/records.py", records) == [(3, "rimandato")]
+    name = 'LABELS = "etichette.json"\n'
+    assert found(check, "src/jiffin/harness/folders.py", name) == []
+    assert found(check, str(CORE), name) == [(1, "etichette")]
+
+
+def test_the_answers_of_0_2_are_no_names_in_the_code_after_migration_0003(
+    check: ModuleType,
+) -> None:
+    records = 'DONE = "fatto"\nNOT_HERE = "non_qui"\n'
+    assert found(check, "src/jiffin/core/records.py", records) == [
+        (1, "fatto"),
+        (2, "non"),
+        (2, "qui"),
+    ]
 
 
 def test_docs_are_read_outside_quotes_and_code_spans(check: ModuleType) -> None:

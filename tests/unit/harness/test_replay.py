@@ -11,7 +11,16 @@ import pytest
 from jiffin.core.clock import SimulatedClock
 from jiffin.core.context import Context, Observation, normalize
 from jiffin.core.model import EngineBuild, ModelError
-from jiffin.core.records import Alert, Answer, Evaluation, Left, Outcome, Snooze
+from jiffin.core.records import (
+    Alert,
+    Answer,
+    ContextAnswer,
+    Evaluation,
+    Here,
+    Left,
+    Outcome,
+    Snooze,
+)
 from jiffin.core.reminders import HOUR_MS, Reminders
 from jiffin.harness import __main__ as harness
 from jiffin.harness import day as days
@@ -178,6 +187,25 @@ def test_a_lower_threshold_alerts_where_the_recorded_scores_reach_it(
     assert [alert.revision.condition for alert in new] == [PAUSA[0]]
     assert len(lower.alerts) == len(day.alerts) + 1
     assert {evaluation.threshold for evaluation in lower.evaluations} == {0.8}
+
+
+def test_an_answer_said_before_the_day_counts_from_its_start(
+    recorded: tuple[Log, days.Day],
+) -> None:
+    log, day = recorded
+    [pause] = [reminder for reminder in log.reminders if reminder.revision.condition == PAUSA[0]]
+    trains = next(e.context for e in day.evaluations if e.context.title == "Offerte treni")
+
+    def alerts_there(*said: tuple[Here, int]) -> int:
+        """Pause's alerts in the trains at a lower threshold, with these answers in the log."""
+        answers = tuple(ContextAnswer(pause.id, trains, here, None, None, at) for here, at in said)
+        lower = replay.Replay(replace(log, answers=answers), day, threshold=0.8).run()
+        return sum(alert.context == trains for alert in lower.alerts)
+
+    assert alerts_there() == 1
+    assert alerts_there((Here.NO, T0 - 2_000)) == 0
+    assert alerts_there((Here.NO, T0 - 2_000), (Here.WITHDRAWN, T0 - 1_000)) == 1
+    assert alerts_there((Here.NO, T0 + 4_600_000)) == 1  # said after its alert: not from the start
 
 
 def test_without_answers_every_alert_leaves_the_screen_unanswered(

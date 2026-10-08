@@ -32,6 +32,8 @@ class Report:
     reminded_intro: str
     reasons: Mapping[str, str]
     """By the reason `harness.day` names: "below threshold"."""
+    answers: Mapping[str, str]
+    """By the answer as `store` keeps it: "not_here"."""
 
 
 @dataclass(frozen=True, slots=True)

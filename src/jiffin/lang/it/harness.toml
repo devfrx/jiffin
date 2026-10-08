@@ -40,6 +40,14 @@ snoozed = "rimandato"
 silenced = "«Non qui»"
 waited = "in attesa di un posto, poi chiuso"
 
+# The answer to an alert shown, by the value the store keeps: the button pressed, or the X.
+[report.answers]
+done = "fatto"
+useful = "utile"
+snooze = "rimanda"
+not_here = "non qui"
+closed = "chiuso"
+
 # Every reminder's condition, beside its time understood and its statement (ADR-0008).
 [statements]
 title = "Affermazioni Jiffin"

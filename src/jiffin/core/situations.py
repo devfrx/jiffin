@@ -161,7 +161,7 @@ class SituationObservation:
 @dataclass(frozen=True, slots=True)
 class SituationStretch:
     """A stretch of one value of a situation, from when it arrived to when it left, recorded once
-    it ended: for the table `situation` of migration 0003 (#150), as `Left` is for contexts."""
+    it ended: for the table `situation`, as `Left` is for contexts."""
 
     situation: Situation
     value: str

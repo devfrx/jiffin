@@ -39,7 +39,7 @@ class Revision:
     """When the revision was made; unknown for the later revisions of version 0.1."""
     situations: tuple[Term, ...] = ()
     """The situations of the condition (ADR-0028): none without, or when they are not
-    understood. `store` keeps them from migration 0003 (#150)."""
+    understood."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,15 +62,6 @@ class ReminderDeleted:
     reminder_id: int
 
 
-@dataclass(frozen=True, slots=True)
-class Silence:
-    """Not here, as `store` keeps it until migration 0003 (#150): the reminder keeps quiet in
-    this context until its text changes."""
-
-    reminder_id: int
-    context: Context
-
-
 class Here(StrEnum):
     """What the user said of a reminder in one place, an exact context (ADR-0029): the last one
     counts, until the reminder's text changes."""
@@ -86,8 +77,8 @@ class Here(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ContextAnswer:
-    """An answer per place, or its withdrawal (ADR-0029), for the table `context_answer` of
-    migration 0003 (#150)."""
+    """An answer per place, or its withdrawal (ADR-0029): `store` keeps every one, and the last
+    of each reminder in each context counts."""
 
     reminder_id: int
     context: Context
@@ -167,12 +158,14 @@ class Left:
 
 
 class Answer(StrEnum):
-    DONE = "fatto"
-    USEFUL = "utile"
+    """The answer to an alert, stored in English since migration 0003 (ADR-0026)."""
+
+    DONE = "done"
+    USEFUL = "useful"
     """Version 0.1 only: Next time took its place."""
-    SNOOZE = "rimanda"
-    NOT_HERE = "non_qui"
-    CLOSED = "chiuso"
+    SNOOZE = "snooze"
+    NOT_HERE = "not_here"
+    CLOSED = "closed"
     """The X: the alert was seen, and gives no label (ADR-0014)."""
 
 
@@ -209,22 +202,9 @@ class Alert:
     answer: Answer | None = None
     answered_at: int | None = None
     snooze: Snooze | None = None
-    """Which Snooze, with the answer `rimanda`; unknown in version 0.1."""
+    """Which Snooze, with the answer `snooze`; unknown in version 0.1."""
     requested: bool = False
-    """Asked for with Remind here (ADR-0029): it counts in its unit, and is never the judge's.
-    `store` keeps it from migration 0003 (#150)."""
-
-
-Record = (
-    Reminder
-    | ReminderDeleted
-    | ContextAnswer
-    | CacheEntry
-    | Evaluation
-    | Left
-    | SituationStretch
-    | Alert
-)
+    """Asked for with Remind here (ADR-0029): it counts in its unit, and is never the judge's."""
 
 
 class SleepReason(StrEnum):
@@ -265,6 +245,19 @@ class EngineSleep:
     ended without a model: the wake failed, or the engine failed asleep."""
 
 
+Record = (
+    Reminder
+    | ReminderDeleted
+    | ContextAnswer
+    | CacheEntry
+    | Evaluation
+    | Left
+    | SituationStretch
+    | Alert
+    | EngineSleep
+)
+
+
 @dataclass(frozen=True, slots=True)
 class LastIds:
     """The highest ids saved so far: new records continue after them."""
@@ -280,7 +273,9 @@ class Snapshot:
     """What `core` gets back from `store` when the app starts."""
 
     reminders: tuple[Reminder, ...] = ()
-    silences: tuple[Silence, ...] = ()
+    answers: tuple[ContextAnswer, ...] = ()
+    """The answer that counts in each place: the last one there, unless it was withdrawn; the
+    last answered last."""
     cache: tuple[CacheEntry, ...] = ()
     """The entries of the current revisions."""
     last_alerts: tuple[tuple[int, int, int], ...] = ()

@@ -242,6 +242,12 @@ def test_a_day_keeps_the_alerts_of_reminders_with_only_a_time() -> None:
     assert days.select(log, None, clock()).alerts == (A1, called)
 
 
+def test_a_day_leaves_out_the_alerts_asked_for_with_remind_here() -> None:
+    asked = Alert(4, 2, RENT, None, BANK, 0.5, T0 + 60_000, T0 + 60_000, requested=True)
+    log = Log((), REVISIONS, (E1,), (A1, asked), (), ())
+    assert days.select(log, None, clock()).alerts == (A1,)
+
+
 def test_false_alarms_count_each_wrong_pair_once_and_times_apart() -> None:
     again = judged(6, T0 + 1_500_000, MAIL, (0.98, Outcome.ALERT), (0.3, Outcome.BELOW_THRESHOLD))
     twice = Alert(4, 1, ICONS, 6, MAIL, 0.98, again.at, again.context_since, shown_at=again.at)

@@ -1,7 +1,6 @@
 """The worker thread with the client's fake engine, on a database in a temporary folder; the
 contexts are played by the test (ADR-0012)."""
 
-import logging
 import sqlite3
 import sys
 import threading
@@ -15,7 +14,6 @@ from typing import cast
 
 import pytest
 
-from jiffin.app import worker
 from jiffin.app.worker import QueuedCore, Worker
 from jiffin.client.supervisor import IDLE_MS, State, Status, StopReason
 from jiffin.core.alerts import AlertsView
@@ -378,17 +376,16 @@ def test_the_worker_wakes_on_its_own_when_the_engine_starts_again(make_scene: Ma
 # The engine's light sleep (ADR-0027)
 
 
-def test_the_engine_sleeps_while_nothing_is_in_front(
-    scene: Scene, caplog: pytest.LogCaptureFixture
-) -> None:
-    caplog.set_level(logging.INFO, logger=worker.__name__)
+def test_the_engine_sleeps_while_nothing_is_in_front(scene: Scene) -> None:
     scene.enter(FIGMA)
     scene.worker.model_ready()
     scene.settle()
     scene.enter(None)
     scene.settle()
     assert scene.statuses == [STARTING, READY, ASLEEP]
-    assert f"engine asleep from {START} (nothing_in_front)" in caplog.text
+    with closing(sqlite3.connect(scene.database)) as db:
+        slept = db.execute("SELECT slept_at, reason, woken_at FROM engine_sleep").fetchall()
+    assert slept == [(START, "nothing_in_front", None)]
 
 
 def test_a_context_wakes_the_engine_before_its_5_s_and_is_judged_once(scene: Scene) -> None:

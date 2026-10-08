@@ -16,6 +16,7 @@ from jiffin.core.records import (
     CacheEntry,
     Candidate,
     ContextAnswer,
+    EngineSleep,
     Evaluation,
     Here,
     LastIds,
@@ -24,12 +25,13 @@ from jiffin.core.records import (
     Reminder,
     ReminderDeleted,
     Revision,
-    Silence,
+    SleepReason,
     Snapshot,
     Snooze,
+    Waker,
 )
 from jiffin.core.schedule import Moment, OnDate, Period, Schedule, Slot, Weekdays
-from jiffin.core.situations import Holds, Situation, SituationStretch
+from jiffin.core.situations import YES, Ends, Holds, Lasts, Situation, SituationStretch
 from jiffin.store.store import RETENTION_MS, Store
 
 NOW = 1_790_000_000_000
@@ -95,6 +97,12 @@ def count(path: Path, table: str, where: str = "1") -> int:
         return int(db.execute(f"SELECT count(*) FROM {table} WHERE {where}").fetchone()[0])
 
 
+def rows(path: Path, sql: str) -> list[tuple[object, ...]]:
+    """Read through a second connection."""
+    with closing(sqlite3.connect(path)) as db:
+        return db.execute(sql).fetchall()
+
+
 def test_what_core_saved_comes_back(store: Store) -> None:
     figma = reminder(1)
     snoozed = replace(reminder(2, "se sono sul sito della banca"), snoozed_until=NOW + DAY)
@@ -104,7 +112,7 @@ def test_what_core_saved_comes_back(store: Store) -> None:
     store.save([figma, snoozed, judged, vanished, entry, said(snoozed.id, BANK), said(2, FIGMA)])
     assert store.load() == Snapshot(
         reminders=(figma, snoozed),
-        silences=(Silence(2, FIGMA), Silence(2, BANK)),
+        answers=(said(2, BANK), said(2, FIGMA)),
         cache=(entry,),
         last_alerts=((figma.id, vanished.id, NOW),),
         unseen=(vanished,),
@@ -210,30 +218,61 @@ def test_alerts_without_a_judgement_and_the_kind_of_a_rimanda_are_kept(store: St
     assert store.log().alerts == (later, closed)
 
 
-def test_remind_here_and_a_withdrawal_take_a_silence_away(store: Store) -> None:
+def test_the_answer_that_counts_in_a_place_is_the_last_unless_withdrawn(store: Store) -> None:
+    asked = ContextAnswer(1, FIGMA, Here.YES, 0.5, BUILD, NOW + 1_000)
     store.save([reminder(1), said(1, FIGMA), said(1, BANK)])
-    store.save([said(1, FIGMA, Here.YES), said(1, BANK, Here.WITHDRAWN)])
-    assert store.load().silences == ()
-    store.save([said(1, BANK)])
-    assert store.load().silences == (Silence(1, BANK),)
+    store.save([asked, replace(said(1, BANK, Here.WITHDRAWN), at=NOW + 2_000)])
+    assert store.load().answers == (asked,)
+    store.save([replace(said(1, BANK), at=NOW + 3_000)])
+    assert store.load().answers == (asked, replace(said(1, BANK), at=NOW + 3_000))
+    # Every answer and every withdrawal stays, for the replay.
+    assert [(a.context, a.here, a.at) for a in store.log().answers] == [
+        (FIGMA, Here.NO, NOW),
+        (BANK, Here.NO, NOW),
+        (FIGMA, Here.YES, NOW + 1_000),
+        (BANK, Here.WITHDRAWN, NOW + 2_000),
+        (BANK, Here.NO, NOW + 3_000),
+    ]
 
 
-def test_until_migration_0003_the_situations_leave_no_rows(store: Store, path: Path) -> None:
-    """#150 gives them their column, their table and their outcome: until then a save with them
-    does not fail, and a reminder comes back without its situations."""
+def test_the_situations_are_kept(store: Store, path: Path) -> None:
     figma = reminder(1)
-    situated = replace(figma, revision=replace(figma.revision, situations=(Holds(Situation.CALL),)))
+    terms = (
+        Lasts(20),
+        Holds(Situation.CALL, "zoom"),
+        Lasts(60, Situation.CALL),
+        Ends(Situation.AWAY, YES),
+    )
+    situated = replace(figma, revision=replace(figma.revision, situations=terms))
     outside = Candidate(figma.revision.id, 2.5, False, Outcome.OUTSIDE_SITUATION)
     judged = replace(evaluation(1, NOW, FIGMA, figma), candidates=(outside,))
     stretch = SituationStretch(Situation.CALL, "zoom.exe", NOW - DAY, NOW)
     store.save([situated, judged, stretch])
-    assert (count(path, "evaluation"), count(path, "candidate")) == (1, 0)
-    assert store.load().reminders == (figma,)
+    assert store.load().reminders == (situated,)
+    assert store.log().evaluations == (judged,)
+    assert rows(path, "SELECT * FROM situation") == [("call", "zoom.exe", NOW - DAY, NOW)]
 
 
-def test_an_answer_that_takes_no_silence_away_adds_no_context(store: Store, path: Path) -> None:
-    store.save([reminder(1), said(1, FIGMA, Here.YES), said(1, BANK, Here.WITHDRAWN)])
-    assert count(path, "context") == 0
+def test_an_alert_asked_for_with_remind_here_is_kept_as_such(store: Store) -> None:
+    figma = reminder(1)
+    asked = replace(on_time(1, figma, NOW), d=0.5, shown_at=NOW, requested=True)
+    store.save([figma, asked])
+    assert store.load().unseen == (asked,)
+    assert store.log().alerts == (asked,)  # with a d and no evaluation, as no other alert has
+
+
+def test_a_sleep_of_the_engine_is_written_when_it_starts_and_again_when_it_ends(
+    store: Store, path: Path
+) -> None:
+    slept = EngineSleep(NOW, SleepReason.NOTHING_IN_FRONT)
+    asleep = EngineSleep(NOW + DAY, SleepReason.IDLE)
+    store.save([slept, asleep])
+    woken = replace(slept, woken_at=NOW + 60_000, woken_by=Waker.CONTEXT, ready_at=NOW + 63_000)
+    store.save([woken])
+    assert rows(path, "SELECT * FROM engine_sleep ORDER BY slept_at") == [
+        (NOW, "nothing_in_front", NOW + 60_000, "context", NOW + 63_000),
+        (NOW + DAY, "idle", None, None, None),
+    ]
 
 
 def test_retention_keeps_30_days(store: Store, path: Path) -> None:
@@ -250,16 +289,24 @@ def test_retention_keeps_30_days(store: Store, path: Path) -> None:
             replace(alert(2, answered, old), answer=Answer.DONE, answered_at=old.at),
             CacheEntry(FIGMA, kept.revision.id, BUILD, 2.5, NOW - RETENTION_MS - 1),
             CacheEntry(BANK, kept.revision.id, BUILD, 2.5, NOW - RETENTION_MS),
+            SituationStretch(Situation.POWER, "battery", old.at - DAY, NOW - RETENTION_MS - 1),
+            SituationStretch(Situation.POWER, "plugged", old.at - DAY, NOW - RETENTION_MS),
+            EngineSleep(NOW - RETENTION_MS - 1, SleepReason.IDLE),
+            EngineSleep(NOW - RETENTION_MS, SleepReason.IDLE),
+            replace(said(answered.id, FIGMA), at=old.at),
         ]
     )
     store.cleanup(NOW)
     assert count(path, "evaluation") == 1
     assert count(path, "candidate") == 1
     assert count(path, "alert") == 1
-    assert count(path, "alert", "evaluation IS NULL AND answer = 'fatto'") == 1
+    assert count(path, "alert", "evaluation IS NULL AND answer = 'done'") == 1
     assert count(path, "judgement") == 1
     assert count(path, "context") == 2  # the answered alert still uses FIGMA
     assert count(path, "engine_build") == 1
+    assert rows(path, "SELECT value FROM situation") == [("plugged",)]
+    assert rows(path, "SELECT slept_at FROM engine_sleep") == [(NOW - RETENTION_MS,)]
+    assert count(path, "context_answer") == 1  # until its reminder is deleted
 
 
 def test_an_alert_answered_after_the_cleanup_took_it_comes_back_without_its_evaluation(
@@ -273,7 +320,7 @@ def test_an_alert_answered_after_the_cleanup_took_it_comes_back_without_its_eval
     store.cleanup(NOW)
     assert count(path, "alert") == 0
     store.save([replace(figma, completed_at=NOW), replace(unseen, answer=Answer.DONE)])
-    assert count(path, "alert", "answer = 'fatto' AND evaluation IS NULL") == 1
+    assert count(path, "alert", "answer = 'done' AND evaluation IS NULL") == 1
     assert count(path, "reminder", "completed_at IS NOT NULL") == 1
 
 
@@ -304,9 +351,9 @@ def test_deleting_a_reminder_leaves_nothing_about_it(store: Store, path: Path) -
     assert count(path, "reminder") == count(path, "revision") == 1
     for table in ("candidate", "alert", "judgement"):
         assert count(path, table, f"revision = {gone.revision.id}") == 0
-    assert count(path, "silence") == 0
+    assert count(path, "context_answer") == 0
     assert count(path, "evaluation") == 1
-    assert count(path, "context", "app = 'figma'") == 0
+    assert count(path, "context", "app = 'figma.exe'") == 0
 
 
 def test_a_save_is_all_or_nothing(store: Store) -> None:
@@ -365,7 +412,7 @@ def test_the_log_holds_every_evaluation_alert_and_revision(store: Store) -> None
     assert log.revisions == {10: figma.revision, 11: revised, 20: bank.revision}
     assert log.evaluations == (first, failed, later)
     assert log.alerts == (answered,)
-    assert log.silences == (Silence(2, FIGMA),)
+    assert log.answers == (said(2, FIGMA),)
     assert log.left == ()
 
 

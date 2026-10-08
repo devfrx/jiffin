@@ -257,8 +257,8 @@ class Reminders:
         self._alerts = Alerts(saved.unseen)
         self._reminders = {reminder.id: reminder for reminder in saved.reminders}
         self._answers = {
-            (silence.reminder_id, silence.context): _Said(Here.NO, None, None)
-            for silence in saved.silences
+            (answer.reminder_id, answer.context): _Said(answer.here, answer.d, answer.build)
+            for answer in saved.answers
         }
         """The answer that counts in each place, by reminder and context: the last answered
         last."""

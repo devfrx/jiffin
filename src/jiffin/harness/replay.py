@@ -32,7 +32,9 @@ from jiffin.core.model import EngineBuild, Model, ModelError
 from jiffin.core.records import (
     Alert,
     Answer,
+    ContextAnswer,
     Evaluation,
+    Here,
     LastIds,
     Left,
     Outcome,
@@ -294,14 +296,9 @@ class Replay:
                 reminders.append(
                     replace(reminder, revision=first, completed_at=None, snoozed_until=snoozed)
                 )
-        made = {(a.reminder_id, a.context) for a in self._day.alerts if a.answer is Answer.NOT_HERE}
         return Snapshot(
             reminders=tuple(reminders),
-            silences=tuple(
-                silence
-                for silence in self._log.silences
-                if (silence.reminder_id, silence.context) not in made
-            ),
+            answers=self._answers_at_start(),
             last_alerts=self._last_alerts(),
             last_ids=LastIds(
                 reminder=max((r.id for r in self._log.reminders), default=0),
@@ -379,6 +376,17 @@ class Replay:
         if not judged or judged[0][1] is not Outcome.SNOOZED:
             return None
         return next((at for at, outcome in judged if outcome is not Outcome.SNOOZED), None)
+
+    def _answers_at_start(self) -> tuple[ContextAnswer, ...]:
+        """What counted in each place when the day began: the last answer said there before it,
+        unless it was withdrawn (ADR-0029). During the day, the Not here of its alerts come again
+        with their answers; its other answers are not replayed."""
+        said: dict[tuple[int, Context], ContextAnswer] = {}
+        for answer in self._log.answers:
+            if answer.at < self._begin:
+                said.pop((answer.reminder_id, answer.context), None)  # the last answered last
+                said[(answer.reminder_id, answer.context)] = answer
+        return tuple(answer for answer in said.values() if answer.here is not Here.WITHDRAWN)
 
     def _last_alerts(self) -> tuple[tuple[int, int, int], ...]:
         """For each reminder, its last alert before the day that counts: not answered Not here."""

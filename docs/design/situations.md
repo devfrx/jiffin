@@ -12,9 +12,8 @@ the terms of a condition and `Situations`, which follows them over time;
 `grammar.py` finds their words beside the time's, `meanings.py` has `read`,
 and `reminders.py` and `units.py` ring them. The words are the lexicon's,
 `situations.toml`. The capture that observes them is
-[#147](https://github.com/devfrx/jiffin/issues/147); until migration 0003
-([#150](https://github.com/devfrx/jiffin/issues/150)) the store keeps neither
-a revision's situations nor their stretches.
+[#147](https://github.com/devfrx/jiffin/issues/147); the store keeps a
+revision's terms and the stretches ([data model](data-model.md)).
 
 ## The situations
 
@@ -111,8 +110,8 @@ now.
   ended when it stopped. A situation followed for the first time holds from
   when its values arrived; an end before is not known.
 - **Each value's stretch** is recorded once it ended, `SituationStretch`
-  (situation, value, since, until), as `Left` is for contexts: for the table
-  `situation` of migration 0003.
+  (situation, value, since, until), as `Left` is for contexts: a row of the
+  table `situation`, kept 30 days.
 - **Not read any more** (`values` None, when the app ends or the capture loses
   it) ends the stretches at once, and is no end.
 - **After a restart** the stretches start again from the state read at start:

@@ -171,9 +171,8 @@ stateDiagram-v2
   what (a context, a statement, a judgement, or Retry), and when the model was
   ready after its warm-up. A sleep ended by a failure has no waker; one ended
   without a model has no ready time; one still under way when the app closes
-  is never ended. Until migration 0003 gives them their table
-  ([#150](https://github.com/devfrx/jiffin/issues/150)), the worker writes
-  them to the app log.
+  is never ended. The worker saves them with `core`'s records, in the table
+  `engine_sleep` ([data model](data-model.md)), kept 30 days.
 - **Time:** the restart, the sleep 5 minutes after the last request, and a
   wake tried again wait on the app's clock. The worker calls `poll` at the
   supervisor's deadline, and when the stdout thread reports that the output
