@@ -9,11 +9,13 @@ Win+Shift+N opens the creation window, the tray icon the list, and Settings in i
 settings; what they change is printed and kept until the end. In the list, Complete moves a
 reminder among the completed, and their full circle brings it back. Win+Shift+Q, or the row at
 the top of the list, opens the card of Remind here on a made-up place; a pick rings its reminder
-at once, and the list shows what it learned there, which its X forgets. Pause in the same menu
-shows the pause on the icon and in the list, until Resume. `--model` plays a first run: a
-download of a minute and its check, or a problem first, which Retry mends. No model and no data
-are needed. Quit in the tray icon's menu ends it, and prints an answer still waiting, which the
-app would send then; Ctrl+C in the terminal ends it at once.
+at once, and the list shows what it learned there, which its X forgets; a reminder on situations
+is the one its situation keeps quiet there. Pause in the same menu shows the pause on the icon
+and in the list, until Resume. A made-up network is in use, without a label: the settings, a
+condition at home and the list put one on it, which is printed (`--offline`: no network).
+`--model` plays a first run: a download of a minute and its check, or a problem first, which
+Retry mends. No model and no data are needed. Quit in the tray icon's menu ends it, and prints an
+answer still waiting, which the app would send then; Ctrl+C in the terminal ends it at once.
 """
 
 import argparse
@@ -52,13 +54,19 @@ from jiffin.ui.look import Material
 from jiffin.ui.tray_list import TrayList
 
 SAMPLES = (
+    ("quando finisco la call", "scrivere il riassunto della riunione", False),
     ("quando lavoro al progetto Rossi", "aggiornare il changelog prima del rilascio", False),
     ("quando apro Claude dopo le 23", "bere un bicchiere d'acqua", True),
     ("alle 15", "chiamare Giulia per il preventivo", False),
 )
-"""Condition, action and "Ogni volta" of the alerts: without a time, perennial with one, and with
-only a time."""
+"""Condition, action and "Ogni volta" of the alerts: on a situation only, without a time,
+perennial with one, and with only a time."""
 REMINDERS = (
+    ("quando sono a casa e apro Steam", "giocare solo un'ora", True, 0, 0, 0),
+    ("quando finisco la call stasera", "mandare il verbale", False, 0, 0, 0),
+    ("in call su Zoom da più di un'ora", "fare una pausa", True, 0, 0, 0),
+    ("quando sono su YouTube da più di 20 minuti", "tornare al lavoro", True, 0, 0, 0),
+    ("quando tolgo le cuffie", "rispondere ai messaggi", False, 0, 0, 0),
     ("quando lavoro al progetto Rossi", "aggiornare il changelog", False, 0, 12, 0),
     ("quando apro la posta", "rispondere a Giulia sul preventivo", False, 0, 0, 2),
     ("quando apro Claude dopo le 23", "bere un bicchiere d'acqua", True, 0, 0, 0),
@@ -67,7 +75,8 @@ REMINDERS = (
     ("quando prenoto un viaggio", "controllare la scadenza del passaporto", False, 0, 0, 0),
 )
 """Condition, action, "Ogni volta", days since it was written, minutes until the snooze ends, and
-silences: without a time, perennial with one, with only a time, and with a period over."""
+silences: on situations (ADR-0028), without a time, perennial with one, with only a time, and
+with a period over."""
 COMPLETED = (
     ("quando apro la posta", "mandare la fattura a Rossi", 20),
     ("quando apro il calendario", "prenotare il tagliando", 26 * 60),
@@ -86,9 +95,11 @@ QUIET = (
     Outcome.SILENCED,
     Outcome.OUTSIDE_TIME,
     Outcome.SAME_OCCASION,
-    Outcome.OUTSIDE_SITUATION,
 )
-"""What else kept each reminder quiet in that place, from the newest, in turn."""
+"""What else kept each reminder without situations quiet in that place, from the newest, in turn;
+one on situations is outside them."""
+NETWORK = "00000000-0000-4000-8000-00000000c0de"
+"""The made-up network in use."""
 _NAME = "spark-x2.5-4b-rizzo-flow-lora-q4_k_m.gguf"
 MODEL = ModelFile(
     name=_NAME,
@@ -284,7 +295,18 @@ class Preview:
         reminders = sorted(self._reminders.values(), key=lambda a: a.reminder.id, reverse=True)
         quiet = itertools.cycle(QUIET)
         view = (
-            HereView(HERE, tuple(HereReminder(a.reminder, next(quiet)) for a in reminders))
+            HereView(
+                HERE,
+                tuple(
+                    HereReminder(
+                        a.reminder,
+                        Outcome.OUTSIDE_SITUATION
+                        if a.reminder.revision.situations
+                        else next(quiet),
+                    )
+                    for a in reminders
+                ),
+            )
             if self._placed
             else HereView(None)
         )
@@ -373,6 +395,7 @@ class Preview:
             schedule=reading.schedule,
             written_at=written_at,
             perennial=perennial,
+            situations=reading.situations,
         )
 
     def _say(self, active: ActiveReminder, context: Context, here: Here | None) -> None:
@@ -446,6 +469,7 @@ def main() -> None:
         default=(),
         help="browsers whose address cannot be read: the '!' and the banner",
     )
+    parser.add_argument("--offline", action="store_true", help="no network in use")
     parser.add_argument(
         "--model",
         choices=["ready", "download", *PROBLEMS],
@@ -473,6 +497,7 @@ def main() -> None:
     preview.start(interface)
     download.begin(interface)
     interface.show_unreadable(frozenset(args.unreadable))
+    interface.show_networks(frozenset() if args.offline else frozenset({NETWORK}))
     interface.show_engine(TrayList.Engine[args.engine.upper()])
     if args.creation:
         interface.creation.new()
