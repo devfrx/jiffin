@@ -577,6 +577,7 @@ class Recorded:
         ("create", ("quando apro Figma", "esportare le icone", True)),
         ("edit", (3, "quando apro Figma", "esportare le icone", True)),
         ("complete", (3,)),
+        ("reopen", (3,)),
         ("delete", (3,)),
         ("remind_here", (3, FIGMA)),
         ("withdraw", (3, FIGMA)),

@@ -40,6 +40,8 @@ LIGHT_SOLID_STILL = Settings(
 )
 WAIT_MS = 500
 """How long the alerts of these tests wait for an answer, instead of 10 s."""
+HOLD_MS = 300
+"""How long an answer waits with Undo in these tests, instead of 5 s."""
 FRIDAY = datetime.fromisoformat("2026-10-02T19:00+00:00")
 ACTION = "esportare le icone"
 LONG_ACTION = (
@@ -185,6 +187,7 @@ class Screen:
         self._windows = [w for w in made if w.title() == TEXTS.alert.title]
         for window in self._windows:
             window.setProperty("duration", WAIT_MS)
+            window.setProperty("holdDuration", HOLD_MS)
 
     def show(self, *alerts: Alert) -> None:
         """`core`'s view: these alerts on screen, oldest first."""
@@ -390,8 +393,8 @@ def test_the_card_of_remind_here_goes_on_top_and_the_alerts_move_under_it_and_ba
 
 def test_the_alerts_below_move_up_once_one_has_left(qtbot: QtBot, screen: Screen) -> None:
     screen.show(alert(1), alert(2), alert(3))
-    screen.click(1, TEXTS.alert.done)
-    assert screen.answers.given == [("done", 1)]
+    screen.click(1, TEXTS.command.close)
+    assert screen.answers.given == [("close", 1)]
     qtbot.waitUntil(lambda: screen.on_screen() == [2, 3])
     second = screen.window(2)
     assert (second.x(), second.y()) == top_centre(second)
@@ -410,7 +413,7 @@ def test_an_answered_alert_does_not_come_back_with_an_older_view(
 
 def test_a_new_alert_waits_for_a_window_that_is_leaving(qtbot: QtBot, screen: Screen) -> None:
     screen.show(alert(1), alert(2), alert(3))
-    screen.click(1, TEXTS.alert.done)
+    screen.click(1, TEXTS.command.close)
     screen.show(alert(2), alert(3), alert(4))  # `core` put the next alert in its place
     assert 4 not in screen.on_screen()
     qtbot.waitUntil(lambda: screen.on_screen() == [2, 3, 4])
@@ -444,8 +447,69 @@ def test_each_answer_is_a_click_or_two_away(
     screen.show(alert(1))
     for name in clicks:
         screen.click(1, name)
-    assert screen.answers.given == [answer]
+    qtbot.waitUntil(lambda: screen.answers.given == [answer], timeout=3 * HOLD_MS)
     qtbot.waitUntil(lambda: screen.on_screen() == [] and screen.menus_shown() == 0)
+
+
+@pytest.mark.parametrize(
+    ("clicks", "name"),
+    [
+        ([TEXTS.alert.done], TEXTS.alert.done),
+        ([TEXTS.alert.snooze, TEXTS.snooze.quarter_hour], TEXTS.snooze.quarter_hour),
+        ([TEXTS.alert.snooze, TEXTS.alert.not_here], TEXTS.alert.not_here),
+    ],
+)
+def test_an_answer_waits_5_seconds_under_its_name_with_annulla(
+    qtbot: QtBot, screen: Screen, clicks: list[str], name: str
+) -> None:
+    screen.show(alert(1))
+    window = screen.window(1)
+    screen.hover(1)  # the mouse stays on the alert after the click, and does not stop the 5 s
+    for click in clicks:
+        screen.click(1, click)
+    assert screen.names(window) == [TEXTS.command.cancel]
+    assert screen.text(1, name).isVisible()
+    assert screen.menus_shown() == 0
+    assert screen.answers.given == []
+    qtbot.waitUntil(lambda: len(screen.answers.given) == 1, timeout=3 * HOLD_MS)
+    qtbot.waitUntil(lambda: screen.on_screen() == [])
+
+
+def test_annulla_puts_the_alert_back_with_its_10_seconds(qtbot: QtBot, screen: Screen) -> None:
+    screen.show(alert(1))
+    screen.click(1, TEXTS.alert.done)
+    screen.click(1, TEXTS.command.cancel)
+    assert screen.names(screen.window(1)) == [
+        TEXTS.alert.done,
+        TEXTS.alert.snooze,
+        TEXTS.command.close,
+    ]
+    assert screen.window(1).property("progress") > 0.8
+    screen.hover(1)  # the 10 s stop under the mouse again
+    qtbot.wait(2 * HOLD_MS)
+    assert screen.answers.given == []
+    screen.leave(1)
+    qtbot.waitUntil(lambda: screen.answers.given == [("vanished", 1)], timeout=3 * WAIT_MS)
+
+
+def test_an_alert_withdrawn_while_its_answer_waits_takes_the_answer_away(
+    qtbot: QtBot, screen: Screen
+) -> None:
+    screen.show(alert(1))
+    screen.click(1, TEXTS.alert.done)
+    screen.show()  # its reminder was completed in the tray list meanwhile
+    qtbot.waitUntil(lambda: screen.on_screen() == [])
+    qtbot.wait(2 * HOLD_MS)
+    assert screen.answers.given == []
+
+
+def test_quitting_sends_a_waiting_answer_at_once(screen: Screen) -> None:
+    screen.show(alert(1), alert(2))
+    screen.click(1, TEXTS.alert.done)
+    screen.click(2, TEXTS.alert.snooze)
+    screen.click(2, TEXTS.snooze.hour)
+    screen.overlay.close()
+    assert screen.answers.given == [("done", 1), ("snooze", 2, Snooze.HOUR)]
 
 
 def test_rimanda_opens_its_menu_under_the_button(screen: Screen) -> None:

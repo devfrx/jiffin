@@ -1,7 +1,8 @@
 // One alert: a strip at the top of the screen that never takes the focus (#12, ADR-0010). The
 // user's "Quando…" and the time understood over what to do, then Done, Snooze and the X (#83,
 // ADR-0023), and a bar for the 10 s. Snooze opens its menu under the button: a window of its
-// own, which the alert places and the overlay shows.
+// own, which the alert places and the overlay shows. An answer that changes something waits
+// 5 s: its name and Undo take the place of the buttons, and the bar runs the 5 s (ADR-0030).
 import QtQuick
 import QtQuick.Layouts
 import Jiffin
@@ -12,6 +13,8 @@ Window {
     required property AlertSlot slot
     // How long the alert waits for an answer (#12).
     property int duration: 10000
+    // How long an answer that changes something waits with Undo (ADR-0030).
+    property int holdDuration: 5000
     property real progress: 1
     // Snooze's menu, for the overlay to show and hide: a QtObject, since PySide has no
     // converter for the Window type of QML.
@@ -104,7 +107,25 @@ Window {
                 }
             }
 
+            // The answer waiting, and Undo.
             Row {
+                visible: window.slot.held.length > 0
+                spacing: 12
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: window.slot.held
+                    color: Colors.textSecondary
+                    font.family: Typography.textFont
+                    font.pixelSize: Typography.body
+                }
+                FluentButton {
+                    text: Texts.cancel
+                    onClicked: window.slot.undo()
+                }
+            }
+            Row {
+                visible: window.slot.held.length === 0
                 spacing: 8
 
                 FluentButton {
@@ -127,6 +148,7 @@ Window {
             // The X closes without an answer (ADR-0023), 8 px after Snooze.
             FluentButton {
                 Layout.leftMargin: -4
+                visible: window.slot.held.length === 0
                 kind: FluentButton.Subtle
                 glyph: "" // Cancel
                 Accessible.name: Texts.close
@@ -135,7 +157,7 @@ Window {
         }
     }
 
-    // The 10 s passing, also with animations off (ADR-0010).
+    // The 10 s passing, or the 5 s of an answer waiting, also with animations off (ADR-0010).
     Rectangle {
         anchors.left: parent.left
         anchors.bottom: parent.bottom
@@ -158,6 +180,17 @@ Window {
         duration: window.duration
         paused: running && window.slot.paused
         onFinished: window.slot.expire()
+    }
+    // The mouse over the alert does not stop these: it is there right after the click.
+    NumberAnimation {
+        id: waiting
+
+        target: window
+        property: "progress"
+        from: 1
+        to: 0
+        duration: window.holdDuration
+        onFinished: window.slot.release()
     }
 
     // WinUI's motion: in from the top in 250 ms, out in 167 ms; only a fade with animations off.
@@ -218,8 +251,20 @@ Window {
             enter.restart();
         }
 
+        function onHolding(): void {
+            countdown.stop();
+            waiting.restart();
+        }
+
+        function onUndone(): void {
+            waiting.stop();
+            window.progress = 1;
+            countdown.restart();
+        }
+
         function onLeaving(): void {
             countdown.stop();
+            waiting.stop();
             enter.stop();
             leave.restart();
         }
