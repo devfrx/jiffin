@@ -77,7 +77,8 @@ flowchart LR
 - **Out to the interface.** The worker, the context thread and the model
   file's thread emit the relay's signals. The relay lives on the interface
   thread, so Qt runs its slots there, and they call `Interface.show_alerts`,
-  `show_reminders`, `show_unreadable`, `show_engine` and `show_model`.
+  `show_reminders`, `show_unreadable`, `show_networks`, `show_engine` and
+  `show_model`.
 - **The ports** are the supervisor, the capture and the system clock in the
   app; the tests give the same composition the client's fake engine, replayed
   contexts and a simulated clock (`tests/unit/app/test_jiffin.py`).
@@ -156,7 +157,7 @@ holds the texts of the interface, one key per text, named after the code's
 names, `time.toml` the words of a time, which `core` reads in a condition
 and `ui/words.py` writes back ([time.md](time.md#the-lexicon)), and
 `situations.toml` the words of the situations, which `core` reads beside the
-time ([situations.md](situations.md#the-lexicon)); `harness.toml`
+time and `ui/words.py` writes back ([situations.md](situations.md#the-lexicon)); `harness.toml`
 holds the texts of the harness's pages, which the harness alone reads
 ([harness.md](harness.md#the-pages)). `lang` is a part of its own, without Qt,
 that imports nothing else from the package; every other part may import it,

@@ -14,7 +14,9 @@ card of Remind here, which goes over them, is `ui/remind_here.py` and
 [ADR-0024](../adr/0024-hold-and-hide-alerts.md), the focus rules from
 [ADR-0009](../adr/0009-qt-quick-pyside6-interface.md), the card from
 [ADR-0029](../adr/0029-learn-from-answers-per-place.md), Undo from
-[ADR-0030](../adr/0030-undo-and-reopen.md); the
+[ADR-0030](../adr/0030-undo-and-reopen.md), the situations' words from
+[ADR-0028](../adr/0028-read-the-situations-in-core.md) and
+[#153](https://github.com/devfrx/jiffin/issues/153); the
 [mockup](mockups/overlay.html) shows them in light and dark.
 
 ## Placement
@@ -58,9 +60,11 @@ stateDiagram-v2
     Leaving --> Empty : the exit has played
 ```
 
-- **The line**: the condition without its time, then the time understood,
-  written for the day it shows on: "Quando apro Claude · dalle 23:00 alle
-  04:00". Every day goes unsaid, also for a perennial reminder, whose icon says
+- **The line**: the condition without its time, its situations after a dot
+  ([the situations' words](situations.md#writing-them)), then the time
+  understood, written for the day it shows on: "Quando apro Claude · dalle
+  23:00 alle 04:00", "Quando apro Outlook · alla fine della call", "All'uscita
+  di casa". Every day goes unsaid, also for a perennial reminder, whose icon says
   it. With only a time, the day of the instance it rings for and its hours:
   "Oggi alle 15:00", or "Ieri alle 15:00" when it rings late
   (`units.instance_day`, from the window that holds the moment it rang).
@@ -147,11 +151,15 @@ sequenceDiagram
   and the X. Under it the active reminders, in `core`'s order there: the
   judged ones, the closest to ringing first, then those not judged there, then
   those with only a time, the newest first. Each row has the action, then the
-  condition without its time (or the time, for one with only a time), and
-  after a dot what else kept it quiet there: "Taciuto qui", "Già suonato",
-  "Rimandato", "Fuori orario", "Periodo finito", "Fuori situazione"; never a
-  number. It grows down to 12 px from the bottom of the work area, then the
-  list scrolls under the question.
+  condition without its time, its situations after it, as on the alert (or
+  the time, for one with only a time), and after a dot what else kept it
+  quiet there: "Taciuto qui", "Già suonato", "Rimandato", "Fuori orario",
+  "Periodo finito", "Fuori situazione"; never a number. "Fuori situazione",
+  for a situation that does not hold, an end not come or a duration not
+  reached, is the owner's choice on #153's trial, with the whole condition in
+  view ("Quando apro Steam · a casa · Fuori situazione"), as a sibling of
+  "Fuori orario". It grows down to 12 px from the bottom of the work area,
+  then the list scrolls under the question.
 - **It takes the focus**, unlike the alerts, since the user asked for it, and
   shows with no entrance, as the tray list does. Up and Down move over the
   reminders, round from the last to the first, with WinUI's focus ring and

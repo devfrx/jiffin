@@ -13,7 +13,8 @@
   alert's Rimanda, here open over its button, since the list sits over the tray; in #105 the
   pause's badge on the icon, two bars at the bottom right (ADR-0024); in #129 Annulla for 5 s on
   an unseen alert's answer and the completed reminders, with their full circle and the action
-  struck through (ADR-0030). Colours are
+  struck through (ADR-0030); in #153 each situation on its line with its icon, and the line of a
+  place no network has, with its button (ADR-0028). Colours are
   those of Colors.qml; text and icons use Windows 11's system fonts, Segoe UI Variable and
   Segoe Fluent Icons.
 -->
@@ -536,6 +537,10 @@
           <span class="status caution"><span class="glyph ring">&#xF136;</span><span class="glyph mark">&#xF13C;</span></span>
           <p>Chrome: non riesco a leggere l'indirizzo. Uso solo app e titolo.</p>
         </div>
+        <div class="notice">
+          <span class="status caution"><span class="glyph ring">&#xF136;</span><span class="glyph mark">&#xF13C;</span></span>
+          <div><p>Non so ancora qual è la rete di casa: i promemoria «a casa» non suonano.</p><button>Sono a casa adesso</button></div>
+        </div>
         <div>
           <p class="section">Non visti</p>
           <div class="card">
@@ -559,6 +564,18 @@
           <div class="row">
             <button class="subtle done" aria-label="Completa"><span class="glyph">&#xEA3A;</span></button>
             <div class="row-text"><p>Chiamare Giulia per il preventivo</p><p class="caption when"><span class="glyph">&#xE121;</span><span>Oggi, giovedì 1 ottobre, alle 15:00</span></p><p class="caption">Rimandato: torna tra 12 min</p></div>
+            <button class="subtle" aria-label="Modifica"><span class="glyph">&#xE70F;</span></button>
+            <button class="subtle" aria-label="Elimina"><span class="glyph">&#xE74D;</span></button>
+          </div>
+          <div class="row">
+            <button class="subtle done" aria-label="Completa"><span class="glyph">&#xEA3A;</span></button>
+            <div class="row-text"><p>Mandare il verbale</p><p class="caption when"><span class="glyph">&#xE717;</span><span>Alla fine della call</span></p><p class="caption when"><span class="glyph">&#xE121;</span><span>Oggi, giovedì 1 ottobre, dalle 18:00 alle 23:00</span></p></div>
+            <button class="subtle" aria-label="Modifica"><span class="glyph">&#xE70F;</span></button>
+            <button class="subtle" aria-label="Elimina"><span class="glyph">&#xE74D;</span></button>
+          </div>
+          <div class="row">
+            <span class="glyph repeat" aria-label="Ogni volta">&#xE8EE;</span>
+            <div class="row-text"><p>Giocare solo un'ora</p><p class="caption">Quando apro Steam</p><p class="caption when"><span class="glyph">&#xE80F;</span><span>A casa</span></p></div>
             <button class="subtle" aria-label="Modifica"><span class="glyph">&#xE70F;</span></button>
             <button class="subtle" aria-label="Elimina"><span class="glyph">&#xE74D;</span></button>
           </div>
@@ -616,6 +633,10 @@
           <span class="status caution"><span class="glyph ring">&#xF136;</span><span class="glyph mark">&#xF13C;</span></span>
           <p>Chrome: non riesco a leggere l'indirizzo. Uso solo app e titolo.</p>
         </div>
+        <div class="notice">
+          <span class="status caution"><span class="glyph ring">&#xF136;</span><span class="glyph mark">&#xF13C;</span></span>
+          <div><p>Non so ancora qual è la rete di casa: i promemoria «a casa» non suonano.</p><button>Sono a casa adesso</button></div>
+        </div>
         <div>
           <p class="section">Non visti</p>
           <div class="card">
@@ -639,6 +660,18 @@
           <div class="row">
             <button class="subtle done" aria-label="Completa"><span class="glyph">&#xEA3A;</span></button>
             <div class="row-text"><p>Chiamare Giulia per il preventivo</p><p class="caption when"><span class="glyph">&#xE121;</span><span>Oggi, giovedì 1 ottobre, alle 15:00</span></p><p class="caption">Rimandato: torna tra 12 min</p></div>
+            <button class="subtle" aria-label="Modifica"><span class="glyph">&#xE70F;</span></button>
+            <button class="subtle" aria-label="Elimina"><span class="glyph">&#xE74D;</span></button>
+          </div>
+          <div class="row">
+            <button class="subtle done" aria-label="Completa"><span class="glyph">&#xEA3A;</span></button>
+            <div class="row-text"><p>Mandare il verbale</p><p class="caption when"><span class="glyph">&#xE717;</span><span>Alla fine della call</span></p><p class="caption when"><span class="glyph">&#xE121;</span><span>Oggi, giovedì 1 ottobre, dalle 18:00 alle 23:00</span></p></div>
+            <button class="subtle" aria-label="Modifica"><span class="glyph">&#xE70F;</span></button>
+            <button class="subtle" aria-label="Elimina"><span class="glyph">&#xE74D;</span></button>
+          </div>
+          <div class="row">
+            <span class="glyph repeat" aria-label="Ogni volta">&#xE8EE;</span>
+            <div class="row-text"><p>Giocare solo un'ora</p><p class="caption">Quando apro Steam</p><p class="caption when"><span class="glyph">&#xE80F;</span><span>A casa</span></p></div>
             <button class="subtle" aria-label="Modifica"><span class="glyph">&#xE70F;</span></button>
             <button class="subtle" aria-label="Elimina"><span class="glyph">&#xE74D;</span></button>
           </div>
@@ -688,7 +721,8 @@
   <li>Rimanda apre il menu dell'avviso, con le stesse voci; Alla prossima volta c'è solo se il promemoria ha una prossima volta. Sta sotto il pulsante, o sopra quando sotto finisce l'area di lavoro. Un clic ovunque nella lista lo chiude e non fa altro; anche Esc, prima della lista. Con la tastiera: le frecce scorrono le voci, Spazio o Invio scelgono.</li>
   <li>Fatto e le voci di Rimanda, su un avviso non visto, aspettano 5 secondi come sull'avviso: la scheda mostra la risposta e Annulla al posto dei pulsanti, con una barretta in basso; con la tastiera il focus passa ad Annulla e torna a Fatto. Chiudere la lista manda subito la risposta che aspetta, perché la lista chiusa non mostra Annulla.</li>
   <li>Il cerchio a sinistra completa il promemoria, subito: i completati sono la strada per tornare indietro; un promemoria «Ogni volta» non si completa mai, e lì ha le frecce del suo avviso. La matita lo apre nella finestra di modifica, il cestino chiede prima di eliminarlo, con Annulla prima di Elimina.</li>
-  <li>Sotto l'azione, la condizione senza l'orario, poi l'orario capito accanto all'orologio, scritto per oggi; un promemoria solo a orario ha solo quella riga. «Periodo finito il …» quando il suo periodo è passato.</li>
+  <li>Sotto l'azione, la condizione senza l'orario e le situazioni, poi ogni situazione capita sulla sua riga, con la sua icona come sotto «Quando», poi l'orario capito accanto all'orologio, scritto per oggi; un promemoria solo a orario o a situazioni ha solo quelle righe. «Periodo finito il …» quando il suo periodo è passato.</li>
+  <li>Se un promemoria attivo aspetta casa o l'ufficio e nessuna rete è ancora quella, una riga in cima dice che non suonerà; se la rete in uso non è né casa né ufficio, «Sono a casa adesso» le dà quel nome, e la riga sparisce.</li>
   <li>Sotto il titolo, «Qui dovevi avvisarmi» con il posto sotto: l'ultimo posto che Jiffin ha giudicato, cioè la finestra di prima, perché la lista è di Jiffin. Apre la stessa scheda di Win+Maiusc+Q, e la lista si chiude. C'è anche se un'altra app tiene i tasti.</li>
   <li>Sotto un promemoria che ha imparato qualcosa, una riga dice quanti posti: Taciuto (Non qui), Chiesto (Qui dovevi avvisarmi), e Più attento se la soglia è scesa; mai numeri. Un clic apre i posti, l'ultimo risposto per primo, ognuno con la sua campanella, barrata dove l'hai zittito, e una X che lo dimentica; poi Dimentica tutto.</li>
   <li>Sotto gli attivi, solo se ce ne sono, «Completati · 3»: chiusi ogni volta che la lista si apre; aperti, il completato più di recente per primo. Il cerchio pieno, nel colore d'accento, lo riapre; l'azione è barrata e grigia; sotto, la condizione senza l'orario e quando è stato completato. Il cestino chiede prima, come per gli attivi; restano finché non li elimini.</li>

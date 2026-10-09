@@ -156,18 +156,24 @@ sequenceDiagram
     participant W as Windows
     participant C as context thread
     participant K as worker thread
+    participant I as interface thread
 
+    K->>C: the networks' labels kept, before the start
     C->>W: start Core Audio, the media controls and the Network List Manager
     C->>K: SituationObservation of each situation, at one time
+    C->>I: the ids of the networks connected
     par a change of a source with events
         W-->>C: Core Audio or the networks changed: one message wakes the loop
         C->>W: read that source again
+    and new labels from the settings
+        K-->>C: one message wakes the loop
     and every second
         C->>W: the time since the last input, what plays, the power, the displays
     and the context in front changed, or a notice came
         C->>W: in a browser that captures, the name of its tab in front
     end
     C->>K: SituationObservation(at, situation, values), for each that changed
+    C->>I: the ids of the networks connected, when they changed
 ```
 
 | Situation | Where it comes from | Read | A read |
@@ -223,8 +229,8 @@ Measured on the owner's laptop on 2026-10-08. The media controls start in
   read do.
 - **The network** is known by the id the Network List Manager keeps for each
   network joined, never by its name. Its label, home or office, comes from the
-  settings ([#153](https://github.com/devfrx/jiffin/issues/153)); until then a
-  network gives no value, and `offline` comes when none is connected.
+  settings ([below](#the-networks-labels)): a network without one gives no
+  value, and `offline` comes when none is connected.
 - **A device built again is no failure.** A Bluetooth headset that connects
   builds its microphone again, and the session manager kept from before then
   refuses every call (`AUDCLNT_E_DEVICE_INVALIDATED`): the reader makes a new
@@ -242,6 +248,21 @@ Measured on the owner's laptop on 2026-10-08. The media controls start in
   the context's last None.
 - **The log** gets each change: programs and labels by name, a call's sites
   only by their count, never a network's id.
+
+### The networks' labels
+
+The worker keeps them ([settings](settings.md#keeping-the-choices)) and gives
+them to `Capture.label`, from its own thread: before the start, which hands
+them to `Situations` as it is made, and at every change
+([#153](https://github.com/devfrx/jiffin/issues/153)). After the start,
+`Situations.label` keeps the new ones and wakes the loop with a third message,
+`WM_APP + 3`, after Core Audio's and the networks'; the loop sends the network
+again if its values changed, so a label put on the network in use counts at
+once. The other way, `Situations` tells the ids of the networks connected at
+the first read and whenever they change (`on_networks`, none while the
+networks cannot be read): the relay takes them to `Interface.show_networks`,
+for the settings, the creation window and the tray list to know the network in
+use ([settings](settings.md#the-network)).
 
 ## Measured
 

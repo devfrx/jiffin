@@ -18,6 +18,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the cards of "Non visti": the alert comes back as it was.
 - "Completati" at the bottom of the list: the completed reminders, the most
   recent first; the full circle brings one back among the active ones.
+- Situations in the condition: a call that goes on or ends ("in call su
+  Zoom", "quando finisco la call"), coming back to the PC, the battery or the
+  charger, an external monitor, headphones, home, the office or no network,
+  and how long one has lasted ("da più di 20 minuti"). Jiffin reads only
+  states, such as whether an app uses the microphone, never what is written.
+  Under "Quando" each situation understood has a line with its icon, and the
+  words not understood are named; the alert, the list and the card of "Qui
+  dovevi avvisarmi" write them too.
+- "Rete" in the settings: whether the network in use is home, the office or
+  neither, for the reminders "a casa" and "in ufficio". While a reminder
+  waits for a place no network has, the creation window and the list say so,
+  with "Sono a casa adesso".
 
 ### Changed
 
