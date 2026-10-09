@@ -4,8 +4,9 @@ The states a reminder and an alert go through, in `jiffin.core`. The code is
 `core/reminders.py`, `core/units.py` and `core/alerts.py`; the rules come from
 [ADR-0021](../adr/0021-one-alert-per-unit.md), which replaced the once-an-hour
 rule of decision ticket [#12](https://github.com/devfrx/jiffin/issues/12), from
-[ADR-0014](../adr/0014-feedback-data-retention.md) and from
-[ADR-0029](../adr/0029-learn-from-answers-per-place.md).
+[ADR-0014](../adr/0014-feedback-data-retention.md), from
+[ADR-0029](../adr/0029-learn-from-answers-per-place.md) and from
+[ADR-0030](../adr/0030-undo-and-reopen.md).
 
 ## Reminder
 
@@ -25,6 +26,7 @@ stateDiagram-v2
         Ended --> Ready : Edit
     }
     Active --> Completed : Done or Complete, one-off
+    Completed --> Active : Reopen
     Active --> [*] : Delete
     Completed --> [*] : Delete
 ```
@@ -80,8 +82,14 @@ stateDiagram-v2
   place is withdrawn, a new condition is read again, a new remainder waits for
   a new statement, and the new text is not true anywhere until it is judged.
   "Ogni volta" alone makes a new revision that keeps the answers.
-- **Completed** reminders are no longer judged, and their open alerts go.
-  **Delete** removes the reminder and everything about it.
+- **Completed** reminders are no longer judged, and their open alerts go; the
+  tray list keeps them, the most recently completed first, until they are
+  deleted. **Reopen** makes one active again with all it knew: if it rang in
+  its unit it waits for the next one, so a one-off reminder whose date is past
+  and that rang stays silent; a snooze it had holds until it ends. Its true
+  stretches outlive the completion, so in the same run it knows whether it
+  rang in the occasion under way; after a restart occasions start afresh, as
+  for every reminder. **Delete** removes the reminder and everything about it.
 - **After a restart** each reminder goes on from its last alert that counts and
   from its snooze, so the instances of a time stay exact; occasions start
   afresh, and so do the stretches of the situations, from their state read at
@@ -111,6 +119,13 @@ stateDiagram-v2
 | Remind here | the place: `remind_here`, and its alert `requested` | true in that context until the text changes; rings at once if it is still in front |
 | the X | `closed` | waits for its next unit; not among the unseen |
 | 10 s without an answer | nothing | waits for its next unit; among the unseen |
+
+Done, Next time, Quarter hour, Hour, Tomorrow and Not here reach `core` 5 s
+after the click: the interface holds them with Undo, on the alert and on the
+tray list's cards, so meanwhile the alert is still visible or unseen. A held
+answer goes at once when the app quits or the tray list closes, and goes with
+its alert when the reminder is completed or deleted meanwhile. The X, Complete
+and Reopen act at once; Delete asks first.
 
 Tomorrow ends at 08:00 of the next day, local time, or of the same day when
 snoozed before 04:00; so does the pause until tomorrow. `useful`, the answer

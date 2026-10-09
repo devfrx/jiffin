@@ -16,6 +16,9 @@ T.AbstractButton {
     property int kind: FluentButton.Standard
     // A Segoe Fluent Icons glyph: the button is square when it has no text.
     property string glyph: ""
+    // The glyph's colour where it says something of its own: the accent of a completed
+    // reminder's full circle (ADR-0030); the text's otherwise.
+    property color glyphColor: textColor
     // The chevron of a button that opens more choices.
     property bool chevron: false
 
@@ -96,7 +99,7 @@ T.AbstractButton {
             anchors.verticalCenter: parent.verticalCenter
             visible: control.glyph.length > 0
             text: control.glyph
-            color: control.textColor
+            color: control.glyphColor
             font.family: Typography.iconFont
             font.pixelSize: Typography.icon
         }

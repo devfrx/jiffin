@@ -62,6 +62,8 @@ MENU = (
 )
 """The alert's menu, from the top (#83), which the unseen alerts' Snooze opens (#84)."""
 F24 = "Controllare la scadenza dell'F24"
+HOLD_MS = 300
+"""How long an unseen alert's answer waits with Undo in these tests, instead of 5 s."""
 
 
 class Commands:
@@ -81,6 +83,9 @@ class Commands:
 
     def complete(self, reminder_id: int) -> None:
         self.sent.append(("complete", reminder_id))
+
+    def reopen(self, reminder_id: int) -> None:
+        self.sent.append(("reopen", reminder_id))
 
     def delete(self, reminder_id: int) -> None:
         self.sent.append(("delete", reminder_id))
@@ -166,6 +171,11 @@ def active(
         Place(Context("olk.exe", f"Posta {n} - Outlook", None), Here.NO) for n in range(silences)
     )
     return ActiveReminder(Reminder(reminder_id, written_at, written, None, snoozed_until), places)
+
+
+def completed(reminder_id: int, condition: str, action: str, completed_at: int) -> Reminder:
+    """A reminder among the completed (ADR-0030)."""
+    return replace(active(reminder_id, condition, action).reminder, completed_at=completed_at)
 
 
 def unseen(
@@ -300,6 +310,7 @@ class Screen:
         )
         assert isinstance(window, QQuickWindow)
         self.window = window
+        window.setProperty("holdDuration", HOLD_MS)
         menu = window.property("menu")
         assert isinstance(menu, QQuickWindow)
         self.menu = menu
@@ -334,6 +345,17 @@ class Screen:
             and accessible(item, "name") == name
             and (row is None or self._reads(item, row))
         )
+
+    def buttons(self, row: str) -> list[object]:
+        """What a screen reader calls the visible buttons of the card or row that reads `row`,
+        from the left."""
+        found = [
+            item
+            for item in shown(self.window)
+            if item.inherits("QQuickAbstractButton") and self._reads(item, row)
+        ]
+        found.sort(key=lambda item: item.mapToScene(QPointF(0, 0)).x())
+        return [accessible(item, "name") for item in found]
 
     def named(self, name: str) -> list[QQuickItem]:
         """The visible items a screen reader calls `name`."""
@@ -822,7 +844,7 @@ def test_cambia_closes_the_list_itself_and_the_icon_opens_it_again_at_once(
     assert screen.window.isVisible()
 
 
-def test_unseen_alerts_sit_on_top_with_fatto_and_rimanda(screen: Screen) -> None:
+def test_unseen_alerts_sit_on_top_with_fatto_and_rimanda(qtbot: QtBot, screen: Screen) -> None:
     alert = unseen(8, "controllare la scadenza dell'F24", at(1, 9, 31))
     screen.list.show_alerts(AlertsView((), 0, (alert,)))
     screen.list.show_reminders(RemindersView((active(1, "quando apro Figma", "esportare"),)))
@@ -839,7 +861,78 @@ def test_unseen_alerts_sit_on_top_with_fatto_and_rimanda(screen: Screen) -> None
     ]
     assert screen.commands.sent == [("seen",)]
     screen.click(TEXTS.alert.done, F24)
-    assert screen.commands.sent[1:] == [("done", 8)]
+    qtbot.waitUntil(lambda: screen.commands.sent[1:] == [("done", 8)])
+
+
+def test_an_unseen_alerts_answer_waits_on_its_card_with_annulla(
+    qtbot: QtBot, screen: Screen
+) -> None:
+    alerts = (unseen(9, "altro", at(1, 9, 40)), unseen(8, F24, at(1, 9, 31)))
+    screen.list.show_alerts(AlertsView((), 0, alerts))
+    screen.open()
+    screen.click(TEXTS.alert.done, F24)
+    assert screen.lines()[2:7] == [
+        "Altro",
+        "Quando apro il gestionale delle fatture, alle 09:40",
+        F24,
+        "Quando apro il gestionale delle fatture, alle 09:31",
+        TEXTS.alert.done,
+    ]
+    assert screen.buttons(F24) == [TEXTS.command.cancel]
+    screen.click(TEXTS.command.cancel, F24)
+    qtbot.wait(2 * HOLD_MS)
+    assert screen.commands.sent[1:] == []
+    assert screen.buttons(F24) == [TEXTS.alert.done, TEXTS.alert.snooze]
+    screen.click(TEXTS.alert.snooze, F24)
+    screen.choose(TEXTS.alert.not_here)
+    assert TEXTS.alert.not_here in screen.lines()
+    qtbot.waitUntil(lambda: screen.commands.sent[1:] == [("not_here", 8)])
+    # Gone to `core`: the card keeps the answer's name until `core` takes it away.
+    assert TEXTS.alert.not_here in screen.lines()
+    screen.list.show_alerts(AlertsView((), 0, alerts[:1]))
+    assert F24 not in screen.lines()
+
+
+def test_closing_the_list_sends_the_answers_still_waiting_at_once(screen: Screen) -> None:
+    alerts = (unseen(9, "altro", at(1, 9, 40)), unseen(8, F24, at(1, 9, 31)))
+    screen.list.show_alerts(AlertsView((), 0, alerts))
+    screen.open()
+    screen.click(TEXTS.alert.done, F24)
+    screen.click(TEXTS.alert.snooze, "Altro")
+    screen.choose(TEXTS.snooze.hour)
+    screen.list.close()
+    assert screen.commands.sent[1:] == [("done", 8), ("snooze", 9, Snooze.HOUR)]
+    screen.open()  # if `core` is late, the cards come back with their buttons
+    assert TEXTS.alert.done not in screen.lines()
+
+
+def test_an_alert_that_leaves_the_unseen_takes_its_waiting_answer_away(
+    qtbot: QtBot, screen: Screen
+) -> None:
+    # Its reminder was completed or deleted in the list meanwhile, or rang again (ADR-0030).
+    screen.list.show_alerts(AlertsView((), 0, (unseen(8, F24, at(1, 9, 31)),)))
+    screen.open()
+    screen.click(TEXTS.alert.done, F24)
+    screen.list.show_alerts(AlertsView((), 0, ()))
+    qtbot.wait(2 * HOLD_MS)
+    screen.list.close()
+    assert screen.commands.sent == [("seen",)]
+
+
+def test_by_keyboard_annulla_takes_the_focus_and_gives_it_back_to_fatto(screen: Screen) -> None:
+    screen.list.show_alerts(AlertsView((), 0, (unseen(8, F24, at(1, 9, 31)),)))
+    screen.list.show_reminders(RemindersView((active(1, "quando apro Figma", "esportare"),)))
+    screen.open()
+    for _ in range(3):
+        screen.press(Qt.Key.Key_Tab)
+    assert screen.focused() == (TEXTS.alert.done, "")
+    screen.press(Qt.Key.Key_Space)
+    assert screen.focused() == (TEXTS.command.cancel, F24)
+    assert ringed(screen.button(TEXTS.command.cancel, F24))
+    screen.press(Qt.Key.Key_Space)
+    assert screen.focused() == (TEXTS.alert.done, "")
+    assert ringed(screen.button(TEXTS.alert.done, F24))
+    assert screen.commands.sent == [("seen",)]
 
 
 def test_an_unseen_alert_names_its_condition_without_the_time(screen: Screen) -> None:
@@ -943,14 +1036,15 @@ def test_rimanda_opens_the_menu_under_its_button_where_there_is_room(screen: Scr
     ],
 )
 def test_each_item_of_the_menu_answers_for_its_alert(
-    screen: Screen, item: str, answer: tuple[object, ...]
+    qtbot: QtBot, screen: Screen, item: str, answer: tuple[object, ...]
 ) -> None:
     alerts = (unseen(9, "altro", at(1, 9, 40)), unseen(8, F24, at(1, 9, 31)))
     screen.list.show_alerts(AlertsView((), 0, alerts))
     screen.open()
     screen.click(TEXTS.alert.snooze, F24)
     screen.choose(item)
-    assert screen.commands.sent[1:] == [answer]
+    assert item in screen.lines()  # it waits 5 s under its name
+    qtbot.waitUntil(lambda: screen.commands.sent[1:] == [answer])
     assert not screen.menu.isVisible()
     assert screen.window.isVisible()
 
@@ -1014,7 +1108,7 @@ def test_esc_closes_the_menu_before_the_list(screen: Screen) -> None:
     assert not screen.window.isVisible()
 
 
-def test_the_menu_by_keyboard(screen: Screen) -> None:
+def test_the_menu_by_keyboard(qtbot: QtBot, screen: Screen) -> None:
     screen.list.show_alerts(AlertsView((), 0, (unseen(8, F24, at(1, 9, 31)),)))
     screen.open()
     for _ in range(4):
@@ -1033,8 +1127,10 @@ def test_the_menu_by_keyboard(screen: Screen) -> None:
     screen.press(Qt.Key.Key_Down)
     assert screen.menu.property("current") == 2
     screen.press(Qt.Key.Key_Space)
-    assert screen.commands.sent[-1] == ("snooze", 8, Snooze.HOUR)
     assert not screen.menu.isVisible()
+    # The answer waits on the card, and Undo takes the focus from Snooze.
+    assert screen.focused() == (TEXTS.command.cancel, F24)
+    qtbot.waitUntil(lambda: screen.commands.sent[-1] == ("snooze", 8, Snooze.HOUR))
 
 
 def test_tab_moving_on_closes_the_menu(screen: Screen) -> None:
@@ -1050,7 +1146,9 @@ def test_tab_moving_on_closes_the_menu(screen: Screen) -> None:
     assert screen.focused() == (TEXTS.tray_list.complete, "Esportare")
 
 
-def test_opened_under_the_mouse_the_menu_waits_for_a_key_to_mark_an_item(screen: Screen) -> None:
+def test_opened_under_the_mouse_the_menu_waits_for_a_key_to_mark_an_item(
+    qtbot: QtBot, screen: Screen
+) -> None:
     screen.list.show_alerts(AlertsView((), 0, (unseen(8, F24, at(1, 9, 31)),)))
     screen.open()
     screen.click(TEXTS.alert.snooze, F24)
@@ -1059,7 +1157,7 @@ def test_opened_under_the_mouse_the_menu_waits_for_a_key_to_mark_an_item(screen:
     screen.press(Qt.Key.Key_Down)
     assert screen.menu.property("current") == 0
     screen.press(Qt.Key.Key_Return)
-    assert screen.commands.sent[-1] == ("snooze", 8, Snooze.NEXT_TIME)
+    qtbot.waitUntil(lambda: screen.commands.sent[-1] == ("snooze", 8, Snooze.NEXT_TIME))
 
 
 def test_enter_before_a_key_moves_is_a_click_on_rimanda(screen: Screen) -> None:
@@ -1133,6 +1231,91 @@ def test_completa_goes_to_core_and_elimina_asks_first(screen: Screen) -> None:
     screen.click(TEXTS.tray_list.delete, "Esportare le icone")
     assert screen.commands.sent == [("complete", 2), ("delete", 1)]
     assert screen.window.isVisible()
+
+
+COMPLETED = (
+    completed(4, "quando apro la posta", "mandare la fattura a Rossi", at(1, 9, 40)),
+    completed(3, "quando apro il calendario", "prenotare il tagliando", at(30, 8, 0, month=9)),
+    completed(2, "domani alle 9", "chiamare l'idraulico", at(26, 18, 0, month=9)),
+)
+"""Completed today, yesterday and days ago, the last one with only a time."""
+FATTURA = "Mandare la fattura a Rossi"
+
+
+def test_the_completed_reminders_sit_under_the_active_ones_closed_at_first(
+    screen: Screen,
+) -> None:
+    figma = active(1, "quando apro Figma", "esportare le icone")
+    screen.list.show_reminders(RemindersView((figma,), completed=COMPLETED))
+    screen.open()
+    assert screen.lines()[-3:] == ["Esportare le icone", "Quando apro Figma", PAUSE]
+    screen.click("Completati · 3")
+    assert screen.lines()[-9:] == [
+        "Esportare le icone",
+        "Quando apro Figma",
+        FATTURA,
+        "Quando apro la posta · completato alle 09:40",
+        "Prenotare il tagliando",
+        "Quando apro il calendario · completato ieri",
+        "Chiamare l'idraulico",
+        "Completato il 26 settembre",
+        PAUSE,
+    ]
+    screen.list.close()
+    screen.open()
+    assert screen.lines()[-3:] == ["Esportare le icone", "Quando apro Figma", PAUSE]
+
+
+def test_a_completed_reminders_action_is_struck_through_and_grey(screen: Screen) -> None:
+    figma = active(1, "quando apro Figma", "esportare le icone")
+    screen.list.show_reminders(RemindersView((figma,), completed=COMPLETED[:1]))
+    screen.open()
+    screen.click("Completati · 1")
+    texts = {
+        str(item.property("text")): item
+        for item in shown(screen.window)
+        if item.inherits("QQuickText") and not in_button(item)
+    }
+    struck, condition = texts[FATTURA], texts["Quando apro Figma"]
+    assert struck.property("font").strikeOut()
+    assert not texts["Esportare le icone"].property("font").strikeOut()
+    assert struck.property("color") == condition.property("color")
+
+
+def test_the_full_circle_reopens_and_the_bin_asks_first(screen: Screen) -> None:
+    screen.list.show_reminders(RemindersView((), completed=COMPLETED[:1]))
+    screen.open()
+    screen.click("Completati · 1")
+    screen.click(TEXTS.tray_list.reopen, FATTURA)
+    screen.click(TEXTS.tray_list.delete, FATTURA)
+    assert screen.lines()[-3:-1] == [FATTURA, TEXTS.tray_list.delete_question]
+    screen.click(TEXTS.command.cancel, FATTURA)
+    assert screen.lines()[-3:-1] == [FATTURA, "Quando apro la posta · completato alle 09:40"]
+    screen.click(TEXTS.tray_list.delete, FATTURA)
+    screen.click(TEXTS.tray_list.delete, FATTURA)
+    assert screen.commands.sent == [("reopen", 4), ("delete", 4)]
+    assert screen.window.isVisible()
+
+
+def test_the_completed_section_by_keyboard(screen: Screen) -> None:
+    screen.list.show_reminders(RemindersView((), completed=COMPLETED[:1]))
+    screen.open()
+    for _ in range(3):
+        screen.press(Qt.Key.Key_Tab)
+    assert screen.focused() == ("Completati · 1", "")
+    assert ringed(screen.button("Completati · 1"))
+    screen.press(Qt.Key.Key_Return)
+    screen.press(Qt.Key.Key_Tab)
+    assert screen.focused() == (TEXTS.tray_list.reopen, FATTURA)
+    screen.press(Qt.Key.Key_Space)
+    assert screen.commands.sent == [("reopen", 4)]
+
+
+def test_without_completed_reminders_there_is_no_section(screen: Screen) -> None:
+    screen.list.show_reminders(RemindersView((active(1, "quando apro Figma", "esportare"),)))
+    screen.open()
+    names = [str(accessible(item, "name")) for item in shown(screen.window)]
+    assert not any(name.startswith("Completati") for name in names)
 
 
 def test_elimina_asks_by_keyboard_too_and_annulla_comes_first(screen: Screen) -> None:

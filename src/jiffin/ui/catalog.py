@@ -119,6 +119,11 @@ class Catalog(QObject):
             parts.append(texts.attentive)
         return TEXTS.format.parts.join(parts)
 
+    @Slot(int, result=str)
+    def completed(self, count: int) -> str:
+        """The row of the completed reminders in the tray list, "Completati · 3" (ADR-0030)."""
+        return TEXTS.tray_list.completed.format(count=count)
+
     @Slot(str, bool, result=str)
     def pausedUntil(self, at: str, tomorrow: bool) -> str:
         texts = TEXTS.tray_list

@@ -1,15 +1,19 @@
 """`python -m jiffin.ui`: made-up alerts on screen and made-up reminders in the tray list, to look
 at the interface without the app.
 
-Answering an alert, or letting it vanish, prints what happened; a new alert comes 2 s later,
-and one that vanished waits in the tray list. Win+Shift+N opens the creation window, the tray
-icon the list, and Settings in its menu the settings; what they change is printed and kept
-until the end. Win+Shift+Q, or the row at the top of the list, opens the card of Remind here on
-a made-up place; a pick rings its reminder at once, and the list shows what it learned there,
-which its X forgets. Pause in the same menu shows the pause on the icon and in the list, until
-Resume. `--model` plays a first run: a download of a minute and its check, or a problem
-first, which Retry mends. No model and no data are needed. Quit in the tray icon's menu, or
-Ctrl+C in the terminal, ends it.
+Answering an alert prints what happened, once its 5 s with Undo are over (ADR-0030), and a new
+alert comes 2 s later; Done on a one-off one puts its reminder among the completed. An alert that
+vanishes prints it and waits in the tray list, and no new one comes: alerts come no faster than
+the user answers them, since a stream of them buries what is being looked at (#129, #151).
+Win+Shift+N opens the creation window, the tray icon the list, and Settings in its menu the
+settings; what they change is printed and kept until the end. In the list, Complete moves a
+reminder among the completed, and their full circle brings it back. Win+Shift+Q, or the row at
+the top of the list, opens the card of Remind here on a made-up place; a pick rings its reminder
+at once, and the list shows what it learned there, which its X forgets. Pause in the same menu
+shows the pause on the icon and in the list, until Resume. `--model` plays a first run: a
+download of a minute and its check, or a problem first, which Retry mends. No model and no data
+are needed. Quit in the tray icon's menu ends it, and prints an answer still waiting, which the
+app would send then; Ctrl+C in the terminal ends it at once.
 """
 
 import argparse
@@ -64,6 +68,13 @@ REMINDERS = (
 )
 """Condition, action, "Ogni volta", days since it was written, minutes until the snooze ends, and
 silences: without a time, perennial with one, with only a time, and with a period over."""
+COMPLETED = (
+    ("quando apro la posta", "mandare la fattura a Rossi", 20),
+    ("quando apro il calendario", "prenotare il tagliando", 26 * 60),
+    ("domani alle 9", "chiamare l'idraulico", 5 * 24 * 60),
+)
+"""Condition, action and minutes since it was completed: today, yesterday and days ago, the
+last one with only a time."""
 DAY_MS = 24 * HOUR_MS
 NEXT_MS = 2000
 BROWSERS = ("vivaldi.exe", "chrome.exe", "brave.exe")
@@ -173,6 +184,13 @@ class Preview:
             mail = (Context("olk.exe", f"Posta {n} - Outlook", None) for n in range(silences))
             places = tuple(Place(context, Here.NO) for context in mail)
             self._reminders[reminder_id] = ActiveReminder(reminder, places)
+        self._completed: dict[int, Reminder] = {}
+        for condition, action, minutes in COMPLETED:
+            reminder_id = next(self._ids)
+            completed_at = now - minutes * MINUTE_MS
+            written_at = completed_at - DAY_MS
+            revision = self._revision(reminder_id, condition, action, False, written_at)
+            self._completed[reminder_id] = Reminder(reminder_id, written_at, revision, completed_at)
         self._paused_until: int | None = None
         self.interface: Interface | None = None
 
@@ -182,6 +200,13 @@ class Preview:
         self._show_reminders()
 
     def done(self, alert_id: int) -> None:
+        alert = next((a for a in (*self._visible, *self._unseen) if a.id == alert_id), None)
+        if alert is not None and not alert.revision.perennial:
+            # Its reminder goes among the completed, as in `core` (ADR-0030).
+            now = self._clock.now()
+            reminder = Reminder(alert.reminder_id, alert.created_at, alert.revision, now)
+            self._completed[reminder.id] = reminder
+            QTimer.singleShot(0, self._show_reminders)
         self._answered(alert_id, "done")
 
     def not_here(self, alert_id: int) -> None:
@@ -201,7 +226,6 @@ class Preview:
                 self._unseen.insert(0, replace(alert, vanished_at=now))
         self._visible = [alert for alert in self._visible if alert.id != alert_id]
         QTimer.singleShot(0, self._show_alerts)
-        QTimer.singleShot(NEXT_MS, self._another)
 
     def seen(self) -> None:
         now = self._clock.now()
@@ -237,12 +261,23 @@ class Preview:
 
     def complete(self, reminder_id: int) -> None:
         print(f"reminder {reminder_id} completed", flush=True)
-        self._reminders.pop(reminder_id, None)
+        active = self._reminders.pop(reminder_id, None)
+        if active is not None:
+            now = self._clock.now()
+            self._completed[reminder_id] = replace(active.reminder, completed_at=now)
+        QTimer.singleShot(0, self._show_reminders)
+
+    def reopen(self, reminder_id: int) -> None:
+        print(f"reminder {reminder_id} reopened", flush=True)
+        reminder = self._completed.pop(reminder_id, None)
+        if reminder is not None:
+            self._reminders[reminder_id] = ActiveReminder(replace(reminder, completed_at=None))
         QTimer.singleShot(0, self._show_reminders)
 
     def delete(self, reminder_id: int) -> None:
         print(f"reminder {reminder_id} deleted", flush=True)
         self._reminders.pop(reminder_id, None)
+        self._completed.pop(reminder_id, None)
         QTimer.singleShot(0, self._show_reminders)
 
     def here(self) -> None:
@@ -364,7 +399,12 @@ class Preview:
     def _show_reminders(self) -> None:
         assert self.interface is not None
         newest_first = sorted(self._reminders.values(), key=lambda a: a.reminder.id, reverse=True)
-        self.interface.show_reminders(RemindersView(tuple(newest_first), self._paused_until))
+        completed = sorted(
+            self._completed.values(), key=lambda r: (r.completed_at, r.id), reverse=True
+        )
+        self.interface.show_reminders(
+            RemindersView(tuple(newest_first), self._paused_until, tuple(completed))
+        )
 
     def _show_here(self, view: HereView) -> None:
         assert self.interface is not None
@@ -433,7 +473,9 @@ def main() -> None:
     interface.show_engine(TrayList.Engine[args.engine.upper()])
     if args.creation:
         interface.creation.new()
-    sys.exit(app.exec())
+    code = app.exec()
+    interface.close()  # as in the app: an answer waiting with Undo is printed now
+    sys.exit(code)
 
 
 if __name__ == "__main__":

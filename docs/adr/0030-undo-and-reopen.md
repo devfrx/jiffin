@@ -117,3 +117,13 @@ the app closes.
 - When this is built, `docs/design/` follows: `lifecycles.md` (the arrow
   Completed → Active), `overlay.md` (Undo) and `tray.md` (the section of the
   completed), with the mockups `overlay.html` and `tray.html`.
+- Built in [#152](https://github.com/devfrx/jiffin/issues/152), with these
+  deduced by Claude: the 5 s run on with the mouse over the alert, since it is
+  there right after the click; the tray list closing sends a waiting answer at
+  once, as quitting does, since a hidden list shows no Undo; a completed
+  reminder keeps its true stretches, so a reopened one knows whether it rang
+  in the occasion under way, and a snooze it had holds until it ends. A known
+  limit: the harness cannot replay a Reopen, since a reminder keeps only its
+  last completion and the log no reopen
+  ([harness](../design/harness.md#replay)). Recording it would take the
+  migration this decision avoids, for a correction that is rare.

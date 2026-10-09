@@ -193,8 +193,10 @@ def test_a_reminder_alerts_in_its_context_and_its_answer_is_kept(qtbot: QtBot, d
         "Esportare le icone",
     )
     slot.done()
-    qtbot.waitUntil(lambda: desk.alert() is None)
+    # Done waits 5 s with Undo; quitting meanwhile sends it at once, before the worker stops
+    # (ADR-0030). The alert plays its exit: no animation is left running for the next test.
     desk.jiffin.close()
+    qtbot.waitUntil(lambda: desk.alert() is None)
 
     log = desk.log()
     [reminder] = log.reminders
@@ -206,6 +208,39 @@ def test_a_reminder_alerts_in_its_context_and_its_answer_is_kept(qtbot: QtBot, d
     assert [candidate.outcome for candidate in evaluation.candidates] == [Outcome.ALERT]
     [alert] = log.alerts
     assert (alert.evaluation_id, alert.answer) == (evaluation.id, Answer.DONE)
+
+
+def test_an_answer_waiting_on_a_card_of_the_tray_list_is_kept_when_the_app_quits(
+    qtbot: QtBot, desk: Desk
+) -> None:
+    """ADR-0030: quitting with the list open sends the answer waiting there at once."""
+    desk.jiffin.start()
+    creation = desk.jiffin.interface.creation
+    creation.new()
+    creation.setCondition("quando apro Figma")
+    creation.setAction("esportare le icone")
+    creation.save()
+    qtbot.waitUntil(desk.statement_written)
+    desk.contexts.enter(FIGMA)
+    desk.clock.advance(DEBOUNCE_MS)
+    desk.contexts.enter(None)
+    qtbot.waitUntil(lambda: desk.alert() is not None)
+    slot = desk.alert()
+    assert slot is not None and slot.alert_id is not None
+    alert_id = slot.alert_id
+    slot.expire()  # the 10 s are up: the alert goes among the unseen
+    qtbot.waitUntil(lambda: desk.alert() is None)
+    tray_list = desk.jiffin.interface.tray_list
+    qtbot.waitUntil(lambda: tray_list.property("unseen").rowCount() == 1)
+    tray_list.toggle()
+    tray_list.done(alert_id)
+    desk.jiffin.close()
+
+    log = desk.log()
+    [reminder] = log.reminders
+    assert reminder.completed_at is not None
+    [alert] = log.alerts
+    assert alert.answer == Answer.DONE
 
 
 def test_win_shift_q_opens_the_card_on_the_place_judged_and_a_pick_rings_and_is_kept(

@@ -1,11 +1,17 @@
 """The tray list: the row of Remind here, the pause from the tray, what keeps Jiffin from working
-fully, the alerts that vanished unanswered, the active reminders and the return pause (#12, #43,
-#84, ADR-0010, ADR-0024). The model file on its way is one of the first: its line shows the
-download or the problem, and Details opens the first-run window.
+fully, the alerts that vanished unanswered, the active reminders, the completed ones and the
+return pause (#12, #43, #84, ADR-0010, ADR-0024, ADR-0030). The model file on its way is one of
+the first: its line shows the download or the problem, and Details opens the first-run window.
 
 The row at the top opens the card of Remind here, with the place under it, asked of `core` each
 time the list opens (ADR-0029). Under a reminder that learned something, a line says so and
 opens the places of its answers, each with an X that forgets it, then Forget all.
+
+An unseen alert's Done, snoozes and Not here wait 5 s on its card with Undo, as on the alert
+(ADR-0030): the window times them and calls `release`. The list closing sends a waiting answer
+at once, since a hidden list shows no Undo; an alert that leaves the unseen meanwhile takes its
+answer away. Complete acts at once: the completed reminders, under the active ones, are its way
+back, and their full circle reopens one.
 
 A card on the alerts' material, at the bottom right of the screen over the tray. The tray icon
 opens it, and it takes the focus; Esc, its X or a click elsewhere closes it. It drags, and opens
@@ -38,17 +44,18 @@ from PySide6.QtQuick import QQuickWindow
 from jiffin.core.alerts import AlertsView
 from jiffin.core.clock import Clock
 from jiffin.core.context import Context
-from jiffin.core.records import Alert, Here, Revision, Snooze
+from jiffin.core.records import Alert, Here, Reminder, Revision, Snooze
 from jiffin.core.reminders import MINUTE_MS, ActiveReminder, Place, RemindersView
 from jiffin.core.schedule import jiffin_day
 from jiffin.core.units import ended, next_occasion
+from jiffin.lang.texts import TEXTS
 from jiffin.ui import catalog  # noqa: F401  # Catalog, which Texts.qml reads
 from jiffin.ui.first_run import FirstRun
 from jiffin.ui.glass import Glass
 from jiffin.ui.preferences import Preferences
 from jiffin.ui.remind_here import RemindHere
 from jiffin.ui.rows import Row, Rows
-from jiffin.ui.words import appeared, dated, place, sentence, when
+from jiffin.ui.words import appeared, completed, dated, place, sentence, when
 
 QML_IMPORT_NAME = "Jiffin"
 QML_IMPORT_MAJOR_VERSION = 1
@@ -70,6 +77,7 @@ class Commands(Protocol):
     def snooze(self, alert_id: int, snooze: Snooze) -> None: ...
     def not_here(self, alert_id: int) -> None: ...
     def complete(self, reminder_id: int) -> None: ...
+    def reopen(self, reminder_id: int) -> None: ...
     def delete(self, reminder_id: int) -> None: ...
     def seen(self) -> None: ...
     def withdraw(self, reminder_id: int, context: Context) -> None: ...
@@ -149,7 +157,10 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         self._menu_for = 0
         """The unseen alert whose Snooze has its menu open; 0 for none."""
         self._next_time = True
-        self._unseen = Rows("alertId", ("action", "line", "fresh"), self)
+        self._held: dict[int, tuple[str, Callable[[int], None] | None]] = {}
+        """The answers waiting with Undo on the unseen alerts, by alert: the answer's name, and the
+        answer until it goes, then None: its card keeps the name until `core` takes it away."""
+        self._unseen = Rows("alertId", ("action", "line", "fresh", "held"), self)
         self._active = Rows(
             "reminderId",
             (
@@ -168,6 +179,7 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
             ),
             self,
         )
+        self._completed = Rows("reminderId", ("action", "line"), self)
         self._places: dict[int, tuple[Place, ...]] = {}
         """Each active reminder's places, as its row shows them: an X forgets one by its
         index."""
@@ -207,8 +219,11 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
     @Slot(object)
     def show_alerts(self, view: AlertsView) -> None:
         self._alerts = view
-        if self._menu_for not in {alert.id for alert in view.unseen}:
+        unseen = {alert.id for alert in view.unseen}
+        if self._menu_for not in unseen:
             self.closeMenu()  # its alert has gone: answered elsewhere, or a newer one came
+        # Gone with their alerts: answered, their reminder completed or deleted, or a newer one.
+        self._held = {alert_id: held for alert_id, held in self._held.items() if alert_id in unseen}
         if self._window.isVisible():
             self._see()
         self._fill()
@@ -239,6 +254,11 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
     def active(self) -> Rows:
         """The active reminders, newest first."""
         return self._active
+
+    @Property(QObject, notify=changed)
+    def completed(self) -> Rows:
+        """The completed reminders, the most recently completed first (ADR-0030)."""
+        return self._completed
 
     # A QStringList: a plain list reaches a QML list<string> parameter empty. Qt takes a type by
     # its name, which the stub does not know.
@@ -298,12 +318,33 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         self._commands.complete(reminder_id)
 
     @Slot(int)
+    def reopen(self, reminder_id: int) -> None:
+        """The full circle of a completed reminder (ADR-0030)."""
+        self._commands.reopen(reminder_id)
+
+    @Slot(int)
     def delete(self, reminder_id: int) -> None:
         self._commands.delete(reminder_id)
 
     @Slot(int)
     def done(self, alert_id: int) -> None:
-        self._commands.done(alert_id)
+        self._hold(alert_id, TEXTS.alert.done, self._commands.done)
+
+    @Slot(int)
+    def undo(self, alert_id: int) -> None:
+        """Undo on a card: its answer does not go, and its buttons are back."""
+        _, answer = self._held.get(alert_id, ("", None))
+        if answer is not None:
+            del self._held[alert_id]
+            self._fill()
+
+    @Slot(int)
+    def release(self, alert_id: int) -> None:
+        """The 5 s of a card are up: its answer goes to `core`, which takes the card away."""
+        name, answer = self._held.get(alert_id, ("", None))
+        if answer is not None:
+            self._held[alert_id] = (name, None)
+            answer(alert_id)
 
     @Slot()
     def remindHere(self) -> None:
@@ -350,23 +391,34 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
 
     @Slot()
     def snoozeNextTime(self) -> None:
-        self._answer(lambda alert_id: self._commands.snooze(alert_id, Snooze.NEXT_TIME))
+        self._answer(
+            TEXTS.snooze.next_time,
+            lambda alert_id: self._commands.snooze(alert_id, Snooze.NEXT_TIME),
+        )
 
     @Slot()
     def snoozeQuarterHour(self) -> None:
-        self._answer(lambda alert_id: self._commands.snooze(alert_id, Snooze.QUARTER_HOUR))
+        self._answer(
+            TEXTS.snooze.quarter_hour,
+            lambda alert_id: self._commands.snooze(alert_id, Snooze.QUARTER_HOUR),
+        )
 
     @Slot()
     def snoozeHour(self) -> None:
-        self._answer(lambda alert_id: self._commands.snooze(alert_id, Snooze.HOUR))
+        self._answer(
+            TEXTS.snooze.hour, lambda alert_id: self._commands.snooze(alert_id, Snooze.HOUR)
+        )
 
     @Slot()
     def snoozeTomorrow(self) -> None:
-        self._answer(lambda alert_id: self._commands.snooze(alert_id, Snooze.TOMORROW))
+        self._answer(
+            TEXTS.snooze.tomorrow,
+            lambda alert_id: self._commands.snooze(alert_id, Snooze.TOMORROW),
+        )
 
     @Slot()
     def notHere(self) -> None:
-        self._answer(self._commands.not_here)
+        self._answer(TEXTS.alert.not_here, self._commands.not_here)
 
     @Slot()
     def settings(self) -> None:
@@ -395,9 +447,14 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
 
     @Slot()
     def close(self) -> None:
+        """The answers still waiting go at once: a hidden list shows no Undo (ADR-0030)."""
         if not self._window.isVisible():
             return
         self.closeMenu()
+        held, self._held = self._held, {}
+        for alert_id, (_, answer) in held.items():
+            if answer is not None:
+                answer(alert_id)
         self._window.hide()
         self._refresh.stop()
         self._fresh = set()
@@ -452,14 +509,19 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         self._active.replace(
             [self._active_row(active, now, local) for active in self._reminders.active]
         )
+        self._completed.replace(
+            [self._completed_row(reminder, local.date()) for reminder in self._reminders.completed]
+        )
 
     def _unseen_row(self, alert: Alert, today: date) -> Row:
         at = self._clock.local(alert.created_at if alert.shown_at is None else alert.shown_at)
+        held = self._held.get(alert.id)
         return {
             "alertId": alert.id,
             "action": sentence(alert.revision.action),
             "line": appeared(alert.revision.remainder, at, today),
             "fresh": alert.id in self._fresh,
+            "held": "" if held is None else held[0],
         }
 
     def _active_row(self, active: ActiveReminder, now: int, local: datetime) -> Row:
@@ -495,12 +557,31 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
             ],
         }
 
-    def _answer(self, answer: Callable[[int], None]) -> None:
-        """An item of the open menu, for its alert; the menu closes."""
+    def _completed_row(self, reminder: Reminder, today: date) -> Row:
+        """The action, struck through by the window, and under it the condition without its
+        time and when it was completed (ADR-0030)."""
+        revision = reminder.revision
+        assert reminder.completed_at is not None
+        at = self._clock.local(reminder.completed_at)
+        return {
+            "reminderId": reminder.id,
+            "action": sentence(revision.action),
+            "line": completed(revision.remainder, at, today),
+        }
+
+    def _answer(self, name: str, answer: Callable[[int], None]) -> None:
+        """An item of the open menu, for its alert: the menu closes, and the answer waits."""
         alert_id = self._menu_for
         self.closeMenu()
         if alert_id:
-            answer(alert_id)
+            self._hold(alert_id, name, answer)
+
+    def _hold(self, alert_id: int, name: str, answer: Callable[[int], None]) -> None:
+        """The answer waits 5 s on its card, under its name, with Undo (ADR-0030)."""
+        if alert_id in self._held or all(alert.id != alert_id for alert in self._alerts.unseen):
+            return
+        self._held[alert_id] = (name, answer)
+        self._fill()
 
     def _find(self, reminder_id: int) -> ActiveReminder | None:
         return next((a for a in self._reminders.active if a.reminder.id == reminder_id), None)

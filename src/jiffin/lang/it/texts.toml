@@ -154,6 +154,12 @@ active = "Attivi"
 no_reminders = "Nessun promemoria attivo."
 edit = "Modifica"
 complete = "Completa"
+# The completed reminders, after the active ones (ADR-0030): the section's row, with how many,
+# and under each one when it was completed, "alle 11:52", "ieri", "il 20 ottobre". Its full
+# circle reopens it.
+completed = "Completati · {count}"
+completed_when = "completato {when}"
+reopen = "Riapri"
 delete = "Elimina"
 delete_question = "Eliminare il promemoria per sempre?"
 change = "Cambia"

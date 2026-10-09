@@ -10,7 +10,9 @@ How Jiffin lives in the tray, in `jiffin.ui`. `ui/tray.py` draws the icon,
 [#84](https://github.com/devfrx/jiffin/issues/84), the pause from
 [ADR-0024](../adr/0024-hold-and-hide-alerts.md), Remind here and what the
 reminders learned from [ADR-0029](../adr/0029-learn-from-answers-per-place.md),
-the look from [ADR-0010](../adr/0010-windows-11-look-own-components.md); the
+Undo and the completed reminders from
+[ADR-0030](../adr/0030-undo-and-reopen.md), the look from
+[ADR-0010](../adr/0010-windows-11-look-own-components.md); the
 [mockup](mockups/tray.html) shows the list in light and dark.
 
 ## The icon
@@ -53,8 +55,11 @@ stateDiagram-v2
     state Open {
         [*] --> Rows
         Rows --> Menu : Snooze, on an unseen alert
-        Menu --> Rows : an item, Snooze again, a press in the list, Esc, Tab
-        Rows --> Question : the trash, on an active reminder
+        Menu --> Rows : Snooze again, a press in the list, Esc, Tab
+        Rows --> Waiting : Done, or an item of the menu, on an unseen alert
+        Menu --> Waiting : an item
+        Waiting --> Rows : Undo, or the 5 s are up and core takes the card away
+        Rows --> Question : the trash, on an active or completed reminder
         Question --> Rows : Cancel
         Rows --> Places : what an active reminder learned
         Places --> Rows : that line again, or nothing left to forget
@@ -96,9 +101,18 @@ stateDiagram-v2
     reminder ([ADR-0021](../adr/0021-one-alert-per-unit.md)), each with its
     condition without the time and when it appeared ("Quando apro Claude, ieri
     alle 23:12"; with only a time, only when: "Ieri alle 15:00"), Done and
-    Snooze, which opens the alert's menu (below);
+    Snooze, which opens the alert's menu (below). Their answer waits 5 s on
+    the card with **Undo**, as on the alert: the answer's name and Undo take the
+    place of the buttons, and a bar of 5 s runs on the card's lower edge, clear
+    of its rounded corners; the keyboard's focus goes from Done or Snooze to
+    Undo, and back to Done. Then the answer goes, and the card keeps its name
+    until `core` takes it away. The list closing sends a waiting answer at
+    once, since a hidden list shows no Undo; an alert that leaves the list
+    meanwhile (its reminder completed or deleted, or ringing again) takes its
+    answer away;
   - **Active**: the active reminders, newest first, or "Nessun promemoria
-    attivo.". A circle at the left completes, as in Microsoft To Do; a
+    attivo.". A circle at the left completes at once, as in Microsoft To Do:
+    the completed reminders are its way back; a
     reminder of every time ("Ogni volta") has the arrows of its alert there
     instead, RepeatAll, an icon and not a button, since it never completes. The
     pencil opens the creation window on the reminder; the trash asks first,
@@ -119,6 +133,16 @@ stateDiagram-v2
     silenced it, its title (with the site in a browser) and an X, **Forget**, which forgets what
     the reminder learned there; then **Forget all**. A forgotten place is as if
     never answered, and `core` computes the threshold again;
+  - **Completed** ([ADR-0030](../adr/0030-undo-and-reopen.md)), only when
+    there are some: a row "Completati · 3" with a chevron, closed each time the
+    list opens; open, the completed reminders, the most recently completed
+    first. Each has the full circle in the accent colour (CompletedSolid),
+    **Reopen**; the action struck through and grey, the owner's choice; under
+    it the condition without its time and when it was completed, on the
+    calendar ("Quando apro la posta · completato alle 09:40", "… · completato
+    ieri", "… · completato il 26 settembre"; with only a time, only when); and
+    the trash, which asks first, as among the active. They stay until deleted
+    ([ADR-0014](../adr/0014-feedback-data-retention.md));
   - after a thin line, the return pause: "Gli avvisi tornano se riprendi una
     cosa dopo almeno 2 min.", in minutes when it is whole minutes, as the
     settings show it, else in seconds ("90 s"), and **Change**, a subtle button
@@ -177,11 +201,12 @@ engine's supervisor ([#44](https://github.com/devfrx/jiffin/issues/44)):
 
 `uv run python -m jiffin.ui --unreadable chrome.exe --engine failures` puts
 the icon in the tray with its "!", and its list with both lines, reminders
-with a time, a perennial one and a period over, one silenced in two places;
-an alert left to vanish comes into the list after 10 s, with its menu. Retry
-brings the engine back, Pause in the icon's menu shows the pause on the icon
-and in the list until Resume, a pick on the card of Remind here adds its
-place to the reminder, and every answer is printed. The unit tests draw the icon and drive the list on
+with a time, a perennial one and a period over, one silenced in two places,
+and three completed ones; an alert left to vanish comes into the list after
+10 s, with its menu, and Done on a one-off alert puts its reminder among the
+completed. Retry brings the engine back, Pause in the icon's menu shows the
+pause on the icon and in the list until Resume, a pick on the card of Remind
+here adds its place to the reminder, and every answer is printed. The unit tests draw the icon and drive the list on
 Qt's offscreen platform, which has no tray (`tests/unit/ui/test_tray.py`,
 `test_tray_list.py` and `test_rows.py`); there every window takes the focus as
 it shows, so the tests give it back to the list as Windows never takes it
