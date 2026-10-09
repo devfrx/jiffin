@@ -67,6 +67,8 @@ class Read:
     modifiers_before: tuple[str, ...]
     modifiers_after: tuple[str, ...]
     leftover: tuple[str, ...]
+    letters: str
+    vowels: str
     lasting: tuple[str, ...]
     after_lasting: tuple[str, ...]
     call: CallWords

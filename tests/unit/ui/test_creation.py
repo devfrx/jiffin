@@ -37,6 +37,8 @@ HINT = "Descrivi dove sei o quando: un'app, un sito, un orario."
 CLOCK = ""
 HOME, PHONE, UNKNOWN = "", "", ""
 """The icons of being at home, of a call, and of situations not understood."""
+WINDOW = ""
+"""The icon of what the window must show (Favicon)."""
 SECONDARY, CAUTION = QColor("#C5FFFFFF"), QColor("#FFFCE100")
 """The clock's colours in dark: at rest, and for a time over or not understood."""
 FRIDAY = datetime(2026, 10, 2, 10, tzinfo=UTC)
@@ -513,12 +515,34 @@ YESTERDAY = datetime(2026, 10, 1, 10, tzinfo=UTC)
 PAST_WARNING = "è già passato. Per salvare, scrivi un giorno o un'ora che deve ancora venire."
 
 
-def test_without_a_time_the_hint_stays_under_quando(screen: Screen) -> None:
+def test_the_hint_shows_until_the_window_has_something_to_look_for(screen: Screen) -> None:
+    """#169: whatever is neither a time nor a situation goes to the judge, which sees only the
+    window; its line says what, so nothing goes there in silence."""
     screen.new()
     assert screen.shows(HINT)
     screen.type("quando apro Teams")
-    assert screen.shows(HINT)
+    assert screen.shows("Guardo se la finestra mostra: «quando apro Teams»")
+    assert screen.icon_colour(WINDOW) == SECONDARY
+    assert not screen.shows(HINT)
     assert screen.clock_colour() is None
+
+
+def test_words_the_list_does_not_know_show_on_the_windows_line(screen: Screen) -> None:
+    screen.new()
+    screen.type("quando sono a uficio")  # two mistakes: no phrase, no word meant
+    assert screen.shows("Guardo se la finestra mostra: «quando sono a uficio»")
+    # Beside a situation and a time, only what is left of the condition.
+    screen.retype("quando sono a casa e apro Steam stasera")
+    assert screen.shows("A casa")
+    assert screen.shows("Guardo se la finestra mostra: «quando apro Steam»")
+    # A condition of situations and a time only is never judged: no line.
+    screen.retype("quando finisco la call stasera")
+    assert screen.icon_colour(WINDOW) is None
+
+
+def test_editing_shows_what_the_saved_reminder_looks_for_in_the_window(screen: Screen) -> None:
+    screen.edit(saved(7, "quando sono a casa e apro Steam", "giocare"))
+    assert screen.shows("Guardo se la finestra mostra: «quando apro Steam»")
 
 
 def test_the_time_understood_takes_the_hints_place_beside_a_clock(screen: Screen) -> None:
@@ -726,7 +750,7 @@ def test_the_situations_show_above_the_time(screen: Screen) -> None:
     assert screen.clock_colour() == SECONDARY
     screen.retype("quando apro Teams")
     assert not screen.shows("Alla fine della call")
-    assert screen.shows(HINT)
+    assert screen.shows("Guardo se la finestra mostra: «quando apro Teams»")
 
 
 def test_words_of_situations_not_understood_leave_the_time_and_are_named(
@@ -736,10 +760,10 @@ def test_words_of_situations_not_understood_leave_the_time_and_are_named(
     screen.type("domani quando chiudo Figma")
     assert screen.shows("Domani, sabato 3 ottobre")
     assert screen.clock_colour() == SECONDARY
-    assert screen.shows("Non capisco «chiudo»: guardo solo la finestra.")
+    assert screen.shows("Non capisco «chiudo».")
     assert screen.icon_colour(UNKNOWN) == CAUTION
     screen.retype("quando chiudo Figma")
-    assert screen.shows("Non capisco «chiudo»: guardo solo la finestra.")
+    assert screen.shows("Non capisco «chiudo».")
     assert screen.clock_colour() is None
 
 
@@ -762,7 +786,33 @@ def test_editing_shows_the_saved_situations_and_names_their_words_not_understood
     # A saved time stands, and the words of situations not understood are named all the same.
     screen.edit(saved(8, "domani quando chiudo Figma", "esportare", written_at=YESTERDAY))
     assert screen.shows("Oggi, venerdì 2 ottobre")
-    assert screen.shows("Non capisco «chiudo»: guardo solo la finestra.")
+    assert screen.shows("Non capisco «chiudo».")
+
+
+def test_a_word_with_a_letter_wrong_offers_the_word_meant_which_a_click_puts_in(
+    screen: Screen,
+) -> None:
+    """#169: named, never read as meant; the user puts the word in, or saves as written."""
+    screen.new()
+    # Two spaces: the words are found in the condition with its spaces tidied, as it is read.
+    screen.type("quando tolgo le cufie  e sono a csa")
+    assert screen.shows("Non capisco «cufie» e «csa».")
+    assert screen.shows("Forse intendevi «cuffie» e «casa»?")
+    screen.click("Correggi")
+    assert screen.text(WHEN) == "quando tolgo le cuffie e sono a casa"
+    assert screen.shows("Quando si tolgono le cuffie") and screen.shows("A casa")
+    assert not screen.shows("Forse intendevi «cuffie» e «casa»?")
+    assert not screen.offers("Correggi")
+    assert screen.focused() == WHEN
+    screen.type(" stasera")  # the box has the focus, its cursor at the end
+    assert screen.text(WHEN) == "quando tolgo le cuffie e sono a casa stasera"
+
+
+def test_a_word_meant_is_offered_with_a_time_not_understood_too(screen: Screen) -> None:
+    screen.new()
+    screen.type("verso sera quando tolgo le cufie")
+    assert screen.shows("Non capisco «verso sera» e «cufie»: suona a qualsiasi ora.")
+    assert screen.shows("Forse intendevi «cuffie»?")
 
 
 NETWORK_ID = "6f1d2c3b-0000-4000-8000-000000000001"

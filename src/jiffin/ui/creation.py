@@ -7,8 +7,9 @@ cancelling hides it, as its X does. The texts go to `core` as written, with thei
 the judge gets exactly the "Quando" box (#12).
 
 The time and the situations of the condition are read at every key (ADR-0020, ADR-0028): the
-lines under "Quando" show what Jiffin understood, each situation on its own, and name the words
-it did not; a time already over turns Save off (#84, #90). Words of a recurrence tick "Ogni
+lines under "Quando" show what Jiffin understood, each situation on its own, what is left for the
+window to show, and name the words it did not, offering the word meant for one with a letter
+wrong (#169); a time already over turns Save off (#84, #90). Words of a recurrence tick "Ogni
 volta" by themselves while the user has not touched it (#92). Edit keeps the saved time and
 situations while the condition is unchanged, as `core` does. A condition at home or at the office
 that no network is labelled for yet says so, with a button that labels the network in use
@@ -90,6 +91,10 @@ class Creation(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         self._schedule: Schedule | None = None
         self._situations: tuple[Term, ...] = ()
         self._unclear: list[str] = []
+        self._meant: list[str] = []
+        self._corrected = ""
+        """The condition with the words meant in place of those with a letter wrong."""
+        self._judged = ""
         self._time_unclear = False
         self._past = False
         # The window goes with its component, which lives as long as this object.
@@ -160,6 +165,23 @@ class Creation(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         """The words not understood, as written: those of a time, and the reminder saves without
         a time; or those of situations only, and it saves without them."""
         return self._unclear
+
+    @Property("QStringList", notify=changed)  # type: ignore[arg-type]
+    def meantWords(self) -> list[str]:
+        """The words meant for those of a situation with a letter wrong (#169); none without
+        any."""
+        return self._meant
+
+    @Property(str, notify=changed)
+    def corrected(self) -> str:
+        """The condition with the words meant in their place, for the box to take."""
+        return self._corrected
+
+    @Property(str, notify=changed)
+    def judged(self) -> str:
+        """What the judge checks, which sees only the window: the condition without its time and
+        situations, as `core` reads it (#169); empty when nothing is left to judge."""
+        return self._judged
 
     @Property(str, notify=changed)
     def unknownPlace(self) -> str:
@@ -246,16 +268,20 @@ class Creation(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         else:
             self._recurring = reading.recurring
         saved = self._saved
-        unclear, time_unclear = reading.unclear, reading.time_unclear
+        unclear, time_unclear, typos = reading.unclear, reading.time_unclear, reading.typos
         if saved is not None and condition == saved.condition:
             self._schedule, self._past = saved.schedule, False
-            self._situations = saved.situations
+            self._situations, self._judged = saved.situations, saved.remainder
             if saved.schedule is not None and time_unclear:
-                unclear, time_unclear = (), False  # today does not read the time it kept
+                unclear, time_unclear, typos = (), False, ()  # today does not read the time it kept
         else:
             self._schedule, self._past = reading.schedule, reading.past
-            self._situations = reading.situations
+            self._situations, self._judged = reading.situations, reading.remainder
         self._unclear = [condition[start:end] for start, end in unclear]
+        self._meant = [meant for _, _, meant in typos]
+        self._corrected = condition
+        for start, end, meant in reversed(typos):
+            self._corrected = self._corrected[:start] + meant + self._corrected[end:]
         self._time_unclear = time_unclear
 
     def _follow(self, recurring: bool) -> None:

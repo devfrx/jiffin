@@ -286,6 +286,10 @@
   .status .ring {
     color: var(--caution);
   }
+  /* A piece of news, the word meant (#169): the accent's shade, as the info bar's own. */
+  .infobar.info .status .ring {
+    color: var(--accent);
+  }
   .status .mark {
     color: var(--text-inverse);
   }
@@ -388,7 +392,7 @@
 </head>
 <body>
 <h1>Nuovo promemoria</h1>
-<p class="lead">Si apre con Win+Maiusc+N da qualsiasi app, al centro dello schermo o dove l'hai lasciata, e prende il focus. Due caselle, «Quando» e «Ricordami di», la casella «Ogni volta» e sotto la frase che formano. Sotto «Quando» Jiffin dice, mentre scrivi, che situazioni e che orario ha capito. Per modificare un promemoria si usa la stessa finestra.</p>
+<p class="lead">Si apre con Win+Maiusc+N da qualsiasi app, al centro dello schermo o dove l'hai lasciata, e prende il focus. Due caselle, «Quando» e «Ricordami di», la casella «Ogni volta» e sotto la frase che formano. Sotto «Quando» Jiffin dice, mentre scrivi, che situazioni e che orario ha capito, e che cosa guarderà nella finestra. Per modificare un promemoria si usa la stessa finestra.</p>
 
 <div class="themes">
   <section class="theme light" aria-label="Tema chiaro">
@@ -402,6 +406,7 @@
             <label>Quando</label>
             <div class="box focused">quando apro Dropbox ogni due settimane<span class="caret"></span></div>
             <div class="when-line"><span class="glyph">&#xE121;</span><span>Una volta ogni due settimane, da oggi, venerdì 2 ottobre</span></div>
+            <div class="when-line"><span class="glyph">&#xE737;</span><span>Guardo se la finestra mostra: «quando apro Dropbox»</span></div>
           </div>
           <div class="field">
             <label>Ricordami di</label>
@@ -477,7 +482,7 @@
   </section>
 
   <section class="theme dark" aria-label="Tema scuro">
-    <h2>Scuro: parole di una situazione non capite</h2>
+    <h2>Scuro: una parola sbagliata di una lettera</h2>
     <div class="desk">
       <div class="window" role="dialog" aria-label="Nuovo promemoria">
         <button class="close" aria-label="Chiudi">&#xE711;</button>
@@ -485,16 +490,18 @@
           <p class="heading">Nuovo promemoria</p>
           <div class="field">
             <label>Quando</label>
-            <div class="box focused">quando chiudo Figma stasera<span class="caret"></span></div>
+            <div class="box focused">quando tolgo le cufie stasera<span class="caret"></span></div>
             <div class="when-line"><span class="glyph">&#xE121;</span><span>Oggi, venerdì 2 ottobre, dalle 18:00 alle 23:00</span></div>
-            <div class="when-line caution"><span class="glyph">&#xE9CE;</span><span>Non capisco «chiudo»: guardo solo la finestra.</span></div>
+            <div class="when-line"><span class="glyph">&#xE737;</span><span>Guardo se la finestra mostra: «quando tolgo le cufie»</span></div>
+            <div class="when-line caution"><span class="glyph">&#xE9CE;</span><span>Non capisco «cufie».</span></div>
+            <div class="infobar under info"><span class="status"><span class="glyph ring">&#xF136;</span><span class="glyph mark">&#xF13F;</span></span><div class="message"><span>Forse intendevi «cuffie»?</span><button>Correggi</button></div></div>
           </div>
           <div class="field">
             <label>Ricordami di</label>
-            <div class="box">esportare le icone</div>
+            <div class="box">rispondere ai messaggi</div>
           </div>
           <div class="check" role="checkbox" aria-checked="false"><span class="square"></span><div><div>Ogni volta</div><div class="caption">Suona ogni volta che succede, e non si completa mai.</div></div></div>
-          <p class="sentence">Quando chiudo Figma stasera, ti ricordo di esportare le icone.</p>
+          <p class="sentence">Quando tolgo le cufie stasera, ti ricordo di rispondere ai messaggi.</p>
           <div class="buttons">
             <button>Annulla</button>
             <button class="accent">Salva</button>
@@ -508,9 +515,11 @@
 <ul class="notes">
   <li>Invio salva, oppure porta alla casella da scrivere o da correggere; una casella non va mai a capo. Tab passa dalle caselle a «Ogni volta» e ai pulsanti; Esc, Annulla e la X chiudono senza salvare.</li>
   <li>Salva si attiva quando entrambe le caselle sono scritte e l'orario non è già passato. Il verificatore riceve esattamente il testo di «Quando», con gli spazi in ordine.</li>
-  <li>Sotto «Quando», al posto del suggerimento «Descrivi dove sei o quando: un'app, un sito, un orario.», c'è l'orario capito, con l'orologio, scritto per il giorno in cui lo guardi: «domani alle 21», scritto ieri, si legge «Oggi». Senza orario resta il suggerimento. Le parole che Jiffin non capisce sono nominate, con l'orologio del colore dell'attenzione: «Non capisco «verso sera»: suona a qualsiasi ora.», e il promemoria si salva senza orario.</li>
+  <li>Sotto «Quando», al posto del suggerimento «Descrivi dove sei o quando: un'app, un sito, un orario.», c'è l'orario capito, con l'orologio, scritto per il giorno in cui lo guardi: «domani alle 21», scritto ieri, si legge «Oggi». Il suggerimento resta solo finché la casella è vuota. Le parole che Jiffin non capisce sono nominate, con l'orologio del colore dell'attenzione: «Non capisco «verso sera»: suona a qualsiasi ora.», e il promemoria si salva senza orario.</li>
   <li>Le situazioni capite vengono prima dell'orario, una per riga, ciascuna con la sua icona: il telefono per una call, la casetta per casa, la valigetta per l'ufficio, le cuffie, la batteria, lo schermo esterno, una persona che cammina per «Lontano dal PC», il cronometro per «Da più di 20 minuti». Una situazione che finisce si scrive senza persona: «Alla fine della call», «All'uscita di casa».</li>
-  <li>Le parole di una situazione che Jiffin non capisce hanno una riga loro, con il punto di domanda del colore dell'attenzione: «Non capisco «chiudo»: guardo solo la finestra.» L'orario capito resta, e il promemoria si salva senza quella situazione.</li>
+  <li>Quello che Jiffin non legge né come orario né come situazione lo cerca nella finestra, e una riga con la finestra lo dice: «Guardo se la finestra mostra: «quando apro Dropbox»». Così niente passa in silenzio: anche una frase scritta in un modo che Jiffin non conosce, come «quando sono a uficio», si vede lì tutta. Con solo orario e situazioni la riga non c'è.</li>
+  <li>Le parole di una situazione che Jiffin non capisce hanno una riga loro, con il punto di domanda del colore dell'attenzione: «Non capisco «chiudo».» L'orario capito resta, e il promemoria si salva senza quella situazione.</li>
+  <li>Una parola di una situazione sbagliata di una lettera, come «cufie», è nominata, e sotto c'è «Forse intendevi «cuffie»?» con Correggi, che la mette nella casella. Da sola non entra mai: se salvi così, il promemoria si salva senza quella situazione.</li>
   <li>Se «Quando» nomina casa o l'ufficio e nessuna rete è ancora quella, sotto le righe lo dice: «Non so ancora qual è la rete di casa.» Se la rete in uso non è né casa né ufficio, c'è «Sono a casa adesso», che le dà quel nome; lo si cambia sempre nelle impostazioni, alla voce «Rete».</li>
   <li>Un orario già passato spegne Salva e lo dice sotto la frase; anche quando passa mentre la finestra è aperta, Salva non salva e lo dice.</li>
   <li>«Ogni volta» si segna da solo quando compaiono parole come «ogni…» o «il primo lunedì del mese», e si toglie se spariscono; se lo tocchi, resta come lo lasci. Nella frase diventa «ti ricordo ogni volta di …», e l'orario di ogni giorno si legge «Ogni giorno dalle 23:00 alle 04:00» invece di «Dalle 23:00 alle 04:00».</li>

@@ -88,6 +88,14 @@ class Catalog(QObject):
     def situationsNotUnderstood(self, words: list[str]) -> str:
         return TEXTS.creation.situations_not_understood.format(words=_quoted(words))
 
+    @Slot("QStringList", result=str)
+    def meant(self, words: list[str]) -> str:
+        return TEXTS.creation.meant.format(words=_quoted(words))
+
+    @Slot(str, result=str)
+    def judged(self, what: str) -> str:
+        return TEXTS.creation.judged.format(what=TEXTS.format.quoted.format(text=what))
+
     @Slot(str, result=str)
     def past(self, when: str) -> str:
         return TEXTS.creation.past.format(when=when)
@@ -147,5 +155,5 @@ class Catalog(QObject):
 
 
 def _quoted(words: list[str]) -> str:
-    """Words not understood, each quoted: "«verso sera» e «a dicembre»"."""
+    """Words not understood, or meant, each quoted: "«verso sera» e «a dicembre»"."""
     return listed([TEXTS.format.quoted.format(text=word) for word in words])

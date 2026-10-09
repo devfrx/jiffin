@@ -62,9 +62,18 @@ preview_perennial_no_action = "{condition}, ti ricordo ogni volta di …"
 # Under "Quando", for the words of a time not understood (#90), each quoted: "«verso sera» e «a
 # dicembre»". The reminder still saves, without its time.
 not_understood = "Non capisco {words}: suona a qualsiasi ora."
-# The same for words of situations only, with a time understood or none (ADR-0028): the reminder
-# saves without those situations, and their words go to the judge with the condition's others.
-situations_not_understood = "Non capisco {words}: guardo solo la finestra."
+# Under "Quando", what goes to the judge, which sees only the window (#169): the condition
+# without its time and situations, quoted, "Guardo se la finestra mostra: «quando apro Steam»";
+# none when nothing is left to judge. The owner's words, from a list.
+judged = "Guardo se la finestra mostra: {what}"
+# Under it, the words of situations only not understood, with a time understood or none
+# (ADR-0028): the reminder saves without those situations, and their words go to the judge with
+# the condition's others, as the line above says.
+situations_not_understood = "Non capisco {words}."
+# Under them, for words of a situation with a letter wrong (#169), each quoted: "«cuffie» e
+# «casa»". Its button puts them in the box; the reminder saves as written otherwise.
+meant = "Forse intendevi {words}?"
+meant_action = "Correggi"
 # Under the sentence, while a time already over keeps Save off (#84): "Oggi alle 09:00".
 past = "{when} è già passato. Per salvare, scrivi un giorno o un'ora che deve ancora venire."
 
