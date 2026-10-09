@@ -81,6 +81,25 @@ material = "Materiale"
 material_hint = "Per gli avvisi, l'elenco e le altre finestre di Jiffin."
 solid = "Gli effetti di trasparenza di Windows sono spenti: le finestre sono piene."
 
+# The networks' labels (ADR-0028, #153): which network is home and which the office, for the
+# reminders "a casa" and "in ufficio". The settings label the network in use; a line says when a
+# reminder waits for a label no network has yet, with a button that puts it on the network in use.
+[networks]
+title = "Rete"
+hint = "La rete a cui sei connesso ora. Serve ai promemoria «a casa» e «in ufficio»: Jiffin la riconosce, senza leggerne il nome."
+home = "Casa"
+office = "Ufficio"
+neither = "Né casa né ufficio"
+offline = "Ora non sei connesso a nessuna rete."
+# Under "Quando", beside a condition that names the place.
+unknown_home = "Non so ancora qual è la rete di casa."
+unknown_office = "Non so ancora qual è la rete dell'ufficio."
+# In the tray list, while a reminder waits.
+waiting_home = "Non so ancora qual è la rete di casa: i promemoria «a casa» non suonano."
+waiting_office = "Non so ancora qual è la rete dell'ufficio: i promemoria «in ufficio» non suonano."
+at_home = "Sono a casa adesso"
+at_office = "Sono in ufficio adesso"
+
 # The materials (ADR-0010): each one's name, and what it looks like.
 [material.acrylic]
 name = "Acrilico"

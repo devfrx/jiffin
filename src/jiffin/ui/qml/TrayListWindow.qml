@@ -21,6 +21,7 @@ Window {
     required property RemindHere remindHere
     required property FirstRun firstRun
     required property Preferences preferences
+    required property Networks networks
     // Snooze's menu, for the list to show and hide: a QtObject, since PySide has no converter
     // for the Window type of QML.
     readonly property QtObject menu: snoozeMenu
@@ -302,6 +303,18 @@ Window {
                     Layout.rightMargin: 8
                     visible: window.trayList.unreadable.length > 0
                     message: Texts.unreadable(window.trayList.unreadable)
+                }
+                // A place an active reminder names that no network is labelled for yet
+                // (ADR-0028): its button labels the network in use, when it has no label of its
+                // own.
+                FluentInfoBar {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 8
+                    Layout.rightMargin: 8
+                    visible: window.trayList.unknownPlace.length > 0
+                    message: visible ? Texts.waitingNetwork[window.trayList.unknownPlace] : ""
+                    action: visible && window.networks.connected && window.networks.label === "" ? Texts.networkInUse[window.trayList.unknownPlace] : ""
+                    onTriggered: window.networks.labelInUse(window.trayList.unknownPlace)
                 }
 
                 ColumnLayout {

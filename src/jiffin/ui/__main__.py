@@ -338,6 +338,9 @@ class Preview:
     def keep_return_pause(self, seconds: int) -> None:
         print(f"return pause {seconds} s", flush=True)
 
+    def keep_networks(self, labels: Mapping[str, str]) -> None:
+        print(f"network labels {sorted(labels.values()) or 'none'}", flush=True)
+
     def pause(self, pause: Pause) -> None:
         now = self._clock.now()
         self._paused_until = now + HOUR_MS if pause is Pause.HOUR else tomorrow(self._clock, now)

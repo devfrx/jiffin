@@ -62,7 +62,7 @@ ENGLISH = frozenset({
     "in", "no", "per", "due", "come", "end", "fine", "era", "meta", "solo", "precise", "state",
     "app", "file", "menu", "log", "download", "video", "byte", "email", "mail", "slide", "week",
     "weekend", "min", "prompt", "call", "monitor", "computer", "offline", "internet", "via", "wi",
-    "fi", "so",
+    "fi", "so", "serve",
     # Names, keys and units.
     "jiffin", "windows", "win", "alt", "backspace", "chrome", "brave", "vivaldi", "mica", "ai",
     "pc", "gb", "sha", "km", "euro", "changelog",

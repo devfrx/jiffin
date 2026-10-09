@@ -5,7 +5,9 @@ the first: its line shows the download or the problem, and Details opens the fir
 
 The row at the top opens the card of Remind here, with the place under it, asked of `core` each
 time the list opens (ADR-0029). Under a reminder that learned something, a line says so and
-opens the places of its answers, each with an X that forgets it, then Forget all.
+opens the places of its answers, each with an X that forgets it, then Forget all. While an active
+reminder names a place no network is labelled for yet, a line says so, with a button that labels
+the network in use (ADR-0028).
 
 An unseen alert's Done, snoozes and Not here wait 5 s on its card with Undo, as on the alert
 (ADR-0030): the window times them and calls `release`. The list closing sends a waiting answer
@@ -52,6 +54,7 @@ from jiffin.lang.texts import TEXTS
 from jiffin.ui import catalog  # noqa: F401  # Catalog, which Texts.qml reads
 from jiffin.ui.first_run import FirstRun
 from jiffin.ui.glass import Glass
+from jiffin.ui.networks import Networks
 from jiffin.ui.preferences import Preferences
 from jiffin.ui.remind_here import RemindHere
 from jiffin.ui.rows import Row, Rows
@@ -136,6 +139,7 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         resume: Callable[[], None],
         first_run: FirstRun,
         preferences: Preferences,
+        networks: Networks,
         glass: Glass,
         clock: Clock,
     ) -> None:
@@ -149,6 +153,8 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         self._resume = resume
         self._first_run = first_run
         self._preferences = preferences
+        self._networks = networks
+        networks.changed.connect(self.changed)
         self._glass = glass
         self._clock = clock
         self._alerts = AlertsView((), 0, ())
@@ -206,6 +212,7 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
                 "remindHere": remind_here,
                 "firstRun": first_run,
                 "preferences": preferences,
+                "networks": networks,
             }
         )
         if not isinstance(window, QQuickWindow):
@@ -279,6 +286,16 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
     @Property(int, notify=changed)
     def engine(self) -> int:
         return self._engine.value
+
+    @Property(str, notify=changed)
+    def unknownPlace(self) -> str:
+        """The first place an active reminder names, home or the office, that no network is
+        labelled for yet (ADR-0028); "" for none."""
+        return self._networks.unknown(
+            term
+            for active in self._reminders.active
+            for term in active.reminder.revision.situations
+        )
 
     @Property(str, notify=changed)
     def pausedAt(self) -> str:

@@ -10,7 +10,9 @@ The time and the situations of the condition are read at every key (ADR-0020, AD
 lines under "Quando" show what Jiffin understood, each situation on its own, and name the words
 it did not; a time already over turns Save off (#84, #90). Words of a recurrence tick "Ogni
 volta" by themselves while the user has not touched it (#92). Edit keeps the saved time and
-situations while the condition is unchanged, as `core` does.
+situations while the condition is unchanged, as `core` does. A condition at home or at the office
+that no network is labelled for yet says so, with a button that labels the network in use
+(#153).
 """
 
 from datetime import datetime
@@ -28,6 +30,7 @@ from jiffin.core.schedule import Schedule, jiffin_day
 from jiffin.core.situations import Term
 from jiffin.ui import catalog  # noqa: F401  # Catalog, which Texts.qml reads
 from jiffin.ui.glass import Glass
+from jiffin.ui.networks import Networks
 from jiffin.ui.places import Places
 from jiffin.ui.words import passed, sentence, situation_lines, tidy, when
 
@@ -57,7 +60,13 @@ class Creation(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
     first one the focus."""
 
     def __init__(
-        self, engine: QQmlEngine, changes: Changes, glass: Glass, places: Places, clock: Clock
+        self,
+        engine: QQmlEngine,
+        changes: Changes,
+        glass: Glass,
+        places: Places,
+        clock: Clock,
+        networks: Networks,
     ) -> None:
         # The engine owns this object, and deletes it only once the window's bindings are
         # dead: whatever Python lets go of first on quitting, none of them reads it gone.
@@ -65,6 +74,8 @@ class Creation(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         self._changes = changes
         self._glass = glass
         self._clock = clock
+        self._networks = networks
+        networks.changed.connect(self.changed)
         self._saved: Revision | None = None
         """The revision being edited; None for a new reminder."""
         self._condition = ""
@@ -85,7 +96,9 @@ class Creation(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         self._component = QQmlComponent(engine, QUrl.fromLocalFile(QML / "CreationWindow.qml"))
         if self._component.isError():
             raise RuntimeError(self._component.errorString())
-        window = self._component.createWithInitialProperties({"creation": self})
+        window = self._component.createWithInitialProperties(
+            {"creation": self, "networks": networks}
+        )
         if not isinstance(window, QQuickWindow):
             raise TypeError(f"no creation window: {self._component.errorString()}")
         self._window = window
@@ -147,6 +160,12 @@ class Creation(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         """The words not understood, as written: those of a time, and the reminder saves without
         a time; or those of situations only, and it saves without them."""
         return self._unclear
+
+    @Property(str, notify=changed)
+    def unknownPlace(self) -> str:
+        """The first place the condition names, home or the office, that no network is labelled
+        for yet: its reminder would never be there (ADR-0028); "" for none."""
+        return self._networks.unknown(self._situations)
 
     @Property(bool, notify=changed)
     def timeUnclear(self) -> bool:

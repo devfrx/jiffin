@@ -31,6 +31,7 @@ from jiffin.ui import tray_list, win32
 from jiffin.ui.first_run import FirstRun, ModelFile, ModelState
 from jiffin.ui.glass import Glass
 from jiffin.ui.look import Look, Settings
+from jiffin.ui.networks import Networks
 from jiffin.ui.places import Places
 from jiffin.ui.preferences import Preferences
 from jiffin.ui.remind_here import RemindHere
@@ -278,11 +279,14 @@ class Screen:
             Places(lambda places: None),
             self.clock,
         )
+        self.labels: list[dict[str, str]] = []
+        self.networks = Networks(self.engine, lambda labels: self.labels.append(dict(labels)))
         self.preferences = Preferences(
             self.engine,
             self.look,
             lambda material: None,
             lambda seconds: None,
+            self.networks,
             Glass(self.look),
             Places(lambda places: None),
         )
@@ -299,6 +303,7 @@ class Screen:
             self._resume,
             self.first_run,
             self.preferences,
+            self.networks,
             Glass(self.look),
             self.clock,
         )
@@ -737,6 +742,7 @@ def test_a_reminder_shows_each_situation_on_its_line_between_its_words_and_its_t
     screen: Screen,
 ) -> None:
     """ADR-0028, as under "Quando" in the creation window."""
+    screen.networks.restore({"home-id": "home"})  # else a line says no network is home
     screen.list.show_reminders(
         RemindersView(
             (
@@ -1604,11 +1610,13 @@ def test_the_list_goes_with_the_engine_and_no_binding_reads_it_gone(
     first_run = FirstRun(
         engine, MODEL, lambda: None, Glass(look), Places(lambda places: None), clock
     )
+    networks = Networks(engine, lambda labels: None)
     preferences = Preferences(
         engine,
         look,
         lambda material: None,
         lambda seconds: None,
+        networks,
         Glass(look),
         Places(lambda places: None),
     )
@@ -1621,6 +1629,7 @@ def test_the_list_goes_with_the_engine_and_no_binding_reads_it_gone(
         lambda: None,
         first_run,
         preferences,
+        networks,
         Glass(look),
         clock,
     )
@@ -1633,3 +1642,29 @@ def test_the_list_goes_with_the_engine_and_no_binding_reads_it_gone(
     del engine
     gc.collect()
     assert gone == ["list"]
+
+
+# A place no network is labelled for (ADR-0028, #153)
+
+NETWORK_ID = "6f1d2c3b-0000-4000-8000-000000000001"
+
+
+def test_a_reminder_at_a_place_no_network_is_labelled_for_waits_and_the_list_says_so(
+    screen: Screen,
+) -> None:
+    screen.networks.show(frozenset({NETWORK_ID}))
+    screen.list.show_reminders(
+        RemindersView((active(1, "quando sono a casa e apro Steam", "giocare"),))
+    )
+    screen.open()
+    waiting = "Non so ancora qual è la rete di casa: i promemoria «a casa» non suonano."
+    assert waiting in screen.lines()
+    screen.click("Sono a casa adesso")
+    assert screen.labels == [{NETWORK_ID: "home"}]
+    assert waiting not in screen.lines()
+
+
+def test_without_such_a_reminder_the_list_says_nothing_of_the_networks(screen: Screen) -> None:
+    screen.list.show_reminders(RemindersView((active(1, "quando sono senza rete", "leggere"),)))
+    screen.open()
+    assert not any("rete di" in line for line in screen.lines())

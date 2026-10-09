@@ -365,6 +365,9 @@ class Upkeep:
     def keep_return_pause(self, seconds: int) -> None:
         pass
 
+    def keep_networks(self, labels: Mapping[str, str]) -> None:
+        pass
+
     def pause(self, pause: Pause) -> None:
         pass
 

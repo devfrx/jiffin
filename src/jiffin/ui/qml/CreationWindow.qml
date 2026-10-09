@@ -13,6 +13,7 @@ Window {
     id: window
 
     required property Creation creation
+    required property Networks networks
     readonly property bool understood: creation.whenLine.length > 0 || creation.situations.length > 0
     readonly property bool unclear: creation.unclearWords.length > 0
 
@@ -159,6 +160,18 @@ Window {
                 UnderstoodText {
                     text: Texts.situationsNotUnderstood(window.creation.unclearWords)
                 }
+            }
+            // A place no network is labelled for yet (ADR-0028): its button labels the network in
+            // use, when it has no label of its own.
+            FluentInfoBar {
+                Layout.fillWidth: true
+                // Its icon level with the boxes' left edge.
+                Layout.leftMargin: -8
+                Layout.topMargin: 2
+                visible: window.creation.unknownPlace.length > 0
+                message: visible ? Texts.unknownNetwork[window.creation.unknownPlace] : ""
+                action: visible && window.networks.connected && window.networks.label === "" ? Texts.networkInUse[window.creation.unknownPlace] : ""
+                onTriggered: window.networks.labelInUse(window.creation.unknownPlace)
             }
         }
         FluentTextBox {

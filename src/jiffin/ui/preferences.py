@@ -1,5 +1,5 @@
-"""The settings window: the return pause, then the material of Jiffin's windows (#43, #84,
-ADR-0010, ADR-0021).
+"""The settings window: the return pause, the network in use, then the material of Jiffin's
+windows (#43, #84, #153, ADR-0010, ADR-0021, ADR-0028).
 
 A card like the creation window. The return pause is a number and its unit, seconds or minutes,
 as WinUI's NumberBox and ComboBox; the combo box's list is a window of its own on the glass,
@@ -7,7 +7,8 @@ which never takes the focus, as Snooze's menu. The four materials are radio butt
 icon's menu opens the window, and Change in the tray list, at the centre of the screen or where
 the user left it (ADR-0023), and it takes the focus, on the pause. Each change applies at once,
 as in Windows' own Settings, and goes to be kept; the X or Esc hides the window, as there, with
-no Close.
+no Close. The network in use is home, the office or neither, as radio buttons too: `Networks`
+puts the label on it.
 """
 
 from collections.abc import Callable
@@ -25,6 +26,7 @@ from jiffin.core.reminders import (
 from jiffin.ui import catalog  # noqa: F401  # Catalog, which Texts.qml reads
 from jiffin.ui.glass import Glass
 from jiffin.ui.look import Look, Material
+from jiffin.ui.networks import Networks
 from jiffin.ui.places import Places
 
 QML_IMPORT_NAME = "Jiffin"
@@ -56,6 +58,7 @@ class Preferences(QObject):  # type: ignore[operator]  # QmlUncreatable's stub h
         look: Look,
         keep: Callable[[Material], None],
         keep_return_pause: Callable[[int], None],
+        networks: Networks,
         glass: Glass,
         places: Places,
     ) -> None:
@@ -74,7 +77,9 @@ class Preferences(QObject):  # type: ignore[operator]  # QmlUncreatable's stub h
         self._component = QQmlComponent(engine, QUrl.fromLocalFile(QML / "PreferencesWindow.qml"))
         if self._component.isError():
             raise RuntimeError(self._component.errorString())
-        window = self._component.createWithInitialProperties({"preferences": self})
+        window = self._component.createWithInitialProperties(
+            {"preferences": self, "networks": networks}
+        )
         if not isinstance(window, QQuickWindow):
             raise TypeError(f"no settings window: {self._component.errorString()}")
         units = window.property("units")

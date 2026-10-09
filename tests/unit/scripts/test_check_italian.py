@@ -37,6 +37,7 @@ def test_a_planted_italian_comment_fails(check: ModuleType) -> None:
     assert found(check, str(CORE), text) == [
         (2, "Il"),
         (2, "di"),
+        (2, "adesso"),
         (2, "da"),
         (2, "domani"),
         (3, "poi"),

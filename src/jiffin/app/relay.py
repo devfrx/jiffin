@@ -42,6 +42,8 @@ class Relay(QObject):
     here = Signal(object)
     """`core`'s answer to the card of Remind here (ADR-0029)."""
     unreadable = Signal(object)
+    networks = Signal(object)
+    """The ids of the networks connected (ADR-0028)."""
     engine = Signal(object)
     """The supervisor's `Status`."""
     model = Signal(object)
@@ -54,6 +56,7 @@ class Relay(QObject):
         self.reminders.connect(self._show_reminders)
         self.here.connect(self._show_here)
         self.unreadable.connect(self._show_unreadable)
+        self.networks.connect(self._show_networks)
         self.engine.connect(self._show_engine)
         self.model.connect(self._show_model)
 
@@ -72,6 +75,10 @@ class Relay(QObject):
     @Slot(object)
     def _show_unreadable(self, apps: frozenset[str]) -> None:
         self._interface.show_unreadable(apps)
+
+    @Slot(object)
+    def _show_networks(self, connected: frozenset[str]) -> None:
+        self._interface.show_networks(connected)
 
     @Slot(object)
     def _show_engine(self, status: Status) -> None:

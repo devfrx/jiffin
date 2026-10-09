@@ -80,6 +80,7 @@ files = [
     "src/jiffin/ui/creation.py",
     "src/jiffin/ui/first_run.py",
     "src/jiffin/ui/look.py",
+    "src/jiffin/ui/networks.py",
     "src/jiffin/ui/preferences.py",
     "src/jiffin/ui/remind_here.py",
     "src/jiffin/ui/tray.py",

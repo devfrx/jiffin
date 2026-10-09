@@ -1,6 +1,7 @@
 import logging
 import os
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -8,7 +9,7 @@ import pytest
 
 from jiffin.core.clock import SimulatedClock, SystemClock
 from jiffin.core.context import Context, Observation
-from jiffin.core.situations import Situation, SituationObservation
+from jiffin.core.situations import OFFICE, Situation, SituationObservation
 from jiffin.platform import win32
 from jiffin.platform.address import Outcome, Reading
 from jiffin.platform.capture import (
@@ -390,7 +391,7 @@ def test_a_read_in_between_starts_the_count_again() -> None:
 def test_the_capture_thread_observes_at_once_and_closes() -> None:
     """With Windows' own sources: those this machine cannot read go out as not read."""
     observations: list[Observation | SituationObservation] = []
-    capture = Capture(SystemClock(), observations.append, lambda apps: None)
+    capture = Capture(SystemClock(), observations.append, lambda apps: None, lambda networks: None)
     capture.start()
     try:
         seen = list(observations)
@@ -403,6 +404,31 @@ def test_the_capture_thread_observes_at_once_and_closes() -> None:
     assert [observation.situation for observation in situations] == list(Situation)
     assert len({observation.at for observation in situations}) == 1
     assert not any(thread.name == "context" for thread in threading.enumerate())
+
+
+def test_a_label_from_another_thread_reaches_the_capture_and_the_network_goes_out_again() -> None:
+    """#153, with Windows' own Network List Manager: the networks connected, as the capture tells
+    their ids, are labelled the office from this thread, as the worker's does."""
+    observations: list[Observation | SituationObservation] = []
+    heard: list[frozenset[str]] = []
+    capture = Capture(SystemClock(), observations.append, lambda apps: None, heard.append)
+    capture.start()
+    try:
+        connected = heard[-1] if heard else frozenset()
+        if not connected:
+            pytest.skip("no network connected on this machine")
+        capture.label(dict.fromkeys(connected, OFFICE))
+        wanted = SituationObservation(0, Situation.NETWORK, frozenset({OFFICE}))
+        deadline = time.monotonic() + 5
+        while not any(
+            isinstance(seen, SituationObservation)
+            and (seen.situation, seen.values) == (wanted.situation, wanted.values)
+            for seen in list(observations)
+        ):
+            assert time.monotonic() < deadline, "the network never went out labelled"
+            time.sleep(0.01)
+    finally:
+        capture.close()
 
 
 def test_the_capture_thread_takes_windows_notices_and_ends_them(
@@ -418,7 +444,9 @@ def test_the_capture_thread_takes_windows_notices_and_ends_them(
     monkeypatch.setattr(win32, "Notices", make)
     monkeypatch.setattr(Foreground, "on_notice", lambda self, notice: heard.append("contexts"))
     monkeypatch.setattr(Situations, "on_notice", lambda self, notice: heard.append("situations"))
-    capture = Capture(SystemClock(), lambda observation: None, lambda apps: None)
+    capture = Capture(
+        SystemClock(), lambda observation: None, lambda apps: None, lambda networks: None
+    )
     capture.start()
     capture.close()
     [notices] = made
@@ -432,7 +460,9 @@ def test_a_capture_that_cannot_start_says_why(monkeypatch: pytest.MonkeyPatch) -
         raise OSError("SetWinEventHook refused the event 0x0003")
 
     monkeypatch.setattr(win32, "Hook", refuse)
-    capture = Capture(SystemClock(), lambda observation: None, lambda apps: None)
+    capture = Capture(
+        SystemClock(), lambda observation: None, lambda apps: None, lambda networks: None
+    )
     with pytest.raises(OSError, match="refused"):
         capture.start()
     capture.close()

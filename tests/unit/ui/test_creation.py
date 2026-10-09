@@ -20,6 +20,7 @@ from jiffin.ui import win32
 from jiffin.ui.creation import Creation
 from jiffin.ui.glass import Glass
 from jiffin.ui.look import Look, Settings
+from jiffin.ui.networks import Networks
 from jiffin.ui.places import Places
 
 DARK = Settings(
@@ -119,9 +120,11 @@ class Screen:
         self.kept: list[dict[str, tuple[int, int]]] = []
         self.places = Places(lambda places: self.kept.append(dict(places)))
         self.clock = SimulatedClock(instant(FRIDAY))
+        self.labels: list[dict[str, str]] = []
+        self.networks = Networks(self.engine, lambda labels: self.labels.append(dict(labels)))
         before = set(QGuiApplication.topLevelWindows())
         self.creation = Creation(
-            self.engine, self.changes, Glass(self.look), self.places, self.clock
+            self.engine, self.changes, Glass(self.look), self.places, self.clock, self.networks
         )
         (window,) = (w for w in QGuiApplication.topLevelWindows() if w not in before)
         assert isinstance(window, QQuickWindow)
@@ -179,6 +182,14 @@ class Screen:
         QTest.mouseClick(
             self.window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, centre
         )
+
+    def offers(self, name: str) -> bool:
+        """A button a screen reader calls `name` shows."""
+        try:
+            self.button(name)
+        except StopIteration:
+            return False
+        return True
 
     def box(self, name: str) -> QQuickItem:
         return self._item(
@@ -470,7 +481,12 @@ def test_the_creation_goes_with_the_engine_and_no_binding_reads_it_gone(
     engine = QQmlEngine()
     look.provide(engine)
     creation = Creation(
-        engine, Changes(), Glass(look), Places(lambda places: None), SimulatedClock(0)
+        engine,
+        Changes(),
+        Glass(look),
+        Places(lambda places: None),
+        SimulatedClock(0),
+        Networks(engine, lambda labels: None),
     )
     creation.new()
     gone: list[str] = []
@@ -747,3 +763,34 @@ def test_editing_shows_the_saved_situations_and_names_their_words_not_understood
     screen.edit(saved(8, "domani quando chiudo Figma", "esportare", written_at=YESTERDAY))
     assert screen.shows("Oggi, venerdì 2 ottobre")
     assert screen.shows("Non capisco «chiudo»: guardo solo la finestra.")
+
+
+NETWORK_ID = "6f1d2c3b-0000-4000-8000-000000000001"
+
+
+def test_a_place_no_network_is_labelled_for_says_so_with_a_button_for_the_network_in_use(
+    screen: Screen,
+) -> None:
+    """#153: a reminder "a casa" would never ring before a network is home."""
+    screen.networks.show(frozenset({NETWORK_ID}))
+    screen.new()
+    screen.type("quando sono a casa e apro Steam")
+    assert screen.shows("Non so ancora qual è la rete di casa.")
+    screen.click("Sono a casa adesso")
+    assert screen.labels == [{NETWORK_ID: "home"}]
+    assert not screen.shows("Non so ancora qual è la rete di casa.")
+    # The office, which no network is labelled for, is named the same way.
+    screen.box(WHEN).forceActiveFocus()
+    screen.retype("quando esco dall'ufficio")
+    assert screen.shows("Non so ancora qual è la rete dell'ufficio.")
+
+
+def test_without_a_network_or_on_a_labelled_one_the_place_has_no_button(screen: Screen) -> None:
+    screen.new()
+    screen.type("quando sono in ufficio")
+    assert screen.shows("Non so ancora qual è la rete dell'ufficio.")
+    assert not screen.offers("Sono in ufficio adesso")
+    screen.networks.restore({NETWORK_ID: "home"})
+    screen.networks.show(frozenset({NETWORK_ID}))
+    assert screen.shows("Non so ancora qual è la rete dell'ufficio.")
+    assert not screen.offers("Sono in ufficio adesso")  # this is home: never relabelled here

@@ -14,6 +14,7 @@ from jiffin.lang.texts import TEXTS
 from jiffin.ui import win32
 from jiffin.ui.glass import Glass
 from jiffin.ui.look import Look, Material, Settings
+from jiffin.ui.networks import Networks
 from jiffin.ui.places import Places
 from jiffin.ui.preferences import Preferences
 
@@ -79,11 +80,14 @@ class Screen:
         self.paused: list[int] = []
         self.placed: list[dict[str, tuple[int, int]]] = []
         self.places = Places(lambda places: self.placed.append(dict(places)))
+        self.labels: list[dict[str, str]] = []
+        self.networks = Networks(self.engine, lambda labels: self.labels.append(dict(labels)))
         self.preferences = Preferences(
             self.engine,
             self.look,
             self.kept.append,
             self.paused.append,
+            self.networks,
             Glass(self.look),
             self.places,
         )
@@ -585,6 +589,7 @@ def test_the_settings_go_with_the_engine_and_no_binding_reads_them_gone(
         look,
         lambda material: None,
         lambda seconds: None,
+        Networks(engine, lambda labels: None),
         Glass(look),
         Places(lambda places: None),
     )
@@ -597,3 +602,39 @@ def test_the_settings_go_with_the_engine_and_no_binding_reads_them_gone(
     del engine
     gc.collect()
     assert gone == ["preferences"]
+
+
+# The network in use (ADR-0028, #153)
+
+NETWORK_ID = "6f1d2c3b-0000-4000-8000-000000000001"
+LABELS = [TEXTS.networks.home, TEXTS.networks.office, TEXTS.networks.neither]
+
+
+def test_the_network_comes_between_the_pause_and_the_material(screen: Screen) -> None:
+    screen.open()
+    assert (
+        screen.top(PAUSE) < screen.top(TEXTS.networks.title) < screen.top(TEXTS.settings.material)
+    )
+    assert screen.shows(TEXTS.networks.hint)
+
+
+def test_without_a_network_the_settings_say_so_and_label_nothing(screen: Screen) -> None:
+    screen.open()
+    assert screen.shows("Ora non sei connesso a nessuna rete.")
+    assert not any(accessible(choice, "name") in LABELS for choice in screen.choices())
+
+
+def test_the_network_in_use_is_home_the_office_or_neither_and_the_check_follows_its_label(
+    screen: Screen,
+) -> None:
+    screen.networks.show(frozenset({NETWORK_ID}))
+    screen.open()
+    assert not screen.shows(TEXTS.networks.offline)
+    assert [accessible(choice, "name") for choice in screen.choices()][:3] == LABELS
+    assert screen.checked()[0] == TEXTS.networks.neither
+    screen.click(TEXTS.networks.home)
+    assert screen.labels == [{NETWORK_ID: "home"}]
+    assert screen.checked()[0] == TEXTS.networks.home
+    screen.click(TEXTS.networks.neither)
+    assert screen.labels[-1] == {}
+    assert screen.checked()[0] == TEXTS.networks.neither
