@@ -481,6 +481,8 @@ Window {
                             required property int reminderId
                             required property string action
                             required property string remainder
+                            // Its situations, each on its line: [{situation, value, line}].
+                            required property var situations
                             required property string when
                             required property bool perennial
                             required property string endedOn
@@ -566,11 +568,36 @@ Window {
                                     BodyText {
                                         text: row.action
                                     }
-                                    // The condition without its time: a reminder with only a time
-                                    // has none.
+                                    // The condition without its time and its situations: a reminder
+                                    // with only a time or situations has none.
                                     CaptionText {
                                         visible: !row.confirming && row.remainder.length > 0
                                         text: row.remainder
+                                    }
+                                    // Each situation understood, beside its icon (ADR-0028).
+                                    Repeater {
+                                        model: row.confirming ? [] : row.situations
+
+                                        RowLayout {
+                                            id: situationRow
+
+                                            required property var modelData
+
+                                            Layout.fillWidth: true
+                                            spacing: 6
+
+                                            SituationIcon {
+                                                Layout.alignment: Qt.AlignTop
+                                                Layout.topMargin: 2
+                                                situation: situationRow.modelData.situation
+                                                value: situationRow.modelData.value
+                                                color: Colors.textSecondary
+                                                font.pixelSize: Typography.caption
+                                            }
+                                            CaptionText {
+                                                text: situationRow.modelData.line
+                                            }
+                                        }
                                     }
                                     // The time understood, written for today (ADR-0020).
                                     RowLayout {

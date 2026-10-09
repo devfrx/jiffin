@@ -98,27 +98,6 @@ nothing_left = "niente: solo orario o situazioni"
 no_statement = "nessuna: non va al modello"
 not_written = "non ancora scritta"
 written_by = "motore {engine}, prompt {prompt}"
-# The situations understood, in provisional words until #153 writes them as the app does: one
-# that holds, its end, how long it has lasted; and how long the thing of the condition has.
-ends = "quando finisce «{situation}»"
-lasts = "«{situation}» da almeno {minutes} min"
-lasting = "da almeno {minutes} min"
-call_on = "in chiamata su {app}"
-
-# A situation with its value, by their names in `core.situations`.
-[statements.understood]
-call = "in chiamata"
-"away yes" = "lontano dal PC"
-"away no" = "al PC"
-"power battery" = "a batteria"
-"power plugged" = "con il caricatore"
-"display yes" = "con lo schermo esterno"
-"display no" = "senza schermo esterno"
-"headphones yes" = "con le cuffie"
-"headphones no" = "senza cuffie"
-"network home" = "sulla rete di casa"
-"network office" = "sulla rete dell'ufficio"
-"network offline" = "senza rete"
 
 # The owner's labelling page, a pair at a time: the texts of the page, then those its script
 # writes.

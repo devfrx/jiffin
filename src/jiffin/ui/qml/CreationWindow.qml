@@ -1,10 +1,10 @@
 // The creation window (#12, #43, #101): "Quando" and "Ricordami di", "Ogni volta", the sentence
 // they make, Cancel and Save. A card like the alerts, on their material, with its title as its
-// first line and an X on it (ADR-0010, ADR-0023). Under "Quando", in place of its hint, the time
-// Jiffin understood beside a clock, or the words it did not understand; a time already over turns
-// Save off and says why under the sentence (#84, #90). It takes the focus: Enter saves, or goes to
-// the box to write or mend; Esc cancels, as the X does; Tab moves on. It drags from any point no
-// control takes.
+// first line and an X on it (ADR-0010, ADR-0023). Under "Quando", in place of its hint, the
+// situations Jiffin understood beside their icons and the time beside a clock, and the words it
+// did not understand (ADR-0028); a time already over turns Save off and says why under the
+// sentence (#84, #90). It takes the focus: Enter saves, or goes to the box to write or mend; Esc
+// cancels, as the X does; Tab moves on. It drags from any point no control takes.
 import QtQuick
 import QtQuick.Layouts
 import Jiffin
@@ -13,7 +13,7 @@ Window {
     id: window
 
     required property Creation creation
-    readonly property bool understood: creation.whenLine.length > 0
+    readonly property bool understood: creation.whenLine.length > 0 || creation.situations.length > 0
     readonly property bool unclear: creation.unclearWords.length > 0
 
     function submit(): void {
@@ -98,30 +98,66 @@ Window {
                 onTextChanged: window.creation.setCondition(text)
                 onAccepted: window.submit()
             }
-            // What Jiffin made of the time, read at every key; the clock takes the colour of a
-            // warning for a time over or words not understood.
+            // What Jiffin made of the condition, read at every key (ADR-0020, ADR-0028): each
+            // situation beside its icon, then the time beside a clock, which takes the colour of
+            // a warning for a time over or words of a time not understood; then the words of
+            // situations not understood, beside a question mark of that colour.
+            Repeater {
+                model: window.creation.situations
+
+                RowLayout {
+                    id: situationRow
+
+                    required property var modelData
+
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    SituationIcon {
+                        Layout.alignment: Qt.AlignTop
+                        Layout.topMargin: 2
+                        situation: situationRow.modelData.situation
+                        value: situationRow.modelData.value
+                        color: Colors.textSecondary
+                        font.pixelSize: Typography.icon
+                    }
+                    UnderstoodText {
+                        text: situationRow.modelData.line
+                    }
+                }
+            }
             RowLayout {
                 Layout.fillWidth: true
-                visible: window.understood || window.unclear
+                visible: window.creation.whenLine.length > 0 || window.creation.timeUnclear
                 spacing: 8
 
                 Text {
                     Layout.alignment: Qt.AlignTop
                     Layout.topMargin: 2
                     text: "" // Clock
-                    color: window.creation.past || window.unclear ? Colors.caution : Colors.textSecondary
+                    color: window.creation.past || window.creation.timeUnclear ? Colors.caution : Colors.textSecondary
                     font.family: Typography.iconFont
                     font.pixelSize: Typography.icon
                 }
+                UnderstoodText {
+                    text: window.creation.timeUnclear ? Texts.notUnderstood(window.creation.unclearWords) : window.creation.whenLine
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                visible: window.unclear && !window.creation.timeUnclear
+                spacing: 8
+
                 Text {
-                    Layout.fillWidth: true
-                    text: window.unclear ? Texts.notUnderstood(window.creation.unclearWords) : window.creation.whenLine
-                    color: Colors.textPrimary
-                    font.family: Typography.textFont
-                    font.pixelSize: Typography.body
-                    lineHeight: Typography.bodyLine
-                    lineHeightMode: Text.FixedHeight
-                    wrapMode: Text.Wrap
+                    Layout.alignment: Qt.AlignTop
+                    Layout.topMargin: 2
+                    text: "" // Unknown
+                    color: Colors.caution
+                    font.family: Typography.iconFont
+                    font.pixelSize: Typography.icon
+                }
+                UnderstoodText {
+                    text: Texts.situationsNotUnderstood(window.creation.unclearWords)
                 }
             }
         }
@@ -200,6 +236,17 @@ Window {
     Shortcut {
         sequences: [StandardKey.Cancel]
         onActivated: window.creation.cancel()
+    }
+
+    // A line of what Jiffin made of the condition, beside its icon.
+    component UnderstoodText: Text {
+        Layout.fillWidth: true
+        color: Colors.textPrimary
+        font.family: Typography.textFont
+        font.pixelSize: Typography.body
+        lineHeight: Typography.bodyLine
+        lineHeightMode: Text.FixedHeight
+        wrapMode: Text.Wrap
     }
 
     Connections {

@@ -63,6 +63,8 @@ class CallApp:
     """An app for calls, as a condition names it: "in call su Zoom". Names, not Italian
     (ADR-0028)."""
 
+    title: str
+    """The name the interface and the harness's pages write, with its capitals: "WhatsApp"."""
     names: tuple[str, ...]
     """As a condition writes them, in lower case."""
     executables: tuple[str, ...]
@@ -71,18 +73,19 @@ class CallApp:
 
 
 CALL_APPS = {
-    "discord": CallApp(("discord",), ("discord.exe",), ("discord.com",)),
-    "meet": CallApp(("meet", "google meet"), (), ("meet.google.com",)),
-    "slack": CallApp(("slack",), ("slack.exe",), ("app.slack.com",)),
+    "discord": CallApp("Discord", ("discord",), ("discord.exe",), ("discord.com",)),
+    "meet": CallApp("Google Meet", ("meet", "google meet"), (), ("meet.google.com",)),
+    "slack": CallApp("Slack", ("slack",), ("slack.exe",), ("app.slack.com",)),
     "teams": CallApp(
+        "Microsoft Teams",
         ("teams", "microsoft teams"),
         # Since January 2026 its calls run in a process of their own (Microsoft's MC1189656).
         ("ms-teams.exe", "ms-teams_modulehost.exe"),
         ("teams.microsoft.com", "teams.live.com", "teams.cloud.microsoft"),
     ),
-    "telegram": CallApp(("telegram",), ("telegram.exe",), ("web.telegram.org",)),
-    "whatsapp": CallApp(("whatsapp",), ("whatsapp.exe",), ("web.whatsapp.com",)),
-    "zoom": CallApp(("zoom",), ("zoom.exe",), ("zoom.us",)),
+    "telegram": CallApp("Telegram", ("telegram",), ("telegram.exe",), ("web.telegram.org",)),
+    "whatsapp": CallApp("WhatsApp", ("whatsapp",), ("whatsapp.exe",), ("web.whatsapp.com",)),
+    "zoom": CallApp("Zoom", ("zoom",), ("zoom.exe",), ("zoom.us",)),
 }
 """The call apps a condition may name, by the name its terms keep: a closed list (ADR-0028)."""
 

@@ -153,6 +153,7 @@ def revision(
         schedule=reading.schedule,
         written_at=written_at,
         perennial=perennial,
+        situations=reading.situations,
     )
 
 
@@ -730,6 +731,40 @@ def test_a_reminder_shows_its_condition_without_the_time_and_the_time_written_fo
     # The time's line has the clock in front, as in the creation window.
     clocks = [item for item in shown(screen.window) if item.property("text") == ""]
     assert len(clocks) == 2
+
+
+def test_a_reminder_shows_each_situation_on_its_line_between_its_words_and_its_time(
+    screen: Screen,
+) -> None:
+    """ADR-0028, as under "Quando" in the creation window."""
+    screen.list.show_reminders(
+        RemindersView(
+            (
+                active(2, "quando sono a casa e apro Steam stasera", "giocare"),
+                active(1, "quando finisco la call", "scrivere il riassunto"),
+            )
+        )
+    )
+    screen.open()
+    assert screen.lines()[2:-1] == [
+        "Giocare",
+        "Quando apro Steam",
+        "A casa",
+        "Oggi, giovedì 1 ottobre, dalle 18:00 alle 23:00",
+        # A reminder of situations only has only their lines.
+        "Scrivere il riassunto",
+        "Alla fine della call",
+    ]
+    # Each situation's line has its icon in front: a house, a phone.
+    icons = [item.property("text") for item in shown(screen.window)]
+    assert "" in icons and "" in icons
+
+
+def test_an_unseen_alert_of_situations_names_them_and_when_it_appeared(screen: Screen) -> None:
+    alerts = (unseen(9, "scrivere il riassunto", at(1, 9, 0), condition="quando finisco la call"),)
+    screen.list.show_alerts(AlertsView((), 0, alerts))
+    screen.open()
+    assert screen.lines()[2:4] == ["Scrivere il riassunto", "Alla fine della call, alle 09:00"]
 
 
 def test_the_time_is_written_for_the_jiffin_day_which_ends_at_4(screen: Screen) -> None:

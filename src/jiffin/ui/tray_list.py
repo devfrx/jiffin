@@ -55,7 +55,16 @@ from jiffin.ui.glass import Glass
 from jiffin.ui.preferences import Preferences
 from jiffin.ui.remind_here import RemindHere
 from jiffin.ui.rows import Row, Rows
-from jiffin.ui.words import appeared, completed, dated, place, sentence, when
+from jiffin.ui.words import (
+    appeared,
+    completed,
+    dated,
+    place,
+    sentence,
+    situation_lines,
+    untimed,
+    when,
+)
 
 QML_IMPORT_NAME = "Jiffin"
 QML_IMPORT_MAJOR_VERSION = 1
@@ -166,6 +175,7 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
             (
                 "action",
                 "remainder",
+                "situations",
                 "when",
                 "perennial",
                 "endedOn",
@@ -519,15 +529,17 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         return {
             "alertId": alert.id,
             "action": sentence(alert.revision.action),
-            "line": appeared(alert.revision.remainder, at, today),
+            "line": appeared(
+                untimed(alert.revision.remainder, alert.revision.situations), at, today
+            ),
             "fresh": alert.id in self._fresh,
             "held": "" if held is None else held[0],
         }
 
     def _active_row(self, active: ActiveReminder, now: int, local: datetime) -> Row:
-        """The condition without its time, and the time written for today's Jiffin day
-        (ADR-0020); a period over says so (ADR-0021). Then what it learned, and where, the last
-        answered first (ADR-0029)."""
+        """The condition without its time and its situations, each situation on its line
+        (ADR-0028), and the time written for today's Jiffin day (ADR-0020); a period over says so
+        (ADR-0021). Then what it learned, and where, the last answered first (ADR-0029)."""
         reminder = active.reminder
         revision = reminder.revision
         schedule = revision.schedule
@@ -540,6 +552,7 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
             "reminderId": reminder.id,
             "action": sentence(revision.action),
             "remainder": sentence(revision.remainder),
+            "situations": situation_lines(revision.situations),
             "when": "" if schedule is None else when(schedule, revision.perennial, day),
             "perennial": revision.perennial,
             "endedOn": dated(period.last, day)
@@ -559,14 +572,14 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
 
     def _completed_row(self, reminder: Reminder, today: date) -> Row:
         """The action, struck through by the window, and under it the condition without its
-        time and when it was completed (ADR-0030)."""
+        time, its situations with it, and when it was completed (ADR-0030)."""
         revision = reminder.revision
         assert reminder.completed_at is not None
         at = self._clock.local(reminder.completed_at)
         return {
             "reminderId": reminder.id,
             "action": sentence(revision.action),
-            "line": completed(revision.remainder, at, today),
+            "line": completed(untimed(revision.remainder, revision.situations), at, today),
         }
 
     def _answer(self, name: str, answer: Callable[[int], None]) -> None:

@@ -32,7 +32,7 @@ from jiffin.ui import catalog  # noqa: F401  # Catalog, which Texts.qml reads
 from jiffin.ui.glass import Glass
 from jiffin.ui.overlay import TOP
 from jiffin.ui.rows import Row, Rows
-from jiffin.ui.words import place, sentence, when
+from jiffin.ui.words import place, sentence, untimed, when
 
 QML_IMPORT_NAME = "Jiffin"
 QML_IMPORT_MAJOR_VERSION = 1
@@ -168,14 +168,15 @@ class RemindHere(QObject):  # type: ignore[operator]  # QmlUncreatable's stub ha
         window.requestActivate()
 
     def _row(self, here: HereReminder, local: datetime) -> Row:
-        """The reminder's action, then its condition without the time, or the time for one with
-        only a time, and what else kept it quiet there."""
+        """The reminder's action, then its condition without the time, its situations with it
+        (ADR-0028), or the time for one with only a time, and what else kept it quiet there."""
         revision = here.reminder.revision
         schedule = revision.schedule
+        untimed_condition = untimed(revision.remainder, revision.situations)
         condition = (
             when(schedule, revision.perennial, jiffin_day(local))
-            if schedule is not None and not revision.remainder
-            else sentence(revision.remainder)
+            if schedule is not None and not untimed_condition
+            else sentence(untimed_condition)
         )
         parts = (condition, _quiet(here, local))
         return {

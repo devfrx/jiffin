@@ -34,6 +34,8 @@ WHEN, WHAT, EVERY_TIME = TEXTS.creation.condition, TEXTS.creation.action, TEXTS.
 """The two boxes and the check box, as a screen reader names them."""
 HINT = "Descrivi dove sei o quando: un'app, un sito, un orario."
 CLOCK = ""
+HOME, PHONE, UNKNOWN = "", "", ""
+"""The icons of being at home, of a call, and of situations not understood."""
 SECONDARY, CAUTION = QColor("#C5FFFFFF"), QColor("#FFFCE100")
 """The clock's colours in dark: at rest, and for a time over or not understood."""
 FRIDAY = datetime(2026, 10, 2, 10, tzinfo=UTC)
@@ -63,6 +65,7 @@ def saved(
         schedule=reading.schedule,
         written_at=instant(written_at),
         perennial=perennial,
+        situations=reading.situations,
     )
 
 
@@ -151,6 +154,16 @@ class Screen:
         except StopIteration:
             return None
         return QColor(glyph.property("color"))
+
+    def icon_colour(self, glyph: str) -> QColor | None:
+        """The colour of an icon beside a line under "Quando"; None when it does not show."""
+        try:
+            icon = self._item(
+                lambda item: item.inherits("QQuickText") and item.property("text") == glyph
+            )
+        except StopIteration:
+            return None
+        return QColor(icon.property("color"))
 
     def type(self, text: str) -> None:
         """ASCII only: QTest types into a window one character code at a time."""
@@ -674,3 +687,63 @@ def test_editing_keeps_the_box_as_it_was_whatever_its_words(screen: Screen) -> N
 def test_editing_names_the_words_not_understood_again(screen: Screen) -> None:
     screen.edit(saved(7, "quando apro Steam verso sera", "giocare"))
     assert screen.shows("Non capisco «verso sera»: suona a qualsiasi ora.")
+
+
+# The situations (ADR-0028, #153)
+
+
+def test_the_situations_understood_show_each_beside_its_icon(screen: Screen) -> None:
+    screen.new()
+    screen.type("quando sono a casa e in call")
+    assert screen.shows("A casa") and screen.shows("In call")
+    assert screen.icon_colour(HOME) == SECONDARY
+    assert screen.icon_colour(PHONE) == SECONDARY
+    assert not screen.shows(HINT)
+    assert screen.clock_colour() is None
+
+
+def test_the_situations_show_above_the_time(screen: Screen) -> None:
+    screen.new()
+    screen.type("quando finisco la call stasera")
+    assert screen.shows("Alla fine della call")
+    assert screen.shows("Oggi, venerdì 2 ottobre, dalle 18:00 alle 23:00")
+    assert screen.clock_colour() == SECONDARY
+    screen.retype("quando apro Teams")
+    assert not screen.shows("Alla fine della call")
+    assert screen.shows(HINT)
+
+
+def test_words_of_situations_not_understood_leave_the_time_and_are_named(
+    screen: Screen,
+) -> None:
+    screen.new()
+    screen.type("domani quando chiudo Figma")
+    assert screen.shows("Domani, sabato 3 ottobre")
+    assert screen.clock_colour() == SECONDARY
+    assert screen.shows("Non capisco «chiudo»: guardo solo la finestra.")
+    assert screen.icon_colour(UNKNOWN) == CAUTION
+    screen.retype("quando chiudo Figma")
+    assert screen.shows("Non capisco «chiudo»: guardo solo la finestra.")
+    assert screen.clock_colour() is None
+
+
+def test_a_time_not_understood_takes_the_situations_with_it(screen: Screen) -> None:
+    """ADR-0028: the whole condition goes to the judge, so no situation is shown understood."""
+    screen.new()
+    screen.type("verso sera quando finisco la call")
+    assert screen.shows("Non capisco «verso sera»: suona a qualsiasi ora.")
+    assert screen.clock_colour() == CAUTION
+    assert not screen.shows("Alla fine della call")
+    assert screen.icon_colour(UNKNOWN) is None
+
+
+def test_editing_shows_the_saved_situations_and_names_their_words_not_understood(
+    screen: Screen,
+) -> None:
+    screen.edit(saved(7, "quando sono a casa e apro Steam", "giocare"))
+    assert screen.shows("A casa")
+    screen.creation.cancel()
+    # A saved time stands, and the words of situations not understood are named all the same.
+    screen.edit(saved(8, "domani quando chiudo Figma", "esportare", written_at=YESTERDAY))
+    assert screen.shows("Oggi, venerdì 2 ottobre")
+    assert screen.shows("Non capisco «chiudo»: guardo solo la finestra.")

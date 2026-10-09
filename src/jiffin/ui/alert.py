@@ -23,7 +23,7 @@ from jiffin.core.records import Alert, Revision, Snooze
 from jiffin.core.schedule import jiffin_day
 from jiffin.core.units import instance_day, next_occasion
 from jiffin.lang.texts import TEXTS
-from jiffin.ui.words import alert_line, sentence
+from jiffin.ui.words import alert_line, sentence, untimed
 
 QML_IMPORT_NAME = "Jiffin"
 QML_IMPORT_MAJOR_VERSION = 1
@@ -103,7 +103,8 @@ class AlertSlot(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has
         self._state = _State.SHOWN
         self._alert_id = alert.id
         self._revision = revision
-        self._line = alert_line(revision.remainder, revision.schedule, day, today)
+        condition = untimed(revision.remainder, revision.situations)
+        self._line = alert_line(condition, revision.schedule, day, today)
         self._action = sentence(revision.action)
         self._hovered = False
         self._held = ""
@@ -125,8 +126,8 @@ class AlertSlot(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has
 
     @Property(str, notify=changed)
     def line(self) -> str:
-        """The user's "Quando…" without its time, and the time understood (#84): it says why the
-        alert came (ADR-0010)."""
+        """The user's "Quando…" without its time, its situations understood (ADR-0028), and the
+        time understood (#84): it says why the alert came (ADR-0010)."""
         return self._line
 
     @Property(str, notify=changed)

@@ -146,13 +146,14 @@ def test_a_case_of_80_reads_as_expected(case: dict[str, Any]) -> None:
     condition = case["condition"]
     reading = read(condition, created(case))
     if case["time"] == "unclear":
-        assert reading.schedule is None
+        assert (reading.schedule, reading.time_unclear) == (None, True)
         assert words(reading, condition) == case["unclear"]
     elif case["time"] is None:
-        assert (reading.schedule, reading.unclear) == (None, ())
+        assert (reading.schedule, reading.unclear, reading.time_unclear) == (None, (), False)
     else:
         assert reading.schedule == schedule(case["time"])
         assert reading.past == case["time"].get("past", False)
+        assert not reading.time_unclear
     assert reading.remainder == case["remainder"]
     assert reading.recurring == case.get("recurring", False)
 
@@ -163,7 +164,7 @@ def test_a_case_of_80_reads_as_expected(case: dict[str, Any]) -> None:
 def test_a_time_not_understood_names_its_words_wherever_they_are() -> None:
     condition = "verso sera, quando apro Telegram, o in pausa pranzo"
     reading = read(condition, FRIDAY)
-    assert reading == Reading(None, condition, reading.unclear)
+    assert reading == Reading(None, condition, reading.unclear, time_unclear=True)
     assert words(reading, condition) == ["verso sera", "in pausa pranzo"]
 
 
@@ -590,6 +591,11 @@ CALL = Situation.CALL
         ("a casa", (Holds(Situation.NETWORK, HOME),), ""),
         ("in ufficio", (Holds(Situation.NETWORK, OFFICE),), ""),
         ("quando esco di casa", (Ends(Situation.NETWORK, HOME),), ""),
+        # An end before the place it leaves, which is no place (#153).
+        ("quando esco da casa", (Ends(Situation.NETWORK, HOME),), ""),
+        ("quando esco dall'ufficio", (Ends(Situation.NETWORK, OFFICE),), ""),
+        ("quando lascio l'ufficio", (Ends(Situation.NETWORK, OFFICE),), ""),
+        ("quando torna la rete", (Ends(Situation.NETWORK, OFFLINE),), ""),
         ("senza rete", (Holds(Situation.NETWORK, OFFLINE),), ""),
         ("quando torno a casa", (Holds(Situation.NETWORK, HOME),), ""),
         # With the thing the judge checks: its words are the remainder.
@@ -681,17 +687,38 @@ def test_a_situation_not_understood_is_named_and_leaves_the_condition_whole(
     assert words(reading, condition) == unclear
 
 
+@pytest.mark.parametrize(
+    ("condition", "time_unclear"),
+    [
+        ("quando chiudo Figma", False),
+        ("quando non sono in call", False),
+        ("quando ho una call", False),
+        # A duration left over is read as a time, which it is not.
+        ("quando gioco per 20 minuti", True),
+        ("da più di 20 minuti", True),
+        ("quando finisco la call da più di un'ora", True),
+    ],
+)
+def test_the_reading_says_whether_words_of_the_time_are_not_understood(
+    condition: str, time_unclear: bool
+) -> None:
+    """The creation window says what the reminder does without them: it rings at any time, or
+    as if the situation were not written (#153)."""
+    assert read(condition, FRIDAY).time_unclear == time_unclear
+
+
 def test_situations_not_understood_leave_the_time_as_it_reads_without_them() -> None:
     reading = read("domani quando chiudo Figma", FRIDAY)
     assert reading.schedule == Schedule(OnDate(date(2026, 10, 3)))
     assert (reading.remainder, reading.situations) == ("quando chiudo Figma", ())
     assert words(reading, "domani quando chiudo Figma") == ["chiudo"]
+    assert not reading.time_unclear  # the words are the situations': the time stands
 
 
 def test_a_time_not_understood_leaves_the_condition_whole_without_its_situations() -> None:
     condition = "verso sera quando sono a casa"
     reading = read(condition, FRIDAY)
-    assert reading == Reading(None, condition, reading.unclear)
+    assert reading == Reading(None, condition, reading.unclear, time_unclear=True)
     assert words(reading, condition) == ["verso sera"]
 
 

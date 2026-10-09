@@ -108,6 +108,9 @@ class Reading:
     time not understood."""
     unclear: tuple[tuple[int, int], ...] = ()
     """Where the words not understood are, as [start, end) offsets, to name them."""
+    time_unclear: bool = False
+    """Words of the time are among them: the reminder rings at any time, and its situations go
+    to the judge with the rest. Otherwise they are the situations' only, and the time stands."""
     past: bool = False
     """The time is over already, when written: Save turns off (#84)."""
     recurring: bool = False
@@ -139,12 +142,12 @@ def read(condition: str, written_at: datetime) -> Reading:
     # Without a time or situations, or with a time not understood, the condition stays byte for
     # byte: the statement the engine writes from it stays today's (ADR-0008).
     if time.unclear or not spans:
-        return Reading(None, condition, unclear, recurring=time.recurring)
+        return Reading(None, condition, unclear, bool(time.unclear), recurring=time.recurring)
     try:
         schedule = _schedule(time, written_at) if time.spans else None
     except (Unclear, ValueError):  # ValueError: a date that does not exist, "il 31 aprile"
         unclear = phrases(condition, (*time.spans, *situations.unclear))
-        return Reading(None, condition, unclear, recurring=time.recurring)
+        return Reading(None, condition, unclear, True, recurring=time.recurring)
     return Reading(
         schedule,
         _remainder(condition, spans) if remainder is None else remainder,

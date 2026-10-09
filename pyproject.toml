@@ -101,6 +101,7 @@ files = [
     "src/jiffin/ui/qml/FluentTextBox.qml",
     "src/jiffin/ui/qml/PreferencesWindow.qml",
     "src/jiffin/ui/qml/RemindHereWindow.qml",
+    "src/jiffin/ui/qml/SituationIcon.qml",
     "src/jiffin/ui/qml/Texts.qml",
     "src/jiffin/ui/qml/TrayIcon.qml",
     "src/jiffin/ui/qml/TrayListWindow.qml",

@@ -77,13 +77,6 @@ class Statements:
     no_statement: str
     not_written: str
     written_by: str
-    ends: str
-    lasts: str
-    lasting: str
-    call_on: str
-    understood: Mapping[str, str]
-    """By the situation, and its value after a space, as `core.situations` names them: "call",
-    "away yes"."""
 
 
 @dataclass(frozen=True, slots=True)

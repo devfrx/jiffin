@@ -62,6 +62,9 @@ preview_perennial_no_action = "{condition}, ti ricordo ogni volta di …"
 # Under "Quando", for the words of a time not understood (#90), each quoted: "«verso sera» e «a
 # dicembre»". The reminder still saves, without its time.
 not_understood = "Non capisco {words}: suona a qualsiasi ora."
+# The same for words of situations only, with a time understood or none (ADR-0028): the reminder
+# saves without those situations, and their words go to the judge with the condition's others.
+situations_not_understood = "Non capisco {words}: guardo solo la finestra."
 # Under the sentence, while a time already over keeps Save off (#84): "Oggi alle 09:00".
 past = "{when} è già passato. Per salvare, scrivi un giorno o un'ora che deve ancora venire."
 

@@ -70,6 +70,7 @@ class Creation:
     preview_perennial: str
     preview_perennial_no_action: str
     not_understood: str
+    situations_not_understood: str
     past: str
 
 

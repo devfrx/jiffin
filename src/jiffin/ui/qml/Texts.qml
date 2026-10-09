@@ -149,6 +149,12 @@ QtObject {
         return Catalog.notUnderstood(words);
     }
 
+    // Under "Quando", for the words of situations not understood, the time understood (ADR-0028):
+    // the reminder still saves, without them. "Non capisco «chiudo»: …".
+    function situationsNotUnderstood(words: list<string>): string {
+        return Catalog.situationsNotUnderstood(words);
+    }
+
     // Under the sentence, while a time already over keeps Save off (#84): "Oggi alle 09:00 …".
     function past(when: string): string {
         return Catalog.past(when);

@@ -6,10 +6,11 @@ centre of the screen, or where the user left it (ADR-0023), and takes the focus,
 cancelling hides it, as its X does. The texts go to `core` as written, with their spaces tidied:
 the judge gets exactly the "Quando" box (#12).
 
-The time of the condition is read at every key (ADR-0020): the line under "Quando" shows what
-Jiffin understood, or names the words it did not, and a time already over turns Save off (#84,
-#90). Words of a recurrence tick "Ogni volta" by themselves while the user has not touched it
-(#92). Edit keeps the saved time while the condition is unchanged, as `core` does.
+The time and the situations of the condition are read at every key (ADR-0020, ADR-0028): the
+lines under "Quando" show what Jiffin understood, each situation on its own, and name the words
+it did not; a time already over turns Save off (#84, #90). Words of a recurrence tick "Ogni
+volta" by themselves while the user has not touched it (#92). Edit keeps the saved time and
+situations while the condition is unchanged, as `core` does.
 """
 
 from datetime import datetime
@@ -24,10 +25,11 @@ from jiffin.core.clock import Clock
 from jiffin.core.meanings import read
 from jiffin.core.records import Revision
 from jiffin.core.schedule import Schedule, jiffin_day
+from jiffin.core.situations import Term
 from jiffin.ui import catalog  # noqa: F401  # Catalog, which Texts.qml reads
 from jiffin.ui.glass import Glass
 from jiffin.ui.places import Places
-from jiffin.ui.words import passed, sentence, tidy, when
+from jiffin.ui.words import passed, sentence, situation_lines, tidy, when
 
 QML_IMPORT_NAME = "Jiffin"
 QML_IMPORT_MAJOR_VERSION = 1
@@ -75,7 +77,9 @@ class Creation(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         self._touched = False
         """The user ticked or unticked "Ogni volta": words no longer move it."""
         self._schedule: Schedule | None = None
+        self._situations: tuple[Term, ...] = ()
         self._unclear: list[str] = []
+        self._time_unclear = False
         self._past = False
         # The window goes with its component, which lives as long as this object.
         self._component = QQmlComponent(engine, QUrl.fromLocalFile(QML / "CreationWindow.qml"))
@@ -130,12 +134,24 @@ class Creation(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
             return ""
         return when(self._schedule, self._perennial, jiffin_day(self._now()))
 
+    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
+    def situations(self) -> list[dict[str, str]]:
+        """The situations understood, each on its line with what its icon goes by; none without
+        any."""
+        return situation_lines(self._situations)
+
     # A QStringList, as the tray list's browsers: Qt takes a type by its name, which the stub does
     # not know.
     @Property("QStringList", notify=changed)  # type: ignore[arg-type]
     def unclearWords(self) -> list[str]:
-        """The words of a time not understood, as written: the reminder saves without a time."""
+        """The words not understood, as written: those of a time, and the reminder saves without
+        a time; or those of situations only, and it saves without them."""
         return self._unclear
+
+    @Property(bool, notify=changed)
+    def timeUnclear(self) -> bool:
+        """Words of the time are among those not understood: it rings at any time."""
+        return self._time_unclear
 
     @Property(bool, notify=changed)
     def past(self) -> bool:
@@ -200,8 +216,10 @@ class Creation(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         return self._clock.local(self._clock.now())
 
     def _read(self, *, follow: bool = True) -> None:
-        """What the condition says of its time, now. A saved condition keeps its saved time while
-        it is unchanged (ADR-0020), never over: only its words not understood are found again."""
+        """What the condition says of its time and its situations, now. A saved condition keeps
+        its saved time and situations while it is unchanged (ADR-0020), never over: only its
+        words not understood are found again, those of situations whatever the day, since a
+        situation's reading never hangs on it."""
         condition = tidy(self._condition)
         reading = read(condition, self._now())
         if follow:
@@ -209,12 +227,17 @@ class Creation(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         else:
             self._recurring = reading.recurring
         saved = self._saved
+        unclear, time_unclear = reading.unclear, reading.time_unclear
         if saved is not None and condition == saved.condition:
             self._schedule, self._past = saved.schedule, False
-            unclear = reading.unclear if saved.schedule is None else ()
+            self._situations = saved.situations
+            if saved.schedule is not None and time_unclear:
+                unclear, time_unclear = (), False  # today does not read the time it kept
         else:
-            self._schedule, self._past, unclear = reading.schedule, reading.past, reading.unclear
+            self._schedule, self._past = reading.schedule, reading.past
+            self._situations = reading.situations
         self._unclear = [condition[start:end] for start, end in unclear]
+        self._time_unclear = time_unclear
 
     def _follow(self, recurring: bool) -> None:
         """ "Ogni volta" ticks itself when words of a recurrence appear, and goes when they go, as
