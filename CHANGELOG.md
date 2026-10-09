@@ -7,13 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-09
+
+Reminders that understand situations, and learn where they are wanted.
+
 ### Added
 
 - "Qui dovevi avvisarmi": Win+Shift+Q, or a new row at the top of the list,
   opens a card with the active reminders for the window in front. A click
-  rings the chosen one at once, and from then on it rings in that window.
-  Under each reminder, the list shows the places where it was asked for or
-  silenced, and forgets them one by one or all at once.
+  rings the chosen one at once, and from then on it rings in that window;
+  asked for twice where it nearly rang, a reminder rings a little more
+  readily everywhere. Under each reminder, the list shows the places where it
+  was asked for or silenced, and forgets them one by one or all at once.
 - "Annulla" for 5 s after Fatto, a Rimanda or Non qui, on the alert and on
   the cards of "Non visti": the alert comes back as it was.
 - "Completati" at the bottom of the list: the completed reminders, the most
@@ -43,6 +48,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   during a pause, with the screen locked or a window in full screen, and 5
   minutes after it was last needed. It comes back within the 5 s a window
   waits before its reminders are judged.
+- The database migrates to its fourth version at the first start; the
+  answers given so far stay.
+- The evaluation harness replays and reports this version: the situations
+  and the answers, with a page to check the calls and absences Jiffin read;
+  the model's sleeps and wakes, with each process's graphics memory; several
+  thresholds in one replay.
 
 ## [0.2.0] - 2026-10-05
 

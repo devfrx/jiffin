@@ -13,7 +13,7 @@ The design is settled and implementation is under way.
 
 - Why things are the way they are: [architecture decision records](docs/adr/README.md).
 - What each version brought: the [changelog](CHANGELOG.md). What is being
-  accepted now: the [v0.2.0 milestone](https://github.com/devfrx/jiffin/milestone/2).
+  accepted now: the [v0.3.0 milestone](https://github.com/devfrx/jiffin/milestone/3).
 
 ## Development
 
