@@ -162,6 +162,18 @@
     display: flex;
     gap: 8px;
   }
+  /* An answer waiting 5 s, with Annulla, in place of the buttons and the X (ADR-0030). */
+  .desk.short {
+    height: 196px;
+  }
+  .held {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
   /* Rimanda, which its menu hangs from. */
   .anchor {
     position: relative;
@@ -340,7 +352,7 @@
 </head>
 <body>
 <h1>Avviso nell'overlay</h1>
-<p class="lead">Fino a tre avvisi in alto al centro dello schermo, il più vecchio in cima. Ognuno mostra il «Quando…» dell'utente, senza l'orario e con l'orario capito a parte, sopra cosa fare; poi Fatto, Rimanda e la X, e una barretta che segna i 10 secondi. Rimanda apre il suo menu sotto il bottone.</p>
+<p class="lead">Fino a tre avvisi in alto al centro dello schermo, il più vecchio in cima. Ognuno mostra il «Quando…» dell'utente, senza l'orario e con l'orario capito a parte, sopra cosa fare; poi Fatto, Rimanda e la X, e una barretta che segna i 10 secondi. Rimanda apre il suo menu sotto il bottone. Fatto, le voci di Rimanda e Non qui aspettano 5 secondi, con Annulla (sotto).</p>
 
 <div class="themes">
   <section class="theme light" aria-label="Tema chiaro">
@@ -465,6 +477,82 @@
   <li>La X chiude senza risposta. Avvisi e menu non compaiono quando condividi lo schermo, nelle registrazioni e negli screenshot; sul tuo monitor sì.</li>
   <li>Entrata dall'alto in 250 ms, uscita in 167 ms; con le animazioni di Windows spente, solo dissolvenza. La barretta segna il tempo anche senza animazioni.</li>
   <li>Il vetro è quello del materiale B: Acrylic con il velo dei menu di Windows. Con la trasparenza spenta, o col risparmio energetico, la superficie è piena.</li>
+</ul>
+
+<h1 class="second">Annulla</h1>
+<p class="lead">Fatto, le voci di Rimanda e Non qui aspettano 5 secondi prima di partire: al posto dei bottoni e della X l'avviso mostra la risposta e Annulla, e la barretta segna i 5 secondi.</p>
+
+<div class="themes">
+  <section class="theme light" aria-label="Tema chiaro">
+    <h2>Chiaro</h2>
+    <div class="desk short">
+      <div class="stack">
+        <div class="alert">
+          <span class="badge icon" aria-hidden="true">&#xE8EE;</span>
+          <div class="words">
+            <span class="condition">Quando apro Claude · dalle 23:00 alle 04:00</span>
+            <span class="action">Bere un bicchiere d'acqua</span>
+          </div>
+          <div class="held">
+            <span>Fatto</span>
+            <button>Annulla</button>
+          </div>
+          <span class="time" style="width: 72%"></span>
+        </div>
+        <div class="alert">
+          <span class="badge icon" aria-hidden="true">&#xE8A5;</span>
+          <div class="words">
+            <span class="condition">Quando lavoro al progetto Rossi</span>
+            <span class="action">Aggiornare il changelog prima del rilascio</span>
+          </div>
+          <div class="held">
+            <span>Tra 15 minuti</span>
+            <button>Annulla</button>
+          </div>
+          <span class="time" style="width: 30%"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="theme dark" aria-label="Tema scuro">
+    <h2>Scuro</h2>
+    <div class="desk short">
+      <div class="stack">
+        <div class="alert">
+          <span class="badge icon" aria-hidden="true">&#xE8EE;</span>
+          <div class="words">
+            <span class="condition">Quando apro Claude · dalle 23:00 alle 04:00</span>
+            <span class="action">Bere un bicchiere d'acqua</span>
+          </div>
+          <div class="held">
+            <span>Fatto</span>
+            <button>Annulla</button>
+          </div>
+          <span class="time" style="width: 72%"></span>
+        </div>
+        <div class="alert">
+          <span class="badge icon" aria-hidden="true">&#xE8A5;</span>
+          <div class="words">
+            <span class="condition">Quando lavoro al progetto Rossi</span>
+            <span class="action">Aggiornare il changelog prima del rilascio</span>
+          </div>
+          <div class="held">
+            <span>Tra 15 minuti</span>
+            <button>Annulla</button>
+          </div>
+          <span class="time" style="width: 30%"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<ul class="notes">
+  <li>In alto: Fatto appena premuto su un promemoria «Ogni volta». In basso: Tra 15 minuti, scelto nel menu, quasi partito.</li>
+  <li>La barretta segna i 5 secondi anche col mouse sopra l'avviso, perché il mouse è lì subito dopo il clic. Poi la risposta parte e l'avviso se ne va.</li>
+  <li>Annulla rimette l'avviso com'era, con i suoi 10 secondi da capo, che col mouse sopra si fermano di nuovo. La X e i 10 secondi non aspettano: non cambiano niente.</li>
+  <li>Se chiudi Jiffin mentre una risposta aspetta, la risposta parte subito. Se intanto completi o elimini il promemoria dalla lista, l'avviso se ne va, e la risposta con lui.</li>
 </ul>
 
 <h1 class="second">Qui dovevi avvisarmi</h1>

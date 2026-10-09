@@ -117,6 +117,22 @@ def appeared(remainder: str, at: datetime, today: date) -> str:
     return f"{sentence(remainder)}, {words}" if remainder else sentence(words)
 
 
+def completed(remainder: str, at: datetime, today: date) -> str:
+    """The line of a completed reminder in the tray list (ADR-0030): the condition without its
+    time, then when it was completed, "Quando apro Claude · completato alle 11:52", "… ·
+    completato ieri", "… · completato il 20 ottobre"; with only a time, only when. `at` is
+    local, and its day counts on the calendar, as for an unseen alert."""
+    days = (today - at.date()).days
+    if days < 1:
+        when = WORDS.hours.moment.format(time=f"{at:%H:%M}")
+    elif days == 1:
+        when = WORDS.yesterday
+    else:
+        when = dated(at.date(), today)
+    words = TEXTS.tray_list.completed_when.format(when=when)
+    return TEXTS.format.parts.join((sentence(remainder), words)) if remainder else sentence(words)
+
+
 def dated(day: date, today: date) -> str:
     """A day in the middle of a line, with its article: "il 20 ottobre", "l'8 ottobre", "l'1
     ottobre"; its year only when it is not the current one."""

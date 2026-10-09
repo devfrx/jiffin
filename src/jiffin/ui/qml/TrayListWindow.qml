@@ -1,10 +1,11 @@
 // The tray list (#12, #43, #84): the row of Remind here, what keeps Jiffin from working fully, the
 // model file on its way first, the alerts that vanished unanswered, with Done and Snooze, the
-// active reminders, with New, Edit, Complete and Delete and what each learned, and the return
-// pause, with Change. A card on the alerts' material, over the tray, with an X after New
-// (ADR-0010, ADR-0023). It takes the focus; Tab moves from button to button, and Esc, the X or a
-// click elsewhere closes it. It drags from any point no control takes. Snooze opens the alert's
-// menu, a window of its own.
+// active reminders, with New, Edit, Complete and Delete and what each learned, the completed
+// ones, with Reopen and Delete, and the return pause, with Change. A card on the alerts'
+// material, over the tray, with an X after New (ADR-0010, ADR-0023). It takes the focus; Tab
+// moves from button to button, and Esc, the X or a click elsewhere closes it. It drags from any
+// point no control takes. Snooze opens the alert's menu, a window of its own. An unseen alert's
+// answer waits 5 s on its card, with Undo, as on the alert (ADR-0030).
 // Bound: the rows take their data as required properties, and reach the list by its id.
 pragma ComponentBehavior: Bound
 
@@ -25,6 +26,8 @@ Window {
     readonly property QtObject menu: snoozeMenu
     // The Snooze the menu opens from, in the window: taken at each click, as the list scrolls.
     property rect menuButton
+    // How long an unseen alert's answer waits with Undo, as on the alert (ADR-0030).
+    property int holdDuration: 5000
 
     // Scrolls the list to the item Tab has reached.
     function reveal(item: Item): void {
@@ -321,6 +324,23 @@ Window {
                             required property string action
                             required property string line
                             required property bool fresh
+                            // The answer waiting with Undo, by its name; empty when none.
+                            required property string held
+                            property real progress: 1
+
+                            // The 5 s start, or stop with Undo. The keyboard's focus goes over
+                            // from Done or Snooze to Undo, and back to Done, with its ring when
+                            // Tab brought it there.
+                            onHeldChanged: {
+                                const waits = card.held.length > 0;
+                                const from = waits ? (doneButton.activeFocus ? doneButton : snoozeButton) : undoButton;
+                                if (waits)
+                                    waiting.restart();
+                                else
+                                    waiting.stop();
+                                if (from.activeFocus)
+                                    (waits ? undoButton : doneButton).forceActiveFocus(from.visualFocus ? Qt.TabFocusReason : Qt.OtherFocusReason);
+                            }
 
                             Layout.fillWidth: true
                             Layout.leftMargin: 8
@@ -365,9 +385,12 @@ Window {
                                 }
                                 Row {
                                     Layout.leftMargin: 17
+                                    visible: card.held.length === 0
                                     spacing: 8
 
                                     FluentButton {
+                                        id: doneButton
+
                                         kind: FluentButton.Accent
                                         text: Texts.done
                                         focusPolicy: Qt.StrongFocus
@@ -391,6 +414,49 @@ Window {
                                         }
                                     }
                                 }
+                                // The answer waiting, and Undo, in place of the buttons.
+                                Row {
+                                    Layout.leftMargin: 17
+                                    visible: card.held.length > 0
+                                    spacing: 12
+
+                                    Text {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: card.held
+                                        color: Colors.textSecondary
+                                        font.family: Typography.textFont
+                                        font.pixelSize: Typography.body
+                                    }
+                                    FluentButton {
+                                        id: undoButton
+
+                                        text: Texts.cancel
+                                        Accessible.description: card.action
+                                        focusPolicy: Qt.StrongFocus
+                                        onClicked: window.trayList.undo(card.alertId)
+                                    }
+                                }
+                            }
+
+                            // The 5 s of the answer waiting, on the card's lower edge, clear of
+                            // its rounded corners; then the answer goes.
+                            Rectangle {
+                                x: card.radius
+                                anchors.bottom: parent.bottom
+                                visible: card.held.length > 0
+                                width: (card.width - 2 * card.radius) * card.progress
+                                height: 2
+                                color: Colors.accent
+                            }
+                            NumberAnimation {
+                                id: waiting
+
+                                target: card
+                                property: "progress"
+                                from: 1
+                                to: 0
+                                duration: window.holdDuration
+                                onFinished: window.trayList.release(card.alertId)
                             }
                         }
                     }
@@ -712,6 +778,214 @@ Window {
                         font.family: Typography.textFont
                         font.pixelSize: Typography.body
                         wrapMode: Text.Wrap
+                    }
+                }
+
+                // The completed reminders (ADR-0030): a row with how many, closed each time the
+                // list opens; open, the most recently completed first.
+                ColumnLayout {
+                    id: completedSection
+
+                    property bool open: false
+
+                    Layout.fillWidth: true
+                    Layout.topMargin: -6
+                    spacing: 2
+                    visible: completedRows.count > 0
+
+                    T.AbstractButton {
+                        id: completedHeader
+
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 8
+                        Layout.rightMargin: 8
+                        implicitHeight: implicitContentHeight + topPadding + bottomPadding
+                        leftPadding: 8
+                        rightPadding: 8
+                        topPadding: 5
+                        bottomPadding: 5
+                        hoverEnabled: true
+                        focusPolicy: Qt.StrongFocus
+                        Accessible.name: Texts.completed(completedRows.count)
+                        Keys.onReturnPressed: click()
+                        Keys.onEnterPressed: click()
+                        onClicked: completedSection.open = !completedSection.open
+
+                        background: Rectangle {
+                            radius: 4
+                            color: completedHeader.down ? Colors.subtleFillPressed : completedHeader.hovered ? Colors.subtleFillHover : "transparent"
+
+                            // The focus ring, 3 px outside, as a button's.
+                            Rectangle {
+                                visible: completedHeader.visualFocus
+                                anchors.fill: parent
+                                anchors.margins: -3
+                                radius: 7
+                                color: "transparent"
+                                border.width: 2
+                                border.color: Colors.focusStrokeOuter
+
+                                Rectangle {
+                                    anchors.fill: parent
+                                    anchors.margins: 2
+                                    radius: 5
+                                    color: "transparent"
+                                    border.width: 1
+                                    border.color: Colors.focusStrokeInner
+                                }
+                            }
+                        }
+                        contentItem: RowLayout {
+                            spacing: 8
+
+                            Text {
+                                Layout.alignment: Qt.AlignVCenter
+                                text: completedSection.open ? "" : "" // ChevronDown, ChevronRight
+                                color: Colors.textSecondary
+                                font.family: Typography.iconFont
+                                font.pixelSize: 10
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: Texts.completed(completedRows.count)
+                                color: Colors.textSecondary
+                                font.family: Typography.captionFont
+                                font.pixelSize: Typography.caption
+                                font.weight: Font.DemiBold
+                                lineHeight: Typography.captionLine
+                                lineHeightMode: Text.FixedHeight
+                            }
+                        }
+                    }
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        visible: completedSection.open
+                        spacing: 2
+
+                        Repeater {
+                            id: completedRows
+
+                            model: window.trayList.completed
+
+                            delegate: Item {
+                                id: completedRow
+
+                                required property int reminderId
+                                required property string action
+                                required property string line
+                                // Delete asks first, as among the active.
+                                property bool confirming: false
+
+                                // The row turns into the question and back; the focus goes along
+                                // when it was on the button.
+                                function swap(confirming: bool, from: T.AbstractButton, to: T.AbstractButton): void {
+                                    const focused = from.activeFocus;
+                                    const reason = from.visualFocus ? Qt.TabFocusReason : Qt.OtherFocusReason;
+                                    completedRow.confirming = confirming;
+                                    if (focused)
+                                        to.forceActiveFocus(reason);
+                                }
+
+                                Layout.fillWidth: true
+                                implicitHeight: completedLayout.implicitHeight + 16
+
+                                RowLayout {
+                                    id: completedLayout
+
+                                    x: 8
+                                    y: 8
+                                    width: completedRow.width - 8 - 12
+                                    spacing: 4
+
+                                    // The full circle in the accent colour, as in Microsoft To Do:
+                                    // Reopen. It keeps its place while Delete asks.
+                                    FluentButton {
+                                        Layout.alignment: Qt.AlignTop
+                                        opacity: completedRow.confirming ? 0 : 1
+                                        enabled: !completedRow.confirming
+                                        kind: FluentButton.Subtle
+                                        glyph: "" // CompletedSolid
+                                        glyphColor: Colors.accent
+                                        Accessible.name: Texts.reopen
+                                        Accessible.description: completedRow.action
+                                        focusPolicy: Qt.StrongFocus
+                                        onClicked: window.trayList.reopen(completedRow.reminderId)
+                                    }
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        Layout.alignment: Qt.AlignTop
+                                        Layout.topMargin: 6
+                                        spacing: 2
+
+                                        // Struck through and grey: done (ADR-0030).
+                                        BodyText {
+                                            text: completedRow.action
+                                            color: Colors.textSecondary
+                                            font.strikeout: true
+                                        }
+                                        // The condition without its time, and when it was
+                                        // completed.
+                                        CaptionText {
+                                            visible: !completedRow.confirming
+                                            text: completedRow.line
+                                        }
+                                        CaptionText {
+                                            visible: completedRow.confirming
+                                            text: Texts.removeQuestion
+                                        }
+                                        Row {
+                                            Layout.topMargin: 6
+                                            spacing: 8
+                                            visible: completedRow.confirming
+
+                                            FluentButton {
+                                                id: keepCompleted
+
+                                                text: Texts.cancel
+                                                Accessible.description: completedRow.action
+                                                focusPolicy: Qt.StrongFocus
+                                                onClicked: completedRow.swap(false, keepCompleted, removeCompleted)
+                                            }
+                                            FluentButton {
+                                                kind: FluentButton.Accent
+                                                text: Texts.remove
+                                                Accessible.description: completedRow.action
+                                                focusPolicy: Qt.StrongFocus
+                                                onClicked: window.trayList.delete(completedRow.reminderId)
+                                            }
+                                        }
+                                    }
+                                    FluentButton {
+                                        id: removeCompleted
+
+                                        Layout.alignment: Qt.AlignTop
+                                        visible: !completedRow.confirming
+                                        kind: FluentButton.Subtle
+                                        glyph: "" // Delete
+                                        Accessible.name: Texts.remove
+                                        Accessible.description: completedRow.action
+                                        focusPolicy: Qt.StrongFocus
+                                        onClicked: completedRow.swap(true, removeCompleted, keepCompleted)
+                                    }
+                                }
+
+                                Connections {
+                                    target: window.trayList
+
+                                    function onOpened(): void {
+                                        completedRow.confirming = false;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Connections {
+                        target: window.trayList
+
+                        function onOpened(): void {
+                            completedSection.open = false;
+                        }
                     }
                 }
 

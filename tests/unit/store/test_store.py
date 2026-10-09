@@ -131,6 +131,14 @@ def test_a_reminder_comes_back_with_its_current_revision_and_cache(store: Store)
     assert snapshot.cache == ()
 
 
+def test_a_completed_reminder_comes_back_completed_and_a_reopened_one_active(store: Store) -> None:
+    figma = reminder(1)
+    store.save([replace(figma, completed_at=NOW)])
+    assert store.load().reminders == (replace(figma, completed_at=NOW),)
+    store.save([figma])  # reopened (ADR-0030)
+    assert store.load().reminders == (figma,)
+
+
 def test_the_unseen_are_the_last_alerts_of_active_reminders_shown_and_unanswered(
     store: Store,
 ) -> None:

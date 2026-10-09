@@ -22,7 +22,7 @@ from jiffin.core.schedule import (
     Weekdays,
     YearDay,
 )
-from jiffin.ui.words import alert_line, appeared, dated, passed, place, when
+from jiffin.ui.words import alert_line, appeared, completed, dated, passed, place, when
 
 
 def at(day: int, hour: int, minute: int = 0) -> datetime:
@@ -473,6 +473,33 @@ def test_an_unseen_alert_with_only_a_time_names_only_when_it_appeared(
 ) -> None:
     """#84: the time is in its line already, as the card's own time."""
     assert appeared("", shown_at, FRIDAY) == line
+
+
+@pytest.mark.parametrize(
+    ("completed_at", "line"),
+    [
+        (at(2, 11, 52), "Quando apro Claude · completato alle 11:52"),
+        (at(1, 23, 40), "Quando apro Claude · completato ieri"),
+        (
+            datetime.fromisoformat("2026-09-11T15:00"),
+            "Quando apro Claude · completato l'11 settembre",
+        ),
+        (
+            datetime.fromisoformat("2025-12-20T15:00"),
+            "Quando apro Claude · completato il 20 dicembre 2025",
+        ),
+    ],
+)
+def test_a_completed_reminder_names_its_condition_without_the_time_and_when_it_was_completed(
+    completed_at: datetime, line: str
+) -> None:
+    """ADR-0030: the day counts on the calendar, as for an unseen alert."""
+    reading = read("quando apro Claude dopo le 23", WRITTEN)
+    assert completed(reading.remainder, completed_at, FRIDAY) == line
+
+
+def test_a_completed_reminder_with_only_a_time_names_only_when_it_was_completed() -> None:
+    assert completed("", at(2, 9, 5), FRIDAY) == "Completato alle 09:05"
 
 
 @pytest.mark.parametrize(

@@ -108,7 +108,8 @@ class Jiffin:
         self._fetch.fetch()
 
     def close(self) -> None:
-        """Once Qt has quit."""
+        """Once Qt has quit. The interface first: the answers it held with Undo join the worker's
+        queue, which runs them before it stops (ADR-0030)."""
         self.interface.close()
         self._worker.close()
 

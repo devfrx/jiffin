@@ -365,6 +365,7 @@ def test_commands_about_what_is_gone_do_nothing() -> None:
     scene.reminders.vanished(alert.id)
     scene.reminders.edit(reminder.id, "quando apro Photoshop", "esportare le icone")
     scene.reminders.complete(reminder.id)
+    scene.reminders.reopen(reminder.id)
     scene.reminders.delete(reminder.id)
     assert scene.reminders.take_records() == []
     assert scene.reminders.deadline is None
@@ -1675,6 +1676,79 @@ def test_the_tray_list_shows_the_active_reminders_newest_first() -> None:
     assert [active.reminder.id for active in scene.listed] == [figma.id]
     scene.reminders.delete(figma.id)
     assert scene.listed == ()
+
+
+def test_the_tray_list_shows_the_completed_reminders_the_most_recently_completed_first() -> None:
+    scene = Scene()
+    figma = scene.create("quando apro Figma")
+    bank = scene.create("se sono sul sito della banca", "pagare l'F24")
+    posta = scene.create("quando apro la posta", "rispondere a Giulia")
+    scene.reminders.complete(figma.id)
+    scene.wait(MINUTE_MS)
+    scene.reminders.complete(posta.id)
+    assert [active.reminder.id for active in scene.listed] == [bank.id]
+    completed = scene.lists[-1].completed
+    assert [(r.id, r.completed_at) for r in completed] == [
+        (posta.id, START + MINUTE_MS),
+        (figma.id, START),
+    ]
+    scene.reminders.delete(posta.id)
+    assert [r.id for r in scene.lists[-1].completed] == [figma.id]
+
+
+def test_reopen_makes_a_completed_reminder_active_again() -> None:
+    scene = Scene()
+    figma = scene.create("quando apro Figma")
+    scene.reminders.complete(figma.id)
+    scene.reminders.reopen(figma.id)
+    assert [active.reminder.id for active in scene.listed] == [figma.id]
+    assert scene.lists[-1].completed == ()
+    assert scene.saved(Reminder)[-1].completed_at is None
+    scene.reminders.reopen(figma.id)  # active already
+    assert scene.reminders.take_records() == []
+
+
+def test_a_reopened_reminder_that_rang_in_its_occasion_waits_for_the_next_one() -> None:
+    scene = figma()
+    scene.stay(FIGMA)
+    scene.reminders.done(scene.alert().id)  # one-off: completed
+    [completed] = scene.lists[-1].completed
+    scene.stay(BANK)
+    scene.reminders.reopen(completed.id)
+    scene.stay(FIGMA)  # back within the return pause: the same occasion
+    assert scene.outcomes() == [Outcome.SAME_OCCASION]
+    scene.stay(BANK, RETURN_PAUSE_MS)
+    scene.stay(FIGMA)
+    assert scene.outcomes() == [Outcome.ALERT]
+
+
+def test_a_reopened_one_off_whose_date_is_past_and_that_rang_stays_silent() -> None:
+    scene = Scene(start=at(2, 10))
+    call = scene.create("oggi alle 15", "chiamare Mario")
+    scene.until(at(2, 15))
+    scene.stay(FIGMA)
+    scene.reminders.done(scene.alert().id)
+    scene.wait(HOUR_MS)
+    scene.reminders.reopen(call.id)
+    scene.stay(BANK)
+    scene.until(at(3, 15))
+    scene.stay(FIGMA)
+    assert scene.view.visible == ()
+    assert len(scene.rang()) == 1
+
+
+def test_a_reopened_reminder_keeps_its_snooze_and_comes_back_when_it_ends() -> None:
+    scene = figma()
+    scene.stay(FIGMA)
+    alert = scene.alert()
+    scene.reminders.snooze(alert.id, Snooze.HOUR)
+    scene.reminders.complete(alert.reminder_id)
+    assert scene.reminders.deadline is None
+    scene.wait(MINUTE_MS)
+    scene.reminders.reopen(alert.reminder_id)
+    assert scene.reminders.deadline == alert.created_at + HOUR_MS
+    scene.until(alert.created_at + HOUR_MS)
+    assert len(scene.rang()) == 2
 
 
 def test_the_tray_list_shows_a_snooze_and_the_silences() -> None:

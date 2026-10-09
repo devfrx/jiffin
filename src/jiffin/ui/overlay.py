@@ -82,6 +82,12 @@ class Overlay(QObject):
             self._windows[slot] = window
             self._menus[slot] = menu
 
+    def close(self) -> None:
+        """The app quits: an answer still waiting with Undo goes at once, never lost
+        (ADR-0030)."""
+        for slot in list(self._order):
+            slot.release()
+
     @Slot(object)
     def show(self, view: AlertsView) -> None:
         self._view = view

@@ -4,6 +4,11 @@ An alert enters, waits 10 s for an answer, and leaves: answered, vanished when t
 or withdrawn when `core` no longer shows it. Its commands are Done, Snooze, whose menu holds
 the snoozes and Not here, and the X (#83, ADR-0023). The 10 s pause while the mouse is over the
 alert or while the menu is open (#12). Its windows never take the focus (ADR-0009).
+
+An answer that changes something, Done, a snooze or Not here, waits 5 s with Undo before it goes
+to `core` (ADR-0030): the window shows its name and times the 5 s, then calls `release`. Undo
+puts the alert back with its 10 s from the start; the X and the 10 s leave at once. A withdrawn
+alert takes its waiting answer away; when the app quits, `release` sends it at once.
 """
 
 from collections.abc import Callable
@@ -17,6 +22,7 @@ from jiffin.core.clock import Clock
 from jiffin.core.records import Alert, Revision, Snooze
 from jiffin.core.schedule import jiffin_day
 from jiffin.core.units import instance_day, next_occasion
+from jiffin.lang.texts import TEXTS
 from jiffin.ui.words import alert_line, sentence
 
 QML_IMPORT_NAME = "Jiffin"
@@ -36,6 +42,8 @@ class Answers(Protocol):
 class _State(Enum):
     EMPTY = auto()
     SHOWN = auto()
+    HOLDING = auto()
+    """An answer waits 5 s with Undo."""
     LEAVING = auto()
 
 
@@ -45,6 +53,10 @@ class AlertSlot(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has
     changed = Signal()
     presented = Signal()
     """A new alert: the window enters and the 10 s start."""
+    holding = Signal()
+    """An answer waits: the 10 s stop, and the window times the 5 s, then calls `release`."""
+    undone = Signal()
+    """Undo: the 10 s start again from the beginning."""
     leaving = Signal()
     """The window leaves, then calls `left`."""
 
@@ -63,6 +75,10 @@ class AlertSlot(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has
         self._menu = False
         self._next_time = True
         self._hovered = False
+        self._held = ""
+        """The waiting answer's name, until a new alert comes: it shows while the alert leaves."""
+        self._waiting: Callable[[int], None] | None = None
+        """The waiting answer, until it goes, is undone or is taken away."""
 
     @property
     def alert_id(self) -> int | None:
@@ -90,12 +106,15 @@ class AlertSlot(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has
         self._line = alert_line(revision.remainder, revision.schedule, day, today)
         self._action = sentence(revision.action)
         self._hovered = False
+        self._held = ""
         self.changed.emit()
         self.presented.emit()
 
     def withdraw(self) -> None:
-        """`core` no longer shows the alert: it leaves without an answer."""
-        if self._state == _State.SHOWN:
+        """`core` no longer shows the alert: it leaves without an answer, also one waiting, since
+        its reminder was completed or deleted meanwhile (ADR-0030)."""
+        if self._state in (_State.SHOWN, _State.HOLDING):
+            self._waiting = None
             self._leave()
 
     def close_menu(self) -> None:
@@ -118,6 +137,12 @@ class AlertSlot(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has
     def perennial(self) -> bool:
         """ "Ogni volta": Done means "done this time", and the icon says it (#83)."""
         return self._revision is not None and self._revision.perennial
+
+    @Property(str, notify=changed)
+    def held(self) -> str:
+        """The answer waiting with Undo, by its name: "Fatto", "Tra 15 minuti"; empty when
+        none."""
+        return self._held
 
     @Property(bool, notify=changed)
     def menuOpen(self) -> bool:
@@ -153,31 +178,62 @@ class AlertSlot(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has
 
     @Slot()
     def done(self) -> None:
-        self._answer(self._answers.done)
+        self._hold(TEXTS.alert.done, self._answers.done)
 
     @Slot()
     def snoozeNextTime(self) -> None:
-        self._answer(lambda alert_id: self._answers.snooze(alert_id, Snooze.NEXT_TIME))
+        self._hold(
+            TEXTS.snooze.next_time,
+            lambda alert_id: self._answers.snooze(alert_id, Snooze.NEXT_TIME),
+        )
 
     @Slot()
     def snoozeQuarterHour(self) -> None:
-        self._answer(lambda alert_id: self._answers.snooze(alert_id, Snooze.QUARTER_HOUR))
+        self._hold(
+            TEXTS.snooze.quarter_hour,
+            lambda alert_id: self._answers.snooze(alert_id, Snooze.QUARTER_HOUR),
+        )
 
     @Slot()
     def snoozeHour(self) -> None:
-        self._answer(lambda alert_id: self._answers.snooze(alert_id, Snooze.HOUR))
+        self._hold(TEXTS.snooze.hour, lambda alert_id: self._answers.snooze(alert_id, Snooze.HOUR))
 
     @Slot()
     def snoozeTomorrow(self) -> None:
-        self._answer(lambda alert_id: self._answers.snooze(alert_id, Snooze.TOMORROW))
+        self._hold(
+            TEXTS.snooze.tomorrow,
+            lambda alert_id: self._answers.snooze(alert_id, Snooze.TOMORROW),
+        )
 
     @Slot()
     def notHere(self) -> None:
-        self._answer(self._answers.not_here)
+        self._hold(TEXTS.alert.not_here, self._answers.not_here)
+
+    @Slot()
+    def undo(self) -> None:
+        """Undo: the waiting answer does not go, and the alert is back as it was."""
+        if self._state != _State.HOLDING:
+            return
+        self._state = _State.SHOWN
+        self._held = ""
+        self._waiting = None
+        self.changed.emit()
+        self.undone.emit()
+
+    @Slot()
+    def release(self) -> None:
+        """The 5 s are up, or the app quits: the waiting answer goes to `core`, and the alert
+        leaves."""
+        answer = self._waiting
+        if self._state != _State.HOLDING or answer is None:
+            return
+        self._waiting = None
+        answer(self._alert_id)
+        self._leave()
 
     @Slot()
     def close(self) -> None:
-        """The X: the user saw the alert and gives no answer (ADR-0021)."""
+        """The X: the user saw the alert and gives no answer (ADR-0021), so it leaves at once."""
         self._answer(self._answers.close)
 
     @Slot()
@@ -195,10 +251,21 @@ class AlertSlot(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has
         self._on_left(self)
 
     def _answer(self, answer: Callable[[int], None]) -> None:
-        if self._state != _State.SHOWN:  # a second click while it leaves
+        if self._state != _State.SHOWN:  # a second click while it waits or leaves
             return
         answer(self._alert_id)
         self._leave()
+
+    def _hold(self, name: str, answer: Callable[[int], None]) -> None:
+        """The answer waits 5 s with Undo, under its name; the menu goes at once."""
+        if self._state != _State.SHOWN:
+            return
+        self._state = _State.HOLDING
+        self._held = name
+        self._waiting = answer
+        self._menu = False
+        self.changed.emit()
+        self.holding.emit()
 
     def _leave(self) -> None:
         """The menu goes at once; the alert plays its exit."""

@@ -174,6 +174,9 @@ class RemindersView:
     """Newest first."""
     paused_until: int | None = None
     """When the pause from the tray ends; None while there is none."""
+    completed: tuple[Reminder, ...] = ()
+    """The completed reminders, the most recently completed first: the way back from a Done
+    pressed by mistake (ADR-0030)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -477,6 +480,8 @@ class Reminders:
         self._publish()
 
     def complete(self, reminder_id: int) -> None:
+        """Its alerts go, and it is judged no more. Its true stretches stay, and end when the
+        context leaves: reopened, it knows whether it rang in the occasion under way."""
         reminder = self._reminders.get(reminder_id)
         if reminder is None or reminder.completed_at is not None:
             return
@@ -484,8 +489,23 @@ class Reminders:
         self._save(replace(reminder, completed_at=now))
         self._snooze_deadlines.pop(reminder_id, None)
         self._edges.pop(reminder_id, None)
-        self._stretches.pop(reminder_id, None)
         self._close_alerts(reminder_id, now)
+        self._publish()
+
+    def reopen(self, reminder_id: int) -> None:
+        """Reopen, from the completed reminders in the tray list (ADR-0030): active again, with
+        all it knew, under ADR-0021's rules. If it rang in its unit it waits for the next one, so
+        a one-off reminder whose date is past and that rang stays silent; a snooze it had holds
+        until it ends, as after a restart."""
+        reminder = self._reminders.get(reminder_id)
+        if reminder is None or reminder.completed_at is None:
+            return
+        self._save(replace(reminder, completed_at=None))
+        if reminder.snoozed_until is not None:
+            self._snooze_deadlines[reminder_id] = reminder.snoozed_until
+        if reminder.revision.statement is None:
+            self._write_statement(reminder_id)
+        self._plan([reminder_id])
         self._publish()
 
     def delete(self, reminder_id: int) -> None:
@@ -1187,6 +1207,18 @@ class Reminders:
             reverse=True,
         )
 
+    def _completed(self) -> list[Reminder]:
+        """The completed reminders, the most recently completed first (ADR-0030)."""
+        return sorted(
+            (
+                reminder
+                for reminder in self._reminders.values()
+                if reminder.completed_at is not None
+            ),
+            key=lambda reminder: (reminder.completed_at, reminder.id),
+            reverse=True,
+        )
+
     def _write_missing_statements(self) -> None:
         for reminder in list(self._reminders.values()):
             revision = reminder.revision
@@ -1241,4 +1273,5 @@ class Reminders:
                 for reminder in self._active()
             ),
             self._paused_until,
+            tuple(self._completed()),
         )

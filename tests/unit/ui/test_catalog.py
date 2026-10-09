@@ -131,6 +131,10 @@ def test_what_a_reminder_learned_is_one_line_of_counts_and_never_a_number_of_its
     assert catalog.learned(silences, requests, attentive) == learned
 
 
+def test_the_completed_reminders_row_says_how_many(catalog: Catalog) -> None:
+    assert catalog.completed(3) == "Completati · 3"
+
+
 def test_a_pause_says_until_when(catalog: Catalog) -> None:
     assert catalog.pausedUntil("15:30", False) == "In pausa fino alle 15:30."
     assert catalog.pausedUntil("08:00", True) == "In pausa fino a domani alle 08:00."

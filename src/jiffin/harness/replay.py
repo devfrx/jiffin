@@ -21,6 +21,10 @@ What the log does not keep is inferred from what it does:
   judged snoozed and first judged free after it;
 - when a situation stopped being read, from the stretches of the situations that always have a
   value while read: one of them that ends with no other starting then.
+
+What the log does not keep, and the replay does not infer: Reopen (ADR-0030). A reminder keeps
+its last completion only, so one reopened after its Done stays completed from that Done, and one
+completed from the tray list, then reopened, is replayed as never completed.
 """
 
 import heapq

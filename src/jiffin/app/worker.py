@@ -368,6 +368,9 @@ class QueuedCore:
     def complete(self, reminder_id: int) -> None:
         self._worker.command(lambda core: core.complete(reminder_id))
 
+    def reopen(self, reminder_id: int) -> None:
+        self._worker.command(lambda core: core.reopen(reminder_id))
+
     def delete(self, reminder_id: int) -> None:
         self._worker.command(lambda core: core.delete(reminder_id))
 

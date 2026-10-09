@@ -164,6 +164,9 @@ class TrayList:
     no_reminders: str
     edit: str
     complete: str
+    completed: str
+    completed_when: str
+    reopen: str
     delete: str
     delete_question: str
     change: str

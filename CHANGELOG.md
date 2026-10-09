@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rings the chosen one at once, and from then on it rings in that window.
   Under each reminder, the list shows the places where it was asked for or
   silenced, and forgets them one by one or all at once.
+- "Annulla" for 5 s after Fatto, a Rimanda or Non qui, on the alert and on
+  the cards of "Non visti": the alert comes back as it was.
+- "Completati" at the bottom of the list: the completed reminders, the most
+  recent first; the full circle brings one back among the active ones.
 
 ### Changed
 

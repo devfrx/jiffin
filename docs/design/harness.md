@@ -304,7 +304,10 @@ sequenceDiagram
   the app's `core` forgets at a restart within the day, the replay's keeps. A
   replay starts with an empty cache, so a score of a context judged before the
   day is no longer from the cache, and a Not here on an alert of an earlier
-  day has no d there.
+  day has no d there. A reminder keeps only its last completion, and the log
+  no Reopen ([ADR-0030](../adr/0030-undo-and-reopen.md)): one reopened after
+  its Done stays completed from that Done in the replay, and one completed in
+  the tray list, then reopened, is replayed as never completed.
 
 ### `convert`
 

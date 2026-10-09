@@ -13,7 +13,8 @@ card of Remind here, which goes over them, is `ui/remind_here.py` and
 [ADR-0023](../adr/0023-window-frame.md), the capture from
 [ADR-0024](../adr/0024-hold-and-hide-alerts.md), the focus rules from
 [ADR-0009](../adr/0009-qt-quick-pyside6-interface.md), the card from
-[ADR-0029](../adr/0029-learn-from-answers-per-place.md); the
+[ADR-0029](../adr/0029-learn-from-answers-per-place.md), Undo from
+[ADR-0030](../adr/0030-undo-and-reopen.md); the
 [mockup](mockups/overlay.html) shows them in light and dark.
 
 ## Placement
@@ -48,8 +49,12 @@ stateDiagram-v2
         Closed --> Open : Snooze
         Open --> Closed : Snooze again, a press outside, another menu opening
     }
-    Shown --> Leaving : an answer, the X, or the 10 s are up
+    Shown --> Holding : Done, a snooze, Not here
+    Holding --> Shown : Undo, with its 10 s from the start
+    Holding --> Leaving : the 5 s are up, or the app quits, and the answer goes
+    Shown --> Leaving : the X, or the 10 s are up
     Shown --> Leaving : core no longer shows it
+    Holding --> Leaving : core no longer shows it, and the answer goes with it
     Leaving --> Empty : the exit has played
 ```
 
@@ -81,7 +86,20 @@ stateDiagram-v2
   already down when the menu opened, does not count.
 - The 10 s pause while the mouse is over the alert or its menu is open. When
   they are up, the alert goes to `core` as vanished.
-- Each answer goes to `core` once: a click while the window leaves is ignored.
+- **Undo** ([ADR-0030](../adr/0030-undo-and-reopen.md)): Done, the four
+  snoozes and Not here wait 5 s before they go to `core`. In place of the
+  buttons and the X the alert shows the answer's name in the secondary colour
+  ("Fatto", "Tra 15 minuti", "Non qui"…) and **Undo**; the bar of the 10 s
+  becomes one of 5 s, which the mouse over the alert does not stop, since it is
+  there right after the click. Undo puts the alert back as it was, with its
+  10 s from the start, which stop again under the mouse. Then the answer goes,
+  and the alert leaves with its name; the X and the 10 s leave at once, since
+  they change nothing. When the app quits, a waiting answer goes at once,
+  before the worker stops (`Overlay.close`); when `core` no longer shows the
+  alert, since its reminder was completed or deleted in the tray list
+  meanwhile, the answer goes with it. The slot keeps the answer and its state;
+  the window shows them and times the 5 s, as the 10 s.
+- Each answer goes to `core` once: a click while it waits or leaves is ignored.
   An empty slot ignores the mouse, since Qt sends an enter and a leave after
   `hide()`.
 - The windows never take the focus: `Qt::WindowDoesNotAcceptFocus`, tool
@@ -180,7 +198,8 @@ sequenceDiagram
 
 `uv run python -m jiffin.ui --alerts 3 --material b` shows made-up alerts, one
 without a time, one perennial with a time and one with only a time, without the
-model or any data; each answer is printed, and a new alert comes 2 s later.
+model or any data; each answer is printed once its 5 s are over, and a new
+alert comes 2 s later; one left to vanish brings no new one.
 Win+Shift+Q opens the card on a made-up place, each reminder kept quiet in a
 way of its own; `--no-place` opens it with no place yet. The unit tests run
 the windows on Qt's offscreen platform (`tests/unit/ui`); the focus test of

@@ -43,13 +43,16 @@ ANSWERS: tuple[tuple[tuple[str, ...], tuple[object, ...]], ...] = (
     ((TEXTS.alert.snooze, TEXTS.snooze.hour), ("snooze", Snooze.HOUR)),
     ((TEXTS.alert.snooze, TEXTS.snooze.next_time), ("snooze", Snooze.NEXT_TIME)),
     ((TEXTS.command.close,), ("close",)),
+    ((TEXTS.alert.done, TEXTS.command.cancel, TEXTS.command.close), ("close",)),
 )
 """How the rounds answer, in turn: the buttons clicked, on the alert or on Snooze's menu, and
-the answer they give."""
+the answer they give; the last one undoes a Done first (ADR-0030)."""
 ON_THE_TEXT = QPointF(100, 20)
 """A point of an alert over its text, away from the buttons."""
 VANISH_MS = 15_000
 """The alerts' 10 s, with room."""
+HOLD_MS = 8_000
+"""The 5 s an answer waits with Undo before the alert leaves, with room (ADR-0030)."""
 
 
 class _MouseInput(ctypes.Structure):
@@ -337,6 +340,9 @@ class Core:
     def complete(self, reminder_id: int) -> None:
         self.made.append(("complete", reminder_id))
 
+    def reopen(self, reminder_id: int) -> None:
+        self.made.append(("reopen", reminder_id))
+
     def delete(self, reminder_id: int) -> None:
         self.made.append(("delete", reminder_id))
 
@@ -507,7 +513,7 @@ def test_an_alert_never_takes_the_focus_from_where_the_user_types(
             qtbot.wait(300)
             desk.check(f"{turn} clicked {name}")
         expected.append((what, turn, *rest))
-        qtbot.waitUntil(screen.none_shown)
+        qtbot.waitUntil(screen.none_shown, timeout=HOLD_MS)
         desk.check(f"{turn} left")
 
         desk.rest()

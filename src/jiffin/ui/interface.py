@@ -136,7 +136,10 @@ class Interface:
         self.first_run.shortcut = hotkey.NEW in self.hotkeys.registered
 
     def close(self) -> None:
-        """The shortcuts go back to Windows."""
+        """The answers still waiting with Undo, on the alerts and in the tray list, go to `core`
+        at once (ADR-0030), before the worker stops; the shortcuts go back to Windows."""
+        self.overlay.close()
+        self.tray_list.close()
         self.hotkeys.close()
 
     def show_alerts(self, view: AlertsView) -> None:

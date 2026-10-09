@@ -123,6 +123,7 @@ QtObject {
     readonly property string noReminders: Catalog.text("tray_list.no_reminders")
     readonly property string edit: Catalog.text("tray_list.edit")
     readonly property string complete: Catalog.text("tray_list.complete")
+    readonly property string reopen: Catalog.text("tray_list.reopen")
     readonly property string remove: Catalog.text("tray_list.delete")
     readonly property string removeQuestion: Catalog.text("tray_list.delete_question")
     readonly property string retry: Catalog.text("command.retry")
@@ -163,6 +164,11 @@ QtObject {
     // posto · Più attento"; empty when nothing.
     function learned(silences: int, requests: int, attentive: bool): string {
         return Catalog.learned(silences, requests, attentive);
+    }
+
+    // The row of the completed reminders in the tray list (ADR-0030): "Completati · 3".
+    function completed(count: int): string {
+        return Catalog.completed(count);
     }
 
     // At the top of the tray list while Jiffin is paused (ADR-0024): "In pausa fino alle 15:30.",
