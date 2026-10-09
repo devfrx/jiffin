@@ -27,18 +27,25 @@ modifiers_after = [
     "vostro",
 ]
 # Words of a situation that, outside one understood, make the situations not understood: a
-# call, headphones, the battery, the charger and the lid; the end of a thing the judge checks
-# ("quando chiudo Figma", "quando finisco di lavorare", "quando smetto di guardare YouTube");
-# a duration that does not say how long ("da un po'"), or not in minutes or hours ("da più di
-# 2 giorni").
+# call, headphones, the battery, the charger and the lid, a place and the link; a state Jiffin
+# does not read ("in riunione", "al telefono", "al lavoro": work is no office); the end of a
+# thing the judge checks ("quando chiudo Figma", "quando finisco di lavorare", "quando smetto di
+# guardare YouTube"); a duration that does not say how long ("da un po'"), or not in minutes or
+# hours ("da più di 2 giorni").
 leftover = [
     "call", "chiamata", "chiamate", "videochiamata", "videochiamate", "videocall", "cuffie",
-    "cuffia", "cuffiette", "auricolari", "auricolare", "batteria", "caricatore", "coperchio",
-    "monitor esterno", "schermo esterno", "secondo monitor", "secondo schermo", "wifi", "wi-fi",
-    "chiudo", "finisco", "smetto", "termino", "concludo", "stacco", "esco", "da un po'",
-    "da poco", "da tanto", "da molto", "da parecchio", "da più di", "da piu di", "da almeno",
-    "da oltre",
+    "cuffia", "cuffiette", "auricolari", "auricolare", "batteria", "caricatore", "alimentatore",
+    "coperchio", "monitor esterno", "schermo esterno", "secondo monitor", "secondo schermo",
+    "wifi", "wi-fi", "connessione", "casa", "ufficio", "riunione", "riunioni", "meeting",
+    "telefono", "telefonata", "telefonate", "al lavoro", "a lavoro", "chiudo", "finisco",
+    "smetto", "termino", "concludo", "stacco", "esco", "da un po'", "da poco", "da tanto",
+    "da molto", "da parecchio", "da più di", "da piu di", "da almeno", "da oltre",
 ]
+# The letters of a word, and its vowels, to find a word of a phrase with a letter wrong (#169):
+# one missing, two swapped, one too many or one changed; but another final vowel is another
+# ending, not a letter wrong ("in carico", "in carica").
+letters = "abcdefghijklmnopqrstuvwxyzàèéìíòóù"
+vowels = "aeiouàèéìíòóù"
 # Before a duration, which says since when: "da più di 20 minuti", "da almeno mezz'ora", "da
 # un'ora".
 lasting = ["da più di", "da piu di", "da almeno", "da oltre", "da"]
@@ -133,7 +140,7 @@ take_off = ["tolgo {headphones}", "stacco {headphones}", "scollego {headphones}"
 
 # The network: one the owner called home or office, or none.
 [read.network]
-home = ["a casa", "a casa mia", "da casa"]
+home = ["a casa", "a casa mia", "da casa", "in casa"]
 office = ["in ufficio", "dall'ufficio"]
 offline = ["senza rete", "senza internet", "senza connessione", "offline"]
 # Before them: "quando sono a casa", "quando arrivo in ufficio".

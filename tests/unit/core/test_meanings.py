@@ -589,6 +589,7 @@ CALL = Situation.CALL
         ("quando tolgo le cuffie", (Ends(Situation.HEADPHONES, YES),), ""),
         ("senza cuffie", (Holds(Situation.HEADPHONES, NO),), ""),
         ("a casa", (Holds(Situation.NETWORK, HOME),), ""),
+        ("quando sono in casa", (Holds(Situation.NETWORK, HOME),), ""),  # another way (#169)
         ("in ufficio", (Holds(Situation.NETWORK, OFFICE),), ""),
         ("quando esco di casa", (Ends(Situation.NETWORK, HOME),), ""),
         # An end before the place it leaves, which is no place (#153).
@@ -677,14 +678,69 @@ def test_a_situation_of_the_adr_is_read(
         ("quando esco", ["esco"]),
         ("quando sono su YouTube da più di 2 giorni", ["da più di"]),
         ("quando sono a casa da più di 2 giorni", ["sono a casa da più di"]),
+        # Never in silence (#169): a place, a link or a charger outside a phrase understood,
+        # after an elided article too; and a state Jiffin does not read. Work is no office: it is
+        # named, never read as one.
+        ("quando sono fuori casa", ["casa"]),
+        ("quando sono all'ufficio", ["ufficio"]),
+        ("quando cade la connessione", ["connessione"]),
+        ("quando collego l'alimentatore", ["alimentatore"]),
+        ("quando sono in riunione", ["riunione"]),
+        ("quando sono in meeting", ["meeting"]),
+        ("quando sono al telefono", ["telefono"]),
+        ("dopo la telefonata", ["telefonata"]),
+        ("quando sono al lavoro", ["al lavoro"]),
+        # Another ending is no letter wrong: named as written, with no word meant.
+        ("quando sono in chiamate", ["chiamate"]),
     ],
 )
 def test_a_situation_not_understood_is_named_and_leaves_the_condition_whole(
     condition: str, unclear: list[str]
 ) -> None:
     reading = read(condition, FRIDAY)
-    assert (reading.situations, reading.remainder) == ((), condition)
+    assert (reading.situations, reading.remainder, reading.typos) == ((), condition, ())
     assert words(reading, condition) == unclear
+
+
+@pytest.mark.parametrize(
+    ("condition", "typos"),
+    [
+        # The owner's (#169): a letter missing.
+        ("quando sono a csa", [("csa", "casa")]),
+        ("quando tolgo le cufie", [("cufie", "cuffie")]),
+        ("quando sono in chimata", [("chimata", "chiamata")]),
+        # The word meant makes the phrase: no other word of it is named.
+        ("quando finisco la chimata", [("chimata", "chiamata")]),
+        ("durante la chimata", [("chimata", "chiamata")]),
+        ("quando esco dall'uffico", [("uffico", "ufficio")]),
+        ("quando tlgo le cuffie", [("tlgo", "tolgo")]),
+        # A word of four letters: a letter missing, or two swapped.
+        ("quando sono in cal", [("cal", "call")]),
+        ("quando sono a csaa", [("csaa", "casa")]),
+        # A letter too many, or a wrong one, in a longer word.
+        ("quando metto le cuffiie", [("cuffiie", "cuffie")]),
+        ("con le cuffoe", [("cuffoe", "cuffie")]),
+        # Beside a phrase understood: the situations are not understood, as with any word named.
+        ("quando sono a casa con le cufie", [("cufie", "cuffie")]),
+        # Over one: "torno" alone is the end of an absence, "torno in chiamata" a call.
+        ("quando torno in chimata", [("chimata", "chiamata")]),
+    ],
+)
+def test_a_situation_word_misspelled_is_named_with_the_word_meant(
+    condition: str, typos: list[tuple[str, str]]
+) -> None:
+    reading = read(condition, FRIDAY)
+    assert (reading.situations, reading.remainder) == ((), condition)
+    assert [(condition[start:end], meant) for start, end, meant in reading.typos] == typos
+    assert words(reading, condition) == [typo for typo, _ in typos]
+
+
+def test_a_word_before_a_phrase_understood_is_no_typo_of_a_verb_that_leads_into_it() -> None:
+    """A letter from "resto", which may lead into "a casa", "presto" is no typo: the phrase is
+    read already, and the word is one of its own (#169)."""
+    reading = read("quando torno presto a casa", FRIDAY)
+    assert reading.typos == ()
+    assert Holds(Situation.NETWORK, HOME) in reading.situations
 
 
 @pytest.mark.parametrize(
@@ -771,8 +827,16 @@ def test_a_time_and_situations_are_read_together(
 @pytest.mark.parametrize(
     "condition",
     [
-        # Work is no office: a label never changes what a phrase means.
-        "quando sono al lavoro",
+        # A verb is no place: the judge reads it (#169).
+        "quando lavoro al progetto",
+        # A word a letter from a situation's that is another word (#169): a short word with a
+        # letter changed, another ending, a phrase of one word.
+        "quando penso a cosa fare",
+        "quando clicco a caso",
+        "quando le vendite sono in calo",
+        "quando ho un ticket in carico",
+        "quando accendo il forno",
+        "quando sono di turno",
         # What plays stays with the judge, which sees the window.
         "quando ascolto musica",
         "quando guardo un video",

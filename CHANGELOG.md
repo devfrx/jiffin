@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Under "Quando" each situation understood has a line with its icon, and the
   words not understood are named; the alert, the list and the card of "Qui
   dovevi avvisarmi" write them too.
+- Nothing in the condition goes unseen: under "Quando", "Guardo se la
+  finestra mostra: «…»" says what Jiffin looks for in the window, the part
+  it reads neither as a time nor as a situation. A word of a situation with
+  a letter wrong ("quando tolgo le cufie") is named, with "Forse intendevi
+  «cuffie»?" and "Correggi", which puts it in. "In casa" reads as "a casa";
+  "in riunione", "al telefono" and "al lavoro" are named, never guessed.
 - "Rete" in the settings: whether the network in use is home, the office or
   neither, for the reminders "a casa" and "in ufficio". While a reminder
   waits for a place no network has, the creation window and the list say so,

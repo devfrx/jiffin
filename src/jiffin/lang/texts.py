@@ -71,6 +71,9 @@ class Creation:
     preview_perennial_no_action: str
     not_understood: str
     situations_not_understood: str
+    meant: str
+    meant_action: str
+    judged: str
     past: str
 
 

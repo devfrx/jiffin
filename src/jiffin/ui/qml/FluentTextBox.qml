@@ -12,6 +12,7 @@ FocusScope {
     property string description
     property alias text: box.text
     property alias placeholderText: box.placeholderText
+    property alias cursorPosition: box.cursorPosition
 
     signal accepted
 

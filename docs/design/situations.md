@@ -56,7 +56,7 @@ without situations, or when they are not understood:
 
 | Term | Means | Examples |
 |---|---|---|
-| `Holds(situation, value)` | the situation holds | "quando sono in call", "in call su Zoom", "a batteria", "con le cuffie", "senza rete", "quando torno a casa" |
+| `Holds(situation, value)` | the situation holds | "quando sono in call", "in call su Zoom", "a batteria", "con le cuffie", "senza rete", "quando torno a casa", "quando sono in casa" |
 | `Ends(situation, value)` | a stretch of it has just ended | "quando finisco la call", "dopo la videochiamata", "quando tolgo le cuffie", "quando stacco il caricatore", "quando esco di casa", "quando torno" (the end of `away`) |
 | `Lasts(minutes, situation, value)` | its stretch has lasted at least that long; with no situation, the occasion of the thing the judge checks | "in call da più di un'ora", "se sono via da più di 10 minuti", "quando sono su YouTube da più di 20 minuti" |
 
@@ -75,8 +75,29 @@ without situations, or when they are not understood:
 
 **Not understood**, named under "Quando" and never guessed:
 
-- a word of a situation outside a phrase understood: "quando ho una call",
-  the battery's level ("50% della batteria"), the lid, the Wi-Fi;
+- a word of a situation outside a phrase understood, also after an elided
+  article: "quando ho una call", the battery's level ("50% della batteria"),
+  the lid, the Wi-Fi, "fuori casa", "all'ufficio", "l'alimentatore", "quando
+  cade la connessione"; and the words of a state Jiffin does not read: "in
+  riunione", "in meeting", "al telefono", "al lavoro" (work is no office: a
+  label never changes what a phrase means). "Quando lavoro al progetto" is
+  no "al lavoro", and stays with the judge; so do the words of what plays,
+  "musica", "video", which the window shows (#169);
+- a word of a phrase with a letter wrong, with the word meant
+  (`Reading.typos`, #169): "quando tolgo le cufie", «cuffie»; "quando sono a
+  csa", «casa». A letter missing, two swapped, one too many or one changed;
+  in a word of four letters or fewer only the first two, since the others
+  make other words of it ("cosa", "cassa" of "casa"); another final vowel is
+  another ending, not a letter wrong ("in carico"). The word meant must make
+  there a phrase of two words or more, of which the word is not the only one
+  outside the phrases found: "torno in chimata" is a call, "torno presto a
+  casa" has no "resto". On every phrase of the lexicon, written with each
+  such mistake, 84% name the word meant; the rest are phrases of one word
+  ("torno") and verbs before a phrase read without them ("sno in call"),
+  which the window's line shows (`creation.md`). Real Italian words put in a
+  phrase's place are taken for mistakes there, nearly all in no sentence
+  anyone writes ("quando ovvio la call"); the likely ones show ("quando ho
+  tolto il caricatore" offers «tolgo»);
 - the end of a thing the judge checks: "quando chiudo Figma", "quando finisco
   di lavorare", "quando smetto di guardare YouTube";
 - a duration that does not say how long, or not in minutes or hours: "da un
@@ -97,9 +118,11 @@ the user writes it again. `Reading.time_unclear` tells the two apart: with
 words of the time among those not understood, the reminder rings at any
 time; with only the situations', the time stands, and the creation window
 names those words on a line of their own
-([creation](creation.md#the-situations)). Work is no office ("al lavoro"),
-and what plays ("musica", "video") stays with the judge, which sees the
-window.
+([creation](creation.md#the-situations)). Work is no office: "al lavoro" is
+named, never read as one; what plays ("musica", "video") stays with the
+judge, which sees the window. Whatever goes to the judge shows on a line of
+its own ([creation](creation.md#what-the-window-must-show)), so a phrasing
+the lists do not know is never lost in silence.
 
 ## Writing them
 

@@ -320,3 +320,17 @@ in the first package.
   ("quando sono in casa", "quando sono in riunione"). The owner kept the list
   and asked that nothing go in silence:
   [#169](https://github.com/devfrx/jiffin/issues/169).
+- Built there, and chosen by the owner on its trial: "in casa" reads as "a
+  casa"; a place, the link, a charger and the states Jiffin does not read ("in
+  riunione", "al telefono", "al lavoro", still no office) are named outside a
+  phrase understood; a word of a phrase with a letter wrong is named with the
+  word meant, which "Correggi" puts in the box and nothing reads by itself (the
+  owner's pick over a reading of the word meant, side by side). A rule that
+  caught more letters wrong was turned down: a closed list misses some
+  writing whatever it catches ("a uficio", "alvoro"). Instead, a line under
+  "Quando" shows what goes to the judge, "Guardo se la finestra mostra:
+  «quando apro Steam»" (the owner's words, from a list), and "Non capisco
+  «…»." beside it is shorter. The first negative stands, never in silence:
+  what the list does not know is named, or shows whole on that line
+  ([situations](../design/situations.md#reading-them),
+  [creation](../design/creation.md#what-the-window-must-show)).

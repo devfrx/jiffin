@@ -70,8 +70,9 @@ stateDiagram-v2
   sito, un orario."), a line beside a clock (`E121`) says what Jiffin
   understood, in the words of [the time's words](time.md#the-words-of-a-time):
   "Ogni giorno dalle 23:00 alle 04:00". The situations understood come above
-  it, each on its line ([below](#the-situations)). Without a time or
-  situations the hint stays.
+  it, each on its line ([below](#the-situations)); what is left for the judge
+  comes under it ([below](#what-the-window-must-show)). The hint stays only
+  while the box is empty.
 - **Words of a time not understood** are named on that line, the clock in
   the warning colour: "Non capisco «verso sera»: suona a qualsiasi ora."
   (#90). Save stays on: the reminder saves without a time, its whole
@@ -138,11 +139,20 @@ stateDiagram-v2
   NetworkOffline (`F384`), and Stopwatch (`E916`) for how long the thing of
   the condition has lasted.
 - **Words of situations not understood**, with a time understood or none,
-  have a line after the time's, beside Unknown (`E9CE`) in the warning
-  colour: "Non capisco «chiudo»: guardo solo la finestra." The reminder saves
-  without those situations, and their words go to the judge with the rest.
-  When words of the time are among them (`Reading.time_unclear`), the clock's
-  line names them all, as above: the reminder rings at any time.
+  have a line after the window's ([below](#what-the-window-must-show)),
+  beside Unknown (`E9CE`) in the warning colour: "Non capisco «chiudo»." The
+  reminder saves without those situations, and their words go to the judge
+  with the rest, as the window's line shows. When words of the time are among
+  them (`Reading.time_unclear`), the clock's line names them all, as above:
+  the reminder rings at any time.
+- **A word of a situation with a letter wrong** (`Reading.typos`, #169):
+  "quando tolgo le cufie" names «cufie», and an info bar under it offers the
+  word meant, "Forse intendevi «cuffie»?", with "Correggi", which puts the
+  words meant in the box with its spaces tidied, the cursor at its end and
+  the focus in it. The word never goes in by itself: a reminder saved as
+  written works without the situation, as with any word not understood. The
+  owner chose the button over a reading of the word meant on #169's trial,
+  two windows side by side.
 - **A place no network is labelled for yet**: when the condition names home
   or the office ("a casa", "quando esco dall'ufficio") and no network has
   that label, a warning info bar under the lines says so, "Non so ancora
@@ -152,6 +162,23 @@ stateDiagram-v2
   has one. Without it, a reminder "a casa" would never ring and nothing would
   say why. The owner chose it on #153's trial, together with the tray list's
   line and the settings' section.
+
+## What the window must show
+
+What Jiffin reads neither as a time nor as a situation goes to the judge,
+which sees only the window: the app, its title and its address
+([ADR-0008](../adr/0008-rewrite-conditions-english-statements.md)). Under the
+time's line, beside Favicon (`E737`), a line says what that is, the
+condition's `Reading.remainder` as `core` saves it, quoted: "Guardo se la
+finestra mostra: «quando apro Steam»" (#169). Nothing goes there unseen: a
+word the lists do not know, with letters wrong ("quando sono a uficio") or
+another word for a place ("quando sono al bar"), shows there whole, and the
+user sees that the window cannot show it. A condition of a time and
+situations only is never judged, and has no such line. Editing an unchanged
+condition shows the saved remainder, as it shows the saved time. The words are
+the owner's, from a list, on #169's trial, where a rule that catches more
+letters wrong was turned down: a closed list misses some writing whatever it
+catches.
 
 ## Trying it
 

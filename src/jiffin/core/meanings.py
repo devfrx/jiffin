@@ -32,6 +32,7 @@ from jiffin.core.grammar import (
     PeriodLabel,
     SituationLabels,
     ThisWeek,
+    Typo,
     Unclear,
     Until,
     WeekdayEveryWeeks,
@@ -119,6 +120,9 @@ class Reading:
     situations: tuple[Term, ...] = ()
     """The situations of the condition (ADR-0028); none when they are not understood, and with a
     time not understood."""
+    typos: tuple[Typo, ...] = ()
+    """The words of a situation with a letter wrong, among those not understood, each with the
+    word meant (#169): "cufie", "cuffie"."""
 
 
 def read(condition: str, written_at: datetime) -> Reading:
@@ -139,15 +143,18 @@ def read(condition: str, written_at: datetime) -> Reading:
         time = labels(condition)
         spans, remainder = time.spans, None
     unclear = phrases(condition, (*time.unclear, *situations.unclear))
+    typos = situations.typos
     # Without a time or situations, or with a time not understood, the condition stays byte for
     # byte: the statement the engine writes from it stays today's (ADR-0008).
     if time.unclear or not spans:
-        return Reading(None, condition, unclear, bool(time.unclear), recurring=time.recurring)
+        return Reading(
+            None, condition, unclear, bool(time.unclear), recurring=time.recurring, typos=typos
+        )
     try:
         schedule = _schedule(time, written_at) if time.spans else None
     except (Unclear, ValueError):  # ValueError: a date that does not exist, "il 31 aprile"
         unclear = phrases(condition, (*time.spans, *situations.unclear))
-        return Reading(None, condition, unclear, True, recurring=time.recurring)
+        return Reading(None, condition, unclear, True, recurring=time.recurring, typos=typos)
     return Reading(
         schedule,
         _remainder(condition, spans) if remainder is None else remainder,
@@ -155,6 +162,7 @@ def read(condition: str, written_at: datetime) -> Reading:
         past=schedule is not None and next(instances(schedule, written_at), None) is None,
         recurring=time.recurring,
         situations=situations.terms,
+        typos=typos,
     )
 
 

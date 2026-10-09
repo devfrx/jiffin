@@ -1,8 +1,9 @@
 // The creation window (#12, #43, #101): "Quando" and "Ricordami di", "Ogni volta", the sentence
 // they make, Cancel and Save. A card like the alerts, on their material, with its title as its
 // first line and an X on it (ADR-0010, ADR-0023). Under "Quando", in place of its hint, the
-// situations Jiffin understood beside their icons and the time beside a clock, and the words it
-// did not understand (ADR-0028); a time already over turns Save off and says why under the
+// situations Jiffin understood beside their icons, the time beside a clock, what the window must
+// show beside a window, and the words it did not understand, with the word meant for one with a
+// letter wrong (ADR-0028, #169); a time already over turns Save off and says why under the
 // sentence (#84, #90). It takes the focus: Enter saves, or goes to the box to write or mend; Esc
 // cancels, as the X does; Tab moves on. It drags from any point no control takes.
 import QtQuick
@@ -14,7 +15,7 @@ Window {
 
     required property Creation creation
     required property Networks networks
-    readonly property bool understood: creation.whenLine.length > 0 || creation.situations.length > 0
+    readonly property bool understood: creation.whenLine.length > 0 || creation.situations.length > 0 || creation.judged.length > 0
     readonly property bool unclear: creation.unclearWords.length > 0
 
     function submit(): void {
@@ -101,8 +102,9 @@ Window {
             }
             // What Jiffin made of the condition, read at every key (ADR-0020, ADR-0028): each
             // situation beside its icon, then the time beside a clock, which takes the colour of
-            // a warning for a time over or words of a time not understood; then the words of
-            // situations not understood, beside a question mark of that colour.
+            // a warning for a time over or words of a time not understood; then what is left for
+            // the window to show (#169), and the words of situations not understood, beside a
+            // question mark of that colour.
             Repeater {
                 model: window.creation.situations
 
@@ -144,6 +146,25 @@ Window {
                     text: window.creation.timeUnclear ? Texts.notUnderstood(window.creation.unclearWords) : window.creation.whenLine
                 }
             }
+            // What is left for the judge, which sees only the window (#169): nothing goes there
+            // in silence.
+            RowLayout {
+                Layout.fillWidth: true
+                visible: window.creation.judged.length > 0
+                spacing: 8
+
+                Text {
+                    Layout.alignment: Qt.AlignTop
+                    Layout.topMargin: 2
+                    text: "" // Favicon: a window
+                    color: Colors.textSecondary
+                    font.family: Typography.iconFont
+                    font.pixelSize: Typography.icon
+                }
+                UnderstoodText {
+                    text: parent.visible ? Texts.judged(window.creation.judged) : ""
+                }
+            }
             RowLayout {
                 Layout.fillWidth: true
                 visible: window.unclear && !window.creation.timeUnclear
@@ -159,6 +180,23 @@ Window {
                 }
                 UnderstoodText {
                     text: Texts.situationsNotUnderstood(window.creation.unclearWords)
+                }
+            }
+            // Words of a situation with a letter wrong (#169): the words meant, which its button
+            // puts in the box, the cursor at its end. They never go in by themselves.
+            FluentInfoBar {
+                Layout.fillWidth: true
+                // Its icon level with the boxes' left edge.
+                Layout.leftMargin: -8
+                Layout.topMargin: 2
+                visible: window.creation.meantWords.length > 0
+                severity: FluentInfoBar.Informational
+                message: visible ? Texts.meant(window.creation.meantWords) : ""
+                action: Texts.meantAction
+                onTriggered: {
+                    whenBox.text = window.creation.corrected;
+                    whenBox.cursorPosition = whenBox.text.length;
+                    whenBox.forceActiveFocus();
                 }
             }
             // A place no network is labelled for yet (ADR-0028): its button labels the network in

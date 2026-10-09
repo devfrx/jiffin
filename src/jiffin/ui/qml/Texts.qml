@@ -27,6 +27,7 @@ QtObject {
     readonly property string everyTime: Catalog.text("creation.perennial")
     readonly property string everyTimeHint: Catalog.text("creation.perennial_hint")
     readonly property string save: Catalog.text("creation.save")
+    readonly property string meantAction: Catalog.text("creation.meant_action")
     readonly property string cancel: Catalog.text("command.cancel")
 
     // The settings window
@@ -177,6 +178,16 @@ QtObject {
     // the reminder still saves, without them. "Non capisco «chiudo»: …".
     function situationsNotUnderstood(words: list<string>): string {
         return Catalog.situationsNotUnderstood(words);
+    }
+
+    // Under them, for words of a situation with a letter wrong (#169): "Forse intendevi «cuffie»?".
+    function meant(words: list<string>): string {
+        return Catalog.meant(words);
+    }
+
+    // Under "Quando", what goes to the judge (#169): "Guardo se la finestra mostra: «…»".
+    function judged(what: string): string {
+        return Catalog.judged(what);
     }
 
     // Under the sentence, while a time already over keeps Save off (#84): "Oggi alle 09:00 …".

@@ -17,7 +17,7 @@ rules that read them are here: the patterns, in order, and what each match says.
 
 import re
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import astuple, dataclass
 from enum import StrEnum
 
 from jiffin.core.schedule import MonthDay, MonthWeekday, Unit, YearDay
@@ -1079,7 +1079,13 @@ def _modifies(word: str) -> bool:
 #
 # A closed list of phrases, each with the verb that may lead into it ("sono in call", "esco di
 # casa"). What is left over, a word beside a phrase that changes it, two of a kind, an end with a
-# duration: not understood. Names are no situations, but those of the call apps are.
+# duration: not understood. Names are no situations, but those of the call apps are. A word with a
+# letter wrong is named too, with the word meant, when that word makes a phrase there (#169).
+
+
+type Typo = tuple[int, int, str]
+"""A word of a situation with a letter wrong: where it is, as [start, end) offsets of the
+condition, and the word meant: "cufie", "cuffie"."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -1094,6 +1100,8 @@ class SituationLabels:
     """In the order written."""
     lasting: tuple[tuple[int, int], ...] = ()
     """Where the durations of the thing the judge checks are: with no thing, not understood."""
+    typos: tuple[Typo, ...] = ()
+    """The words with a letter wrong among those not understood, with the word meant."""
 
 
 type Phrase = tuple[int, int, Term]
@@ -1195,10 +1203,60 @@ SITUATION_COMPILED = [
     (re.compile(rf"(?<![\w'])(?:{pattern})(?![\w'])"), handle)
     for pattern, handle in SITUATION_PATTERNS
 ]
-SITUATION_LEFTOVER = re.compile(rf"(?<![\w'])(?:{alternatives(SITUATION_WORDS.leftover)})(?![\w'])")
+SITUATION_LEFTOVER = re.compile(rf"(?<!\w)(?:{alternatives(SITUATION_WORDS.leftover)})(?![\w'])")
+"""Also after an elided article: "l'alimentatore"."""
 SITUATION_BEFORE = frozenset(SITUATION_WORDS.modifiers_before)
 SITUATION_AFTER = frozenset(SITUATION_WORDS.modifiers_after)
 AFTER_LASTING = re.compile(rf"\s+(?:{alternatives(SITUATION_WORDS.after_lasting)})(?![\w'])")
+
+# A word with a letter wrong (#169). A word of `SHORT` letters or fewer has one missing or two
+# swapped, never one changed or one too many: those make other words of it ("cosa", "cassa" of
+# "casa"); nor is another final vowel a letter wrong ("carico" of "carica"). The word meant must
+# make a phrase there, which rules out most of the words a letter from another.
+
+LETTERS = re.compile(r"[^\W\d_]+")
+VOWELS = SITUATION_WORDS.vowels
+ALPHABET = SITUATION_WORDS.letters
+SHORT = 4
+PHRASE_WORDS = frozenset(
+    word
+    for section in (CALL, AWAY, POWER, DISPLAY, HEADPHONES, NETWORK)
+    for forms in astuple(section)
+    for form in forms
+    for word in LETTERS.findall(PLACEHOLDER.sub(" ", form))
+)
+"""The words of the phrases and of the verbs that lead into them: those a typo may be of."""
+
+
+def misspellings(word: str) -> set[str]:
+    """The ways to write `word` with a letter wrong: one missing, or two swapped; and in a word
+    longer than `SHORT`, one too many, or one changed but for a final vowel for another."""
+    splits = [(word[:index], word[index:]) for index in range(len(word) + 1)]
+    found = {head + tail[1:] for head, tail in splits if tail}
+    found |= {head + tail[1] + tail[0] + tail[2:] for head, tail in splits if len(tail) > 1}
+    if len(word) > SHORT:
+        found |= {head + letter + tail for head, tail in splits for letter in ALPHABET}
+        found |= {
+            head + letter + tail[1:]
+            for head, tail in splits
+            if tail
+            for letter in ALPHABET
+            if len(tail) > 1 or not (tail in VOWELS and letter in VOWELS)
+        }
+    return found - {word}
+
+
+def _meant() -> dict[str, tuple[str, ...]]:
+    meant: dict[str, list[str]] = {}
+    for word in sorted(PHRASE_WORDS):
+        if len(word) >= SHORT:
+            for typo in misspellings(word) - PHRASE_WORDS:
+                meant.setdefault(typo, []).append(word)
+    return {typo: tuple(words) for typo, words in meant.items()}
+
+
+MEANT = _meant()
+"""The words of the phrases a typo may be of, by the typo."""
 
 
 def situation_text(condition: str) -> str:
@@ -1219,7 +1277,11 @@ def situation_text(condition: str) -> str:
 
 def situation_phrases(condition: str) -> tuple[Phrase, ...]:
     """The situation phrases of a condition, in the order written."""
-    text = situation_text(condition)
+    return _phrases_in(situation_text(condition))
+
+
+def _phrases_in(text: str) -> tuple[Phrase, ...]:
+    """The situation phrases of the text `situation_text` gives."""
     found: list[Phrase] = []
     for pattern, handle in SITUATION_COMPILED:
         for match in pattern.finditer(text):
@@ -1240,15 +1302,23 @@ def situation_labels(
     the thing the judge checks."""
     text = situation_text(condition)
     spans = tuple((start, end) for start, end, _ in found)
+    typos, misspelled = _typos(text, spans, times)
     terms, lasting, disagree = _terms(text, found)
     rest = list(text)
-    for start, end in (*spans, *times):
+    for start, end in (*spans, *misspelled, *times):
         rest[start:end] = " " * (end - start)
     regions = [match.span() for match in SITUATION_LEFTOVER.finditer("".join(rest))]
     regions += disagree
-    starts = {start for start, _ in (*spans, *times)}
-    # A duration of the thing the judge checks goes with the thing's words, whatever they are.
-    for start, end in phrases(text, [span for span in spans if span not in lasting]):
+    regions += [(start, end) for start, end, _ in typos]
+    starts = {start for start, _ in (*spans, *misspelled, *times)}
+    # A duration of the thing the judge checks goes with the thing's words, whatever they are;
+    # a phrase inside one a letter wrong makes is a part of it: "torno" of "torno in chimata".
+    alone = [
+        span
+        for span in spans
+        if span not in lasting and not any(s <= span[0] and span[1] <= e for s, e in misspelled)
+    ]
+    for start, end in phrases(text, alone):
         before = WORD_BEFORE.search(text, 0, start)
         if before is not None and before[1] in SITUATION_BEFORE:
             regions.append((before.start(1), end))
@@ -1262,7 +1332,41 @@ def situation_labels(
         if per is not None:  # "da più di un'ora al giorno" does not say since when
             regions.append((start, per.end()))
     unclear = phrases(text, regions)
-    return SituationLabels(spans, unclear, () if unclear else terms, lasting)
+    return SituationLabels(spans, unclear, () if unclear else terms, lasting, typos)
+
+
+def _typos(
+    text: str, found: Sequence[tuple[int, int]], times: Sequence[tuple[int, int]]
+) -> tuple[tuple[Typo, ...], tuple[tuple[int, int], ...]]:
+    """The words with a letter wrong, and where the phrase each makes is: in its place, the word
+    meant makes a phrase of two words or more over it, of which it is not the only word outside
+    the phrases found ("tolgo le cufie", "torno in chimata"; but "presto" is no "resto" in
+    "torno presto a casa": it would only lead into "a casa"). A word of the phrases found or of
+    the time is none."""
+    typos: list[Typo] = []
+    made: list[tuple[int, int]] = []
+    for word in LETTERS.finditer(text):
+        start, end = word.span()
+        if any(start < e and s < end for s, e in (*found, *times)):
+            continue
+        for meant in MEANT.get(word[0], ()):
+            fixed = text[:start] + meant + text[end:]
+            over = [
+                (first, last)
+                for first, last, _ in _phrases_in(fixed)
+                if first <= start < start + len(meant) <= last
+                and len(LETTERS.findall(fixed[first:last])) > 1
+            ]
+            if not over:
+                continue
+            first, last = over[0][0], over[0][1] - len(meant) + end - start
+            others = [other.span() for other in LETTERS.finditer(text, first, last)]
+            if all(any(s <= a and b <= e for s, e in found) for a, b in others if a != start):
+                continue
+            typos.append((start, end, meant))
+            made.append((first, last))
+            break
+    return tuple(typos), tuple(made)
 
 
 def _changes(word: str) -> bool:
