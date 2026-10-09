@@ -5,9 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jiffin — impostazioni</title>
 <!--
-  The settings window, as built in src/jiffin/ui/qml (ADR-0010, ADR-0021, ADR-0023, tickets #43
-  and #84): the return pause, a number and its unit, then the material of Jiffin's windows, as
-  four radio buttons. A card like the creation window, on the material it sets (B by default),
+  The settings window, as built in src/jiffin/ui/qml (ADR-0010, ADR-0021, ADR-0023, ADR-0028,
+  tickets #43, #84 and #153): the return pause, a number and its unit, the network in use, home,
+  the office or neither (light: labelled home; dark: no network), then the material of Jiffin's
+  windows, as four radio buttons. A card like the creation window, on the material it sets (B by default),
   without Windows' title bar. The owner chose the plain list on screen in #43, over the radios
   in a card, as Windows' Settings, and over four tiles; in #84 the pause first, as WinUI's
   NumberBox with its spin buttons inline and a ComboBox with secondi and minuti, over a combo
@@ -144,6 +145,12 @@
     line-height: 16px;
     color: var(--text-secondary);
   }
+  /* A quiet line in place of the radios: no network in use. */
+  .line {
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--text-secondary);
+  }
 
   /* Fluent 2 radio buttons (FluentRadioButton.qml): a 20 px circle, the label 8 px after it. */
   .radio {
@@ -261,7 +268,7 @@
 
 <div class="themes">
   <section class="theme light" aria-label="Tema chiaro">
-    <h2>Chiaro</h2>
+    <h2>Chiaro: la rete in uso è casa</h2>
     <div class="desk">
       <div class="window" role="dialog" aria-label="Impostazioni">
         <button class="close" aria-label="Chiudi">&#xE711;</button>
@@ -276,6 +283,15 @@
               <div class="box" role="spinbutton" aria-label="Pausa di ritorno" aria-valuenow="2"><span class="number">2</span><span class="spin" aria-label="Aumenta">&#xE70E;</span><span class="spin" aria-label="Diminuisci">&#xE70D;</span></div>
               <div class="combo" role="combobox" aria-label="Unità"><span>minuti</span><span class="chevron">&#xE70D;</span></div>
             </div>
+          </div>
+          <div class="group" role="radiogroup" aria-label="Rete">
+            <div>
+              <div class="label">Rete</div>
+              <div class="caption">La rete a cui sei connesso ora. Serve ai promemoria «a casa» e «in ufficio»: Jiffin la riconosce, senza leggerne il nome.</div>
+            </div>
+            <div class="radio checked" role="radio" aria-checked="true"><span class="circle"></span><div><div class="label">Casa</div></div></div>
+            <div class="radio" role="radio" aria-checked="false"><span class="circle"></span><div><div class="label">Ufficio</div></div></div>
+            <div class="radio" role="radio" aria-checked="false"><span class="circle"></span><div><div class="label">Né casa né ufficio</div></div></div>
           </div>
           <div class="group" role="radiogroup" aria-label="Materiale">
             <div>
@@ -293,7 +309,7 @@
   </section>
 
   <section class="theme dark" aria-label="Tema scuro">
-    <h2>Scuro</h2>
+    <h2>Scuro: nessuna rete</h2>
     <div class="desk">
       <div class="window" role="dialog" aria-label="Impostazioni">
         <button class="close" aria-label="Chiudi">&#xE711;</button>
@@ -308,6 +324,13 @@
               <div class="box" role="spinbutton" aria-label="Pausa di ritorno" aria-valuenow="2"><span class="number">2</span><span class="spin" aria-label="Aumenta">&#xE70E;</span><span class="spin" aria-label="Diminuisci">&#xE70D;</span></div>
               <div class="combo" role="combobox" aria-label="Unità"><span>minuti</span><span class="chevron">&#xE70D;</span></div>
             </div>
+          </div>
+          <div class="group">
+            <div>
+              <div class="label">Rete</div>
+              <div class="caption">La rete a cui sei connesso ora. Serve ai promemoria «a casa» e «in ufficio»: Jiffin la riconosce, senza leggerne il nome.</div>
+            </div>
+            <div class="line">Ora non sei connesso a nessuna rete.</div>
           </div>
           <div class="group" role="radiogroup" aria-label="Materiale">
             <div>
@@ -328,6 +351,7 @@
 <ul class="notes">
   <li>La pausa di ritorno è un numero e la sua unità, secondi o minuti: in minuti quando è di minuti interi, altrimenti in secondi. Le frecce dentro la casella la cambiano di uno; un numero scritto vale quando si lascia la casella o si preme Invio, e fuori dai limiti, da 10 secondi a 2 ore, torna dentro. Cambiare unità converte la pausa, al minuto più vicino.</li>
   <li>L'elenco delle unità è una finestra sua sopra la casella, con l'unità scelta sopra la casella stessa; un clic altrove nella finestra lo chiude, e così Esc, prima della finestra.</li>
+  <li>«Rete» dice se la rete a cui sei connesso è casa, l'ufficio o nessuno dei due: serve ai promemoria «a casa» e «in ufficio». Un clic dà quel nome a tutte le reti connesse in quel momento; Jiffin non legge mai il nome di una rete. Senza rete, al posto delle scelte c'è una riga che lo dice. Una rete connessa in tutti e due i posti, come una VPN, tiene l'ultimo nome dato.</li>
   <li>Ogni cambiamento vale subito, come nelle Impostazioni di Windows, e resta per i prossimi avvii. La X o Esc chiudono la finestra: non c'è Chiudi, come nelle Impostazioni di Windows.</li>
   <li>Il focus parte dalla pausa; Tab passa al controllo successivo, Spazio sceglie; Tab non passa dalla X, perché Esc fa lo stesso.</li>
   <li>La finestra si trascina da ogni punto vuoto, non dai controlli, e si riapre dove l'hai lasciata, anche dopo un riavvio; se quel posto non è più tutto su uno schermo, torna al centro.</li>

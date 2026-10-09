@@ -70,6 +70,7 @@ class Creation:
     preview_perennial: str
     preview_perennial_no_action: str
     not_understood: str
+    situations_not_understood: str
     past: str
 
 
@@ -84,6 +85,22 @@ class Settings:
     material: str
     material_hint: str
     solid: str
+
+
+@dataclass(frozen=True, slots=True)
+class Networks:
+    title: str
+    hint: str
+    home: str
+    office: str
+    neither: str
+    offline: str
+    unknown_home: str
+    unknown_office: str
+    waiting_home: str
+    waiting_office: str
+    at_home: str
+    at_office: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,6 +237,7 @@ class Texts:
     snooze: Snooze
     creation: Creation
     settings: Settings
+    networks: Networks
     material: Materials
     number_box: NumberBox
     first_run: FirstRun

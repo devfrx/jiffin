@@ -11,7 +11,7 @@ import ctypes
 import hashlib
 import sqlite3
 import sys
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import closing
 from ctypes import wintypes
 from datetime import UTC, datetime
@@ -70,10 +70,16 @@ class Contexts:
         clock: Clock,
         on_observation: Callable[[Observation], None],
         on_unreadable: Callable[[frozenset[str]], None],
+        on_networks: Callable[[frozenset[str]], None],
     ) -> None:
         self._clock = clock
         self._on_observation = on_observation
+        self._on_networks = on_networks
         self.started = False
+        self.labels: list[dict[str, str]] = []
+
+    def label(self, labels: Mapping[str, str]) -> None:
+        self.labels.append(dict(labels))
 
     def start(self) -> None:
         self.started = True
@@ -83,6 +89,10 @@ class Contexts:
 
     def enter(self, context: Context | None) -> None:
         self._on_observation(Observation(self._clock.now(), context))
+
+    def connect(self, *networks: str) -> None:
+        """The networks connected now, by id, as the capture tells them."""
+        self._on_networks(frozenset(networks))
 
 
 class Desk:
@@ -103,8 +113,9 @@ class Desk:
         clock: Clock,
         on_observation: Callable[[Observation], None],
         on_unreadable: Callable[[frozenset[str]], None],
+        on_networks: Callable[[frozenset[str]], None],
     ) -> Contexts:
-        self.contexts = Contexts(clock, on_observation, on_unreadable)
+        self.contexts = Contexts(clock, on_observation, on_unreadable, on_networks)
         return self.contexts
 
     def alert(self) -> AlertSlot | None:
@@ -330,3 +341,27 @@ def test_the_return_pause_is_kept_and_put_back_at_the_start(desk: Desk) -> None:
 
     with closing(Store.open(desk.folders.database)) as store:
         assert store.setting("return_pause") == 600
+
+
+def test_the_networks_labels_are_kept_given_to_the_capture_and_put_back_at_the_start(
+    qtbot: QtBot, desk: Desk
+) -> None:
+    """#153: the capture's ids reach the interface, a label on the network in use reaches the
+    capture and the settings, and the next start gives both what was kept."""
+    with closing(Store.open(desk.folders.database)) as store:
+        store.set_setting("networks", {"office-id": "office"})
+    desk.jiffin.start()
+    networks = desk.jiffin.interface.networks
+    qtbot.waitUntil(lambda: desk.contexts.started)
+    assert desk.contexts.labels == [{"office-id": "office"}]
+    desk.contexts.connect("home-id")
+    qtbot.waitUntil(lambda: bool(networks.property("connected")))
+    assert networks.property("label") == ""
+    networks.labelInUse("home")
+    qtbot.waitUntil(lambda: len(desk.contexts.labels) == 2)
+    assert desk.contexts.labels[-1] == {"office-id": "office", "home-id": "home"}
+    assert networks.property("label") == "home"
+    desk.jiffin.close()
+
+    with closing(Store.open(desk.folders.database)) as store:
+        assert store.setting("networks") == {"office-id": "office", "home-id": "home"}

@@ -82,8 +82,11 @@ class Catalog(QObject):
 
     @Slot("QStringList", result=str)
     def notUnderstood(self, words: list[str]) -> str:
-        quoted = [TEXTS.format.quoted.format(text=word) for word in words]
-        return TEXTS.creation.not_understood.format(words=listed(quoted))
+        return TEXTS.creation.not_understood.format(words=_quoted(words))
+
+    @Slot("QStringList", result=str)
+    def situationsNotUnderstood(self, words: list[str]) -> str:
+        return TEXTS.creation.situations_not_understood.format(words=_quoted(words))
 
     @Slot(str, result=str)
     def past(self, when: str) -> str:
@@ -141,3 +144,8 @@ class Catalog(QObject):
         """The browsers whose address cannot be read, by app: "chrome.exe" is "Chrome"."""
         names = [TEXTS.browser.get(app, app) for app in apps]
         return TEXTS.tray_list.unreadable.format(browsers=listed(names))
+
+
+def _quoted(words: list[str]) -> str:
+    """Words not understood, each quoted: "«verso sera» e «a dicembre»"."""
+    return listed([TEXTS.format.quoted.format(text=word) for word in words])

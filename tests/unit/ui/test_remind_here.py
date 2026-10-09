@@ -76,6 +76,7 @@ def revision(reminder_id: int, condition: str, action: str, written_at: int) -> 
         reading.remainder,
         schedule=reading.schedule,
         written_at=written_at,
+        situations=reading.situations,
     )
 
 
@@ -274,9 +275,13 @@ def test_the_card_writes_the_place_then_the_reminders_in_cores_order(screen: Scr
          "Quando apro Steam · Fuori orario"),
         ("per tre giorni quando apro Steam", 5, Outcome.OUTSIDE_TIME,
          "Quando apro Steam · Periodo finito"),
-        # The situations' words come with #153, as in the tray list.
+        # The situations understood, as in the tray list (#153).
         ("quando sono a casa e apro Steam", 0, Outcome.OUTSIDE_SITUATION,
-         "Quando apro Steam · Fuori situazione"),
+         "Quando apro Steam · a casa · Fuori situazione"),
+        ("quando finisco la call", 0, Outcome.OUTSIDE_SITUATION,
+         "Alla fine della call · Fuori situazione"),
+        ("alle 18 se sono in ufficio", 0, Outcome.OUTSIDE_SITUATION,
+         "In ufficio · Fuori situazione"),
         ("alle 18", 0, Outcome.OUTSIDE_TIME, "Alle 18:00 · Fuori orario"),
     ],
 )  # fmt: skip

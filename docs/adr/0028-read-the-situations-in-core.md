@@ -303,3 +303,20 @@ in the first package.
 - When this is built, `docs/design/` follows: `context.md`, `time.md` (or a
   page of its own), `pipeline.md`, `lifecycles.md`, `data-model.md`,
   `harness.md`, `creation.md` and `settings.md`.
+- Chosen by the owner on [#153](https://github.com/devfrx/jiffin/issues/153)'s
+  trial, on the app's preview: the ends written without a person ("Alla fine
+  della call", "All'uscita di casa"), "Fuori situazione" on the card of Remind
+  here, and three places for a network's label, the settings, the creation
+  window and the tray list, the last two while a reminder names a place no
+  network has ([situations](../design/situations.md#writing-them),
+  [settings](../design/settings.md#the-network)). Built there too: "quando
+  esco da casa" and "quando esco dall'ufficio" read as ends, the ends of home
+  and the office now tried before what holds there; and a label goes on every
+  network connected at once, so a network connected in both places, as a VPN,
+  keeps the label put last.
+- Found on that trial, against the first negative above: some phrases the
+  list does not know go to the judge in silence, with nothing named under
+  "Quando", a typo ("quando tolgo le cufie") or a word outside the list
+  ("quando sono in casa", "quando sono in riunione"). The owner kept the list
+  and asked that nothing go in silence:
+  [#169](https://github.com/devfrx/jiffin/issues/169).

@@ -5,7 +5,9 @@ the first: its line shows the download or the problem, and Details opens the fir
 
 The row at the top opens the card of Remind here, with the place under it, asked of `core` each
 time the list opens (ADR-0029). Under a reminder that learned something, a line says so and
-opens the places of its answers, each with an X that forgets it, then Forget all.
+opens the places of its answers, each with an X that forgets it, then Forget all. While an active
+reminder names a place no network is labelled for yet, a line says so, with a button that labels
+the network in use (ADR-0028).
 
 An unseen alert's Done, snoozes and Not here wait 5 s on its card with Undo, as on the alert
 (ADR-0030): the window times them and calls `release`. The list closing sends a waiting answer
@@ -52,10 +54,20 @@ from jiffin.lang.texts import TEXTS
 from jiffin.ui import catalog  # noqa: F401  # Catalog, which Texts.qml reads
 from jiffin.ui.first_run import FirstRun
 from jiffin.ui.glass import Glass
+from jiffin.ui.networks import Networks
 from jiffin.ui.preferences import Preferences
 from jiffin.ui.remind_here import RemindHere
 from jiffin.ui.rows import Row, Rows
-from jiffin.ui.words import appeared, completed, dated, place, sentence, when
+from jiffin.ui.words import (
+    appeared,
+    completed,
+    dated,
+    place,
+    sentence,
+    situation_lines,
+    untimed,
+    when,
+)
 
 QML_IMPORT_NAME = "Jiffin"
 QML_IMPORT_MAJOR_VERSION = 1
@@ -127,6 +139,7 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         resume: Callable[[], None],
         first_run: FirstRun,
         preferences: Preferences,
+        networks: Networks,
         glass: Glass,
         clock: Clock,
     ) -> None:
@@ -140,6 +153,8 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         self._resume = resume
         self._first_run = first_run
         self._preferences = preferences
+        self._networks = networks
+        networks.changed.connect(self.changed)
         self._glass = glass
         self._clock = clock
         self._alerts = AlertsView((), 0, ())
@@ -166,6 +181,7 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
             (
                 "action",
                 "remainder",
+                "situations",
                 "when",
                 "perennial",
                 "endedOn",
@@ -196,6 +212,7 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
                 "remindHere": remind_here,
                 "firstRun": first_run,
                 "preferences": preferences,
+                "networks": networks,
             }
         )
         if not isinstance(window, QQuickWindow):
@@ -269,6 +286,16 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
     @Property(int, notify=changed)
     def engine(self) -> int:
         return self._engine.value
+
+    @Property(str, notify=changed)
+    def unknownPlace(self) -> str:
+        """The first place an active reminder names, home or the office, that no network is
+        labelled for yet (ADR-0028); "" for none."""
+        return self._networks.unknown(
+            term
+            for active in self._reminders.active
+            for term in active.reminder.revision.situations
+        )
 
     @Property(str, notify=changed)
     def pausedAt(self) -> str:
@@ -519,15 +546,17 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
         return {
             "alertId": alert.id,
             "action": sentence(alert.revision.action),
-            "line": appeared(alert.revision.remainder, at, today),
+            "line": appeared(
+                untimed(alert.revision.remainder, alert.revision.situations), at, today
+            ),
             "fresh": alert.id in self._fresh,
             "held": "" if held is None else held[0],
         }
 
     def _active_row(self, active: ActiveReminder, now: int, local: datetime) -> Row:
-        """The condition without its time, and the time written for today's Jiffin day
-        (ADR-0020); a period over says so (ADR-0021). Then what it learned, and where, the last
-        answered first (ADR-0029)."""
+        """The condition without its time and its situations, each situation on its line
+        (ADR-0028), and the time written for today's Jiffin day (ADR-0020); a period over says so
+        (ADR-0021). Then what it learned, and where, the last answered first (ADR-0029)."""
         reminder = active.reminder
         revision = reminder.revision
         schedule = revision.schedule
@@ -540,6 +569,7 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
             "reminderId": reminder.id,
             "action": sentence(revision.action),
             "remainder": sentence(revision.remainder),
+            "situations": situation_lines(revision.situations),
             "when": "" if schedule is None else when(schedule, revision.perennial, day),
             "perennial": revision.perennial,
             "endedOn": dated(period.last, day)
@@ -559,14 +589,14 @@ class TrayList(QObject):  # type: ignore[operator]  # QmlUncreatable's stub has 
 
     def _completed_row(self, reminder: Reminder, today: date) -> Row:
         """The action, struck through by the window, and under it the condition without its
-        time and when it was completed (ADR-0030)."""
+        time, its situations with it, and when it was completed (ADR-0030)."""
         revision = reminder.revision
         assert reminder.completed_at is not None
         at = self._clock.local(reminder.completed_at)
         return {
             "reminderId": reminder.id,
             "action": sentence(revision.action),
-            "line": completed(revision.remainder, at, today),
+            "line": completed(untimed(revision.remainder, revision.situations), at, today),
         }
 
     def _answer(self, name: str, answer: Callable[[int], None]) -> None:

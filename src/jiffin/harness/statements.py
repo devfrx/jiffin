@@ -6,9 +6,9 @@ that each time and situation is read right: the alerts of a reminder without a r
 right when they are (ADR-0022, ADR-0031). A statement, a time or a situation that is wrong is
 fixed by editing the reminder.
 
-The words of a time are the interface's (ADR-0020): `ui.words` is pure Python, without Qt, and
-the one module of `ui` that the harness imports. Those of the situations are provisional, in
-`harness.toml`, until the interface writes them too (#153).
+The words of a time and of the situations are the interface's (ADR-0020, ADR-0028): `ui.words`
+is pure Python, without Qt, and the one module of `ui` that the harness imports. The owner checks
+the very words the app shows.
 """
 
 from datetime import date
@@ -19,12 +19,10 @@ from jiffin.core.meanings import read
 from jiffin.core.model import EngineBuild
 from jiffin.core.records import Revision
 from jiffin.core.schedule import jiffin_day
-from jiffin.core.situations import CALL_APPS, Ends, Holds, Lasts, Situation, Term
 from jiffin.harness import render
-from jiffin.harness.calls import name
 from jiffin.lang.harness import HARNESS
 from jiffin.store.store import Log
-from jiffin.ui.words import when
+from jiffin.ui.words import listed_situations, sentence, when
 
 
 def page(log: Log, copy: Path, folder: Path, clock: Clock) -> Path:
@@ -36,7 +34,7 @@ def page(log: Log, copy: Path, folder: Path, clock: Clock) -> Path:
             "state": texts.active if reminder.completed_at is None else texts.completed,
             "condition": reminder.revision.condition,
             "time": _time(reminder.revision, today),
-            "situations": ", ".join(_term(term) for term in reminder.revision.situations),
+            "situations": sentence(listed_situations(reminder.revision.situations)),
             "unclear": _unclear(reminder.revision, clock),
             "remainder": reminder.revision.remainder,
             "action": reminder.revision.action,
@@ -54,25 +52,6 @@ def _time(revision: Revision, today: date) -> str:
     if revision.schedule is None:
         return ""
     return when(revision.schedule, revision.perennial, today)
-
-
-def _term(term: Term) -> str:
-    texts = HARNESS.statements
-    match term:
-        case Holds(situation, value):
-            return _situation(situation, value)
-        case Ends(situation, value):
-            return texts.ends.format(situation=_situation(situation, value))
-        case Lasts(minutes, situation, value):
-            if situation is None:  # the thing of the condition, which the judge checks
-                return texts.lasting.format(minutes=minutes)
-            return texts.lasts.format(situation=_situation(situation, value), minutes=minutes)
-
-
-def _situation(situation: Situation, value: str | None) -> str:
-    if situation is Situation.CALL and value is not None:
-        return HARNESS.statements.call_on.format(app=name(CALL_APPS[value]))
-    return HARNESS.statements.understood[situation if value is None else f"{situation} {value}"]
 
 
 def _unclear(revision: Revision, clock: Clock) -> str:

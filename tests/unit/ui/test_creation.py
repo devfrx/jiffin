@@ -20,6 +20,7 @@ from jiffin.ui import win32
 from jiffin.ui.creation import Creation
 from jiffin.ui.glass import Glass
 from jiffin.ui.look import Look, Settings
+from jiffin.ui.networks import Networks
 from jiffin.ui.places import Places
 
 DARK = Settings(
@@ -34,6 +35,8 @@ WHEN, WHAT, EVERY_TIME = TEXTS.creation.condition, TEXTS.creation.action, TEXTS.
 """The two boxes and the check box, as a screen reader names them."""
 HINT = "Descrivi dove sei o quando: un'app, un sito, un orario."
 CLOCK = ""
+HOME, PHONE, UNKNOWN = "", "", ""
+"""The icons of being at home, of a call, and of situations not understood."""
 SECONDARY, CAUTION = QColor("#C5FFFFFF"), QColor("#FFFCE100")
 """The clock's colours in dark: at rest, and for a time over or not understood."""
 FRIDAY = datetime(2026, 10, 2, 10, tzinfo=UTC)
@@ -63,6 +66,7 @@ def saved(
         schedule=reading.schedule,
         written_at=instant(written_at),
         perennial=perennial,
+        situations=reading.situations,
     )
 
 
@@ -116,9 +120,11 @@ class Screen:
         self.kept: list[dict[str, tuple[int, int]]] = []
         self.places = Places(lambda places: self.kept.append(dict(places)))
         self.clock = SimulatedClock(instant(FRIDAY))
+        self.labels: list[dict[str, str]] = []
+        self.networks = Networks(self.engine, lambda labels: self.labels.append(dict(labels)))
         before = set(QGuiApplication.topLevelWindows())
         self.creation = Creation(
-            self.engine, self.changes, Glass(self.look), self.places, self.clock
+            self.engine, self.changes, Glass(self.look), self.places, self.clock, self.networks
         )
         (window,) = (w for w in QGuiApplication.topLevelWindows() if w not in before)
         assert isinstance(window, QQuickWindow)
@@ -152,6 +158,16 @@ class Screen:
             return None
         return QColor(glyph.property("color"))
 
+    def icon_colour(self, glyph: str) -> QColor | None:
+        """The colour of an icon beside a line under "Quando"; None when it does not show."""
+        try:
+            icon = self._item(
+                lambda item: item.inherits("QQuickText") and item.property("text") == glyph
+            )
+        except StopIteration:
+            return None
+        return QColor(icon.property("color"))
+
     def type(self, text: str) -> None:
         """ASCII only: QTest types into a window one character code at a time."""
         for character in text:
@@ -166,6 +182,14 @@ class Screen:
         QTest.mouseClick(
             self.window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, centre
         )
+
+    def offers(self, name: str) -> bool:
+        """A button a screen reader calls `name` shows."""
+        try:
+            self.button(name)
+        except StopIteration:
+            return False
+        return True
 
     def box(self, name: str) -> QQuickItem:
         return self._item(
@@ -457,7 +481,12 @@ def test_the_creation_goes_with_the_engine_and_no_binding_reads_it_gone(
     engine = QQmlEngine()
     look.provide(engine)
     creation = Creation(
-        engine, Changes(), Glass(look), Places(lambda places: None), SimulatedClock(0)
+        engine,
+        Changes(),
+        Glass(look),
+        Places(lambda places: None),
+        SimulatedClock(0),
+        Networks(engine, lambda labels: None),
     )
     creation.new()
     gone: list[str] = []
@@ -674,3 +703,94 @@ def test_editing_keeps_the_box_as_it_was_whatever_its_words(screen: Screen) -> N
 def test_editing_names_the_words_not_understood_again(screen: Screen) -> None:
     screen.edit(saved(7, "quando apro Steam verso sera", "giocare"))
     assert screen.shows("Non capisco «verso sera»: suona a qualsiasi ora.")
+
+
+# The situations (ADR-0028, #153)
+
+
+def test_the_situations_understood_show_each_beside_its_icon(screen: Screen) -> None:
+    screen.new()
+    screen.type("quando sono a casa e in call")
+    assert screen.shows("A casa") and screen.shows("In call")
+    assert screen.icon_colour(HOME) == SECONDARY
+    assert screen.icon_colour(PHONE) == SECONDARY
+    assert not screen.shows(HINT)
+    assert screen.clock_colour() is None
+
+
+def test_the_situations_show_above_the_time(screen: Screen) -> None:
+    screen.new()
+    screen.type("quando finisco la call stasera")
+    assert screen.shows("Alla fine della call")
+    assert screen.shows("Oggi, venerdì 2 ottobre, dalle 18:00 alle 23:00")
+    assert screen.clock_colour() == SECONDARY
+    screen.retype("quando apro Teams")
+    assert not screen.shows("Alla fine della call")
+    assert screen.shows(HINT)
+
+
+def test_words_of_situations_not_understood_leave_the_time_and_are_named(
+    screen: Screen,
+) -> None:
+    screen.new()
+    screen.type("domani quando chiudo Figma")
+    assert screen.shows("Domani, sabato 3 ottobre")
+    assert screen.clock_colour() == SECONDARY
+    assert screen.shows("Non capisco «chiudo»: guardo solo la finestra.")
+    assert screen.icon_colour(UNKNOWN) == CAUTION
+    screen.retype("quando chiudo Figma")
+    assert screen.shows("Non capisco «chiudo»: guardo solo la finestra.")
+    assert screen.clock_colour() is None
+
+
+def test_a_time_not_understood_takes_the_situations_with_it(screen: Screen) -> None:
+    """ADR-0028: the whole condition goes to the judge, so no situation is shown understood."""
+    screen.new()
+    screen.type("verso sera quando finisco la call")
+    assert screen.shows("Non capisco «verso sera»: suona a qualsiasi ora.")
+    assert screen.clock_colour() == CAUTION
+    assert not screen.shows("Alla fine della call")
+    assert screen.icon_colour(UNKNOWN) is None
+
+
+def test_editing_shows_the_saved_situations_and_names_their_words_not_understood(
+    screen: Screen,
+) -> None:
+    screen.edit(saved(7, "quando sono a casa e apro Steam", "giocare"))
+    assert screen.shows("A casa")
+    screen.creation.cancel()
+    # A saved time stands, and the words of situations not understood are named all the same.
+    screen.edit(saved(8, "domani quando chiudo Figma", "esportare", written_at=YESTERDAY))
+    assert screen.shows("Oggi, venerdì 2 ottobre")
+    assert screen.shows("Non capisco «chiudo»: guardo solo la finestra.")
+
+
+NETWORK_ID = "6f1d2c3b-0000-4000-8000-000000000001"
+
+
+def test_a_place_no_network_is_labelled_for_says_so_with_a_button_for_the_network_in_use(
+    screen: Screen,
+) -> None:
+    """#153: a reminder "a casa" would never ring before a network is home."""
+    screen.networks.show(frozenset({NETWORK_ID}))
+    screen.new()
+    screen.type("quando sono a casa e apro Steam")
+    assert screen.shows("Non so ancora qual è la rete di casa.")
+    screen.click("Sono a casa adesso")
+    assert screen.labels == [{NETWORK_ID: "home"}]
+    assert not screen.shows("Non so ancora qual è la rete di casa.")
+    # The office, which no network is labelled for, is named the same way.
+    screen.box(WHEN).forceActiveFocus()
+    screen.retype("quando esco dall'ufficio")
+    assert screen.shows("Non so ancora qual è la rete dell'ufficio.")
+
+
+def test_without_a_network_or_on_a_labelled_one_the_place_has_no_button(screen: Screen) -> None:
+    screen.new()
+    screen.type("quando sono in ufficio")
+    assert screen.shows("Non so ancora qual è la rete dell'ufficio.")
+    assert not screen.offers("Sono in ufficio adesso")
+    screen.networks.restore({NETWORK_ID: "home"})
+    screen.networks.show(frozenset({NETWORK_ID}))
+    assert screen.shows("Non so ancora qual è la rete dell'ufficio.")
+    assert not screen.offers("Sono in ufficio adesso")  # this is home: never relabelled here

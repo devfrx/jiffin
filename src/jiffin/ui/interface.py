@@ -19,6 +19,7 @@ from jiffin.ui.first_run import FirstRun, ModelFile, ModelState
 from jiffin.ui.glass import Glass
 from jiffin.ui.hotkey import Hotkeys
 from jiffin.ui.look import Look, Material
+from jiffin.ui.networks import Networks
 from jiffin.ui.overlay import Overlay
 from jiffin.ui.places import Places
 from jiffin.ui.preferences import Preferences
@@ -57,6 +58,11 @@ class Upkeep(Protocol):
         start."""
         ...
 
+    def keep_networks(self, labels: Mapping[str, str]) -> None:
+        """The networks' labels, by id: in force at once in the capture, and given to
+        `networks.restore` at the next start (ADR-0028)."""
+        ...
+
     def pause(self, pause: Pause) -> None:
         """Pause, in the tray icon's menu: in force at once, and kept through a restart until
         it ends (ADR-0024)."""
@@ -69,8 +75,8 @@ class Upkeep(Protocol):
 
 class Interface:
     """Make it on the interface thread, after the application and before any window, and set
-    the kept material on `look.material`, the kept places on `places` and the kept return pause
-    on `preferences.return_pause` before anything shows.
+    the kept material on `look.material`, the kept places on `places`, the kept return pause on
+    `preferences.return_pause` and the kept labels on `networks` before anything shows.
     The `show_` methods take, on this thread, what `core`, the context capture, the engine and the
     model file say. `close` once Qt has quit."""
 
@@ -94,9 +100,10 @@ class Interface:
         self.engine = QQmlEngine()
         self.look.provide(self.engine)
         self.places = Places(upkeep.keep_places)
+        self.networks = Networks(self.engine, upkeep.keep_networks)
         self.overlay = Overlay(self.engine, core, self.glass, clock)
         self.remind_here = RemindHere(self.engine, core, self.overlay, self.glass, clock)
-        self.creation = Creation(self.engine, core, self.glass, self.places, clock)
+        self.creation = Creation(self.engine, core, self.glass, self.places, clock, self.networks)
         self.first_run = FirstRun(
             self.engine, model, upkeep.fetch_model, self.glass, self.places, clock
         )
@@ -105,6 +112,7 @@ class Interface:
             self.look,
             upkeep.keep_material,
             upkeep.keep_return_pause,
+            self.networks,
             self.glass,
             self.places,
         )
@@ -117,6 +125,7 @@ class Interface:
             upkeep.resume,
             self.first_run,
             self.preferences,
+            self.networks,
             self.glass,
             clock,
         )
@@ -158,6 +167,10 @@ class Interface:
     def show_unreadable(self, apps: frozenset[str]) -> None:
         self.tray_list.show_unreadable(apps)
         self.tray.show_unreadable(apps)
+
+    def show_networks(self, connected: frozenset[str]) -> None:
+        """The ids of the networks connected now, from the context capture."""
+        self.networks.show(connected)
 
     def show_engine(self, engine: TrayList.Engine) -> None:
         self.tray_list.show_engine(engine)

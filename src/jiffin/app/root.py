@@ -50,9 +50,12 @@ type MakeCapture = Callable[
         Clock,
         Callable[[Observation | SituationObservation], None],
         Callable[[frozenset[str]], None],
+        Callable[[frozenset[str]], None],
     ],
     Source,
 ]
+"""What makes the context source: given the clock, where its observations go, where the browsers
+whose address cannot be read go, and where the ids of the networks connected go."""
 
 
 class Jiffin:
@@ -79,7 +82,7 @@ class Jiffin:
             relay.alerts.emit,
             relay.reminders.emit,
             relay.engine.emit,
-            lambda observe: capture(clock, observe, relay.unreadable.emit),
+            lambda observe: capture(clock, observe, relay.unreadable.emit, relay.networks.emit),
             engine=engine,
         )
         self._fetch = ModelFetch(model, folders.models, relay.model.emit, self._worker.model_ready)
@@ -94,9 +97,9 @@ class Jiffin:
         self._relay = relay
 
     def start(self) -> None:
-        """Open the database and put on the material, the windows' places and the return pause it
-        kept, before any window shows; then the model file. Raise what opening the database
-        raised."""
+        """Open the database and put on the material, the windows' places, the return pause and
+        the networks' labels it kept, before any window shows; then the model file. Raise what
+        opening the database raised."""
         kept = self._worker.start()
         if kept.material is not None:
             try:
@@ -105,6 +108,7 @@ class Jiffin:
                 log.warning("the kept material %r is unknown: the default stays", kept.material)
         self.interface.places.restore(kept.places)
         self.interface.preferences.return_pause = kept.return_pause
+        self.interface.networks.restore(kept.networks)
         self._fetch.fetch()
 
     def close(self) -> None:
@@ -129,6 +133,9 @@ class Jiffin:
 
     def keep_return_pause(self, seconds: int) -> None:
         self._worker.keep_return_pause(seconds)
+
+    def keep_networks(self, labels: Mapping[str, str]) -> None:
+        self._worker.keep_networks(labels)
 
     def pause(self, pause: Pause) -> None:
         self._worker.pause(pause)

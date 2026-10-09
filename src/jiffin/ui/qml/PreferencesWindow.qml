@@ -1,8 +1,9 @@
-// The settings window (#43, #84): the return pause, a number and its unit, then the material of
-// Jiffin's windows, as four radio buttons. A card like the creation window, on the material it
-// sets, with an X on its title's line and no Close, as Windows' own Settings (ADR-0010,
-// ADR-0023). A change applies at once, as there. It takes the focus, on the pause; Tab moves on,
-// Space chooses, and Esc or the X closes it. It drags from any point no control takes.
+// The settings window (#43, #84, #153): the return pause, a number and its unit, then the network
+// in use, home, the office or neither, then the material of Jiffin's windows, as radio buttons. A
+// card like the creation window, on the material it sets, with an X on its title's line and no
+// Close, as Windows' own Settings (ADR-0010, ADR-0023). A change applies at once, as there. It
+// takes the focus, on the pause; Tab moves on, Space chooses, and Esc or the X closes it. It drags
+// from any point no control takes.
 pragma ComponentBehavior: Bound
 
 import QtQuick
@@ -13,6 +14,7 @@ Window {
     id: window
 
     required property Preferences preferences
+    required property Networks networks
     // The unit's list, for the settings to show with the glass: a QtObject, since PySide has no
     // converter for the Window type of QML.
     readonly property QtObject units: unitBox.list
@@ -116,6 +118,43 @@ Window {
                     onActivated: index => window.preferences.setMinutes(index === 1)
                     onDismissed: window.preferences.closeUnits()
                 }
+            }
+        }
+
+        // The network in use (ADR-0028): home, the office or neither, for the reminders "a casa"
+        // and "in ufficio"; the check follows the label, never the click. Without a network, a
+        // line says so.
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            Heading {
+                title: Texts.network
+                hint: Texts.networkHint
+            }
+            Repeater {
+                model: window.networks.connected ? ["home", "office", ""] : []
+
+                delegate: FluentRadioButton {
+                    required property string modelData
+
+                    Layout.fillWidth: true
+                    text: Texts.networkLabels[modelData]
+                    checkable: false
+                    checked: window.networks.label === modelData
+                    onClicked: window.networks.labelInUse(modelData)
+                }
+            }
+            Text {
+                Layout.fillWidth: true
+                visible: !window.networks.connected
+                text: Texts.offline
+                color: Colors.textSecondary
+                font.family: Typography.textFont
+                font.pixelSize: Typography.body
+                lineHeight: Typography.bodyLine
+                lineHeightMode: Text.FixedHeight
+                wrapMode: Text.Wrap
             }
         }
 

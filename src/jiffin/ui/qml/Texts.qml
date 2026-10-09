@@ -48,6 +48,30 @@ QtObject {
             "d": [Catalog.text("material.mica_alt.name"), Catalog.text("material.mica_alt.description")]
         })
     readonly property string solidSurfaces: Catalog.text("settings.solid")
+    // The networks' labels (ADR-0028): the network in use, and the lines of a label missing.
+    readonly property string network: Catalog.text("networks.title")
+    readonly property string networkHint: Catalog.text("networks.hint")
+    // By the label, as `Networks.label` gives it; "" is neither.
+    readonly property var networkLabels: ({
+            "home": Catalog.text("networks.home"),
+            "office": Catalog.text("networks.office"),
+            "": Catalog.text("networks.neither")
+        })
+    readonly property string offline: Catalog.text("networks.offline")
+    // By the label missing: the line under "Quando", the tray list's, and the button that puts
+    // the label on the network in use.
+    readonly property var unknownNetwork: ({
+            "home": Catalog.text("networks.unknown_home"),
+            "office": Catalog.text("networks.unknown_office")
+        })
+    readonly property var waitingNetwork: ({
+            "home": Catalog.text("networks.waiting_home"),
+            "office": Catalog.text("networks.waiting_office")
+        })
+    readonly property var networkInUse: ({
+            "home": Catalog.text("networks.at_home"),
+            "office": Catalog.text("networks.at_office")
+        })
     readonly property string close: Catalog.text("command.close")
 
     // The first run (ADR-0015)
@@ -147,6 +171,12 @@ QtObject {
     // without its time. "Non capisco «verso sera» e «a dicembre»: …".
     function notUnderstood(words: list<string>): string {
         return Catalog.notUnderstood(words);
+    }
+
+    // Under "Quando", for the words of situations not understood, the time understood (ADR-0028):
+    // the reminder still saves, without them. "Non capisco «chiudo»: …".
+    function situationsNotUnderstood(words: list<string>): string {
+        return Catalog.situationsNotUnderstood(words);
     }
 
     // Under the sentence, while a time already over keeps Save off (#84): "Oggi alle 09:00 …".

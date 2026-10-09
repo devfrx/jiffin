@@ -22,7 +22,19 @@ from jiffin.core.schedule import (
     Weekdays,
     YearDay,
 )
-from jiffin.ui.words import alert_line, appeared, completed, dated, passed, place, when
+from jiffin.ui.words import (
+    alert_line,
+    appeared,
+    completed,
+    dated,
+    duration,
+    listed_situations,
+    passed,
+    place,
+    situation_lines,
+    untimed,
+    when,
+)
 
 
 def at(day: int, hour: int, minute: int = 0) -> datetime:
@@ -429,6 +441,32 @@ def test_an_alert_with_only_a_time_names_the_day_it_rings_for(
     assert alert_line(reading.remainder, reading.schedule, day, FRIDAY) == line
 
 
+@pytest.mark.parametrize(
+    ("condition", "line"),
+    [
+        ("quando sono a casa e apro Steam", "Quando apro Steam · a casa"),
+        ("quando finisco la call", "Alla fine della call"),
+        (
+            "quando finisco la call stasera",
+            "Alla fine della call · oggi, venerdì 2 ottobre, dalle 18:00 alle 23:00",
+        ),
+        ("alle 15 se sono in ufficio", "In ufficio · alle 15:00"),
+        (
+            "quando sono su YouTube dopo le 21 da più di 20 minuti",
+            "Quando sono su YouTube · da più di 20 minuti · dalle 21:00 alle 04:00",
+        ),
+    ],
+)
+def test_an_alert_names_its_situations_after_the_words_the_judge_checks(
+    condition: str, line: str
+) -> None:
+    """ADR-0028: the situations are the condition too; with them, the time is a part apart, as
+    with words the judge checks."""
+    reading = read(condition, WRITTEN)
+    untimed_condition = untimed(reading.remainder, reading.situations)
+    assert alert_line(untimed_condition, reading.schedule, FRIDAY, FRIDAY) == line
+
+
 # The tray list
 
 
@@ -502,6 +540,15 @@ def test_a_completed_reminder_with_only_a_time_names_only_when_it_was_completed(
     assert completed("", at(2, 9, 5), FRIDAY) == "Completato alle 09:05"
 
 
+def test_the_tray_list_names_a_reminder_of_situations_by_them() -> None:
+    reading = read("quando finisco la call", WRITTEN)
+    condition = untimed(reading.remainder, reading.situations)
+    assert appeared(condition, at(1, 23, 12), FRIDAY) == "Alla fine della call, ieri alle 23:12"
+    assert (
+        completed(condition, at(2, 9, 5), FRIDAY) == "Alla fine della call · completato alle 09:05"
+    )
+
+
 @pytest.mark.parametrize(
     ("day", "words"),
     [
@@ -531,3 +578,96 @@ def test_a_day_in_a_line_takes_its_article_and_its_year_only_when_not_this_one(
 def test_a_place_is_its_title_with_the_site_in_a_browser(context: Context, line: str) -> None:
     """ADR-0029: the card of Remind here and the tray list name a place by what shows on it."""
     assert place(context) == line
+
+
+# The situations (ADR-0028, #153)
+
+
+@pytest.mark.parametrize(
+    ("condition", "words"),
+    [
+        ("quando sono in call", "in call"),
+        ("in call su Zoom", "in call su Zoom"),
+        ("durante una chiamata di WhatsApp", "in call su WhatsApp"),
+        ("quando finisco la call", "alla fine della call"),
+        ("quando finisco la call su Meet", "alla fine della call su Google Meet"),
+        ("in call su Teams da più di un'ora", "in call su Microsoft Teams da più di un'ora"),
+        ("se sono via", "lontano dal PC"),
+        ("quando torno", "al ritorno al PC"),
+        ("se sono via da più di 10 minuti", "lontano dal PC da più di dieci minuti"),
+        ("a batteria", "a batteria"),
+        ("in carica", "con il caricatore"),
+        ("quando stacco il caricatore", "quando si stacca il caricatore"),
+        ("con il monitor esterno", "con il monitor esterno"),
+        ("senza monitor esterno", "senza monitor esterno"),
+        ("quando stacco lo schermo", "quando si stacca il monitor esterno"),
+        ("con le cuffie", "con le cuffie"),
+        ("senza cuffie", "senza cuffie"),
+        ("quando tolgo le cuffie", "quando si tolgono le cuffie"),
+        ("a casa", "a casa"),
+        ("in ufficio", "in ufficio"),
+        ("senza rete", "senza rete"),
+        ("quando esco di casa", "all'uscita di casa"),
+        ("quando esco dall'ufficio", "all'uscita dall'ufficio"),
+        ("quando torna la rete", "quando torna la rete"),
+        ("quando sono a casa da più di 2 ore", "a casa da più di due ore"),
+        ("quando sono su YouTube da più di 20 minuti", "da più di 20 minuti"),
+        ("quando sono a casa e in call", "a casa e in call"),
+        ("in call da più di un'ora con le cuffie", "in call da più di un'ora e con le cuffie"),
+    ],
+)
+def test_each_situation_is_written_as_read(condition: str, words: str) -> None:
+    """Every phrase of the grammar's patterns, back in the lexicon's words: a call with the app's
+    own name, a duration in minutes and hours."""
+    reading = read(condition, WRITTEN)
+    assert reading.situations
+    assert listed_situations(reading.situations) == words
+
+
+@pytest.mark.parametrize(
+    ("minutes", "words"),
+    [
+        (1, "un minuto"),
+        (5, "cinque minuti"),
+        (20, "20 minuti"),
+        (30, "30 minuti"),
+        (60, "un'ora"),
+        (61, "un'ora e un minuto"),
+        (75, "un'ora e 15 minuti"),
+        (90, "un'ora e mezza"),
+        (120, "due ore"),
+        (150, "due ore e mezza"),
+        (660, "11 ore"),
+    ],
+)
+def test_a_duration_is_written_in_minutes_and_hours(minutes: int, words: str) -> None:
+    assert duration(minutes) == words
+
+
+@pytest.mark.parametrize(
+    ("condition", "untimed_condition"),
+    [
+        ("quando sono a casa e apro Steam", "quando apro Steam · a casa"),
+        ("quando finisco la call e apro Outlook", "quando apro Outlook · alla fine della call"),
+        ("quando finisco la call stasera", "alla fine della call"),
+        ("quando apro Figma", "quando apro Figma"),
+        ("alle 15", ""),
+    ],
+)
+def test_the_condition_without_its_time_keeps_its_situations_after_its_words(
+    condition: str, untimed_condition: str
+) -> None:
+    reading = read(condition, WRITTEN)
+    assert untimed(reading.remainder, reading.situations) == untimed_condition
+
+
+def test_each_situation_has_a_line_with_what_its_icon_goes_by() -> None:
+    reading = read("quando sono a casa e in call su Zoom da più di un'ora", WRITTEN)
+    assert situation_lines(reading.situations) == [
+        {"situation": "network", "value": "home", "line": "A casa"},
+        {"situation": "call", "value": "zoom", "line": "In call su Zoom da più di un'ora"},
+    ]
+    thing = read("quando sono su YouTube da più di 20 minuti", WRITTEN)
+    assert situation_lines(thing.situations) == [
+        {"situation": "", "value": "", "line": "Da più di 20 minuti"},
+    ]

@@ -203,10 +203,11 @@ def test_the_statements_page_shows_the_situations_understood(tmp_path: Path) -> 
     store.close()
     text = statements.page(log, tmp_path / "log.db", tmp_path, clock).read_text(encoding="utf-8")
     cells = [cell.strip() for cell in re.findall(r"<td>(.*?)</td>", text, re.DOTALL)]
-    assert "quando finisce «in chiamata»" in cells
-    assert "quando finisce «lontano dal PC»" in cells
-    assert "«in chiamata su Microsoft Teams» da almeno 20 min" in cells
-    assert "a batteria" in cells and "da almeno 20 min" in cells
+    # The words the app shows (#153).
+    assert "Alla fine della call" in cells
+    assert "Al ritorno al PC" in cells
+    assert "In call su Microsoft Teams da più di 20 minuti" in cells
+    assert "A batteria" in cells and "Da più di 20 minuti" in cells
     assert text.count("niente: solo orario o situazioni") == 2  # the first and the third
     # A time understood, a situation not: the words not understood are told all the same.
     assert "non capito: «videochiamata»" in text

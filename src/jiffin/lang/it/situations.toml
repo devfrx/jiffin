@@ -1,5 +1,6 @@
 # The words of the situations, in Italian (ADR-0026, ADR-0028): what core's grammar reads in a
-# condition besides its time ("quando finisco la call", "a casa", "da più di 20 minuti"). The
+# condition besides its time ("quando finisco la call", "a casa", "da più di 20 minuti"), and
+# what ui/words.py writes back ("Alla fine della call", "A casa", "Da più di 20 minuti"). The
 # rules stay code: which words go together and in which order. A word here is read whole, in
 # lower case; a space between two words stands for any space. The names of the call apps are
 # names, not Italian: they live in core, with their executables and their sites.
@@ -141,3 +142,56 @@ verbs = ["sono", "arrivo", "torno", "rientro", "resto", "sto"]
 leave_home = ["esco di casa", "esco da casa", "lascio casa"]
 leave_office = ["esco dall'ufficio", "lascio l'ufficio"]
 online = ["torna la rete", "torna internet", "torna la connessione"]
+
+# What the interface writes (#153, the owner's words): each situation understood, under "Quando"
+# on a line of its own, and in the middle of a line in the tray list, on the alert and on the
+# card of Remind here, after the condition's other words. A line gives its first word the
+# capital: "Alla fine della call".
+[write]
+# How long a situation, after its words, or the thing of the condition has lasted: "in call da
+# più di un'ora", "da più di 20 minuti".
+lasting = "da più di {duration}"
+
+# A duration, in minutes and hours: "un minuto", "20 minuti", "un'ora", "due ore e mezza",
+# "un'ora e 15 minuti". Counts up to ten are in words, as the time writes them.
+[write.duration]
+minute = "un minuto"
+minutes = "{count} minuti"
+hour = "un'ora"
+hours = "{count} ore"
+half = "{hours} e mezza"
+hours_and_minutes = "{hours} e {minutes}"
+
+# A call; after its words, the app it is on: "in call su Zoom", "alla fine della call su Google
+# Meet".
+[write.call]
+holds = "in call"
+ends = "alla fine della call"
+on = "su {app}"
+
+[write.away]
+holds = "lontano dal PC"
+ends = "al ritorno al PC"
+
+[write.power]
+battery = "a batteria"
+plugged = "con il caricatore"
+unplug = "quando si stacca il caricatore"
+
+[write.display]
+connected = "con il monitor esterno"
+disconnected = "senza monitor esterno"
+disconnect = "quando si stacca il monitor esterno"
+
+[write.headphones]
+on = "con le cuffie"
+off = "senza cuffie"
+take_off = "quando si tolgono le cuffie"
+
+[write.network]
+home = "a casa"
+office = "in ufficio"
+offline = "senza rete"
+leave_home = "all'uscita di casa"
+leave_office = "all'uscita dall'ufficio"
+online = "quando torna la rete"

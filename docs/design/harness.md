@@ -100,12 +100,12 @@ flowchart LR
   engine judges, to check on the acceptance day that each time and situation
   is read right and that each statement says what its remainder says
   ([ADR-0008](../adr/0008-rewrite-conditions-english-statements.md),
-  [ADR-0021](../adr/0021-one-alert-per-unit.md)). The time is written as the
-  creation window writes it, by `ui/words.py`
-  ([ADR-0020](../adr/0020-read-the-time-in-core.md)): pure Python, without Qt,
-  the one module of `ui` the harness imports. The situations have provisional
-  words in `harness.toml` until the creation window writes them too
-  ([#153](https://github.com/devfrx/jiffin/issues/153)). Words not understood,
+  [ADR-0021](../adr/0021-one-alert-per-unit.md)). The time and the situations
+  are written as the creation window writes them, by `ui/words.py`
+  ([ADR-0020](../adr/0020-read-the-time-in-core.md),
+  [situations](situations.md#writing-them)): pure Python, without Qt, the one
+  module of `ui` the harness imports, so the owner checks the very words the
+  app shows. Words not understood,
   of a time or of a situation, are shown under the condition: that reminder
   rings at any time, or as if those words were not there.
 - **A day** is a local day: the last one with evaluations unless `--day` says

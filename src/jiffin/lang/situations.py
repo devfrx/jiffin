@@ -1,6 +1,6 @@
 """The words of the situations (ADR-0026, ADR-0028), from `it/situations.toml`: `SITUATIONS`, what
-the grammar of `core` reads in a condition besides its time. The rules that put them together
-are the grammar's."""
+the grammar of `core` reads in a condition besides its time, and what `ui.words` writes back. The
+rules that put them together are the grammar's and `ui.words`'."""
 
 from dataclasses import dataclass
 
@@ -78,8 +78,75 @@ class Read:
 
 
 @dataclass(frozen=True, slots=True)
+class DurationWrite:
+    minute: str
+    minutes: str
+    hour: str
+    hours: str
+    half: str
+    hours_and_minutes: str
+
+
+@dataclass(frozen=True, slots=True)
+class CallWrite:
+    holds: str
+    ends: str
+    on: str
+
+
+@dataclass(frozen=True, slots=True)
+class AwayWrite:
+    holds: str
+    ends: str
+
+
+@dataclass(frozen=True, slots=True)
+class PowerWrite:
+    battery: str
+    plugged: str
+    unplug: str
+
+
+@dataclass(frozen=True, slots=True)
+class DisplayWrite:
+    connected: str
+    disconnected: str
+    disconnect: str
+
+
+@dataclass(frozen=True, slots=True)
+class HeadphonesWrite:
+    on: str
+    off: str
+    take_off: str
+
+
+@dataclass(frozen=True, slots=True)
+class NetworkWrite:
+    home: str
+    office: str
+    offline: str
+    leave_home: str
+    leave_office: str
+    online: str
+
+
+@dataclass(frozen=True, slots=True)
+class Write:
+    lasting: str
+    duration: DurationWrite
+    call: CallWrite
+    away: AwayWrite
+    power: PowerWrite
+    display: DisplayWrite
+    headphones: HeadphonesWrite
+    network: NetworkWrite
+
+
+@dataclass(frozen=True, slots=True)
 class Situations:
     read: Read
+    write: Write
 
 
 SITUATIONS = read(Situations, "situations.toml")

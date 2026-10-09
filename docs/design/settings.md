@@ -1,16 +1,18 @@
 # The settings
 
 What the user can set, in `jiffin.ui`: the return pause of
-[ADR-0021](../adr/0021-one-alert-per-unit.md), then the material of Jiffin's
-windows, one of the four of
+[ADR-0021](../adr/0021-one-alert-per-unit.md), the network in use of
+[ADR-0028](../adr/0028-read-the-situations-in-core.md), then the material of
+Jiffin's windows, one of the four of
 [ADR-0010](../adr/0010-windows-11-look-own-components.md).
 `ui/preferences.py` holds the window's state, and `qml/PreferencesWindow.qml`
 draws it with our own `FluentNumberBox`, `FluentComboBox`, `FluentRadioButton`
 and `FluentButton`. What the settings hold comes from
 [#6](https://github.com/devfrx/jiffin/issues/6),
-[#31](https://github.com/devfrx/jiffin/issues/31) and
-[#76](https://github.com/devfrx/jiffin/issues/76), the behaviour and the look
-from [#43](https://github.com/devfrx/jiffin/issues/43) and
+[#31](https://github.com/devfrx/jiffin/issues/31),
+[#76](https://github.com/devfrx/jiffin/issues/76) and
+[#153](https://github.com/devfrx/jiffin/issues/153), the behaviour and the
+look from [#43](https://github.com/devfrx/jiffin/issues/43) and
 [#84](https://github.com/devfrx/jiffin/issues/84); the
 [mockup](mockups/settings.html) shows it in light and dark.
 
@@ -58,6 +60,31 @@ from [#43](https://github.com/devfrx/jiffin/issues/43) and
   or after, and Space, Enter, Alt+Down or F4 open the list, where Up and Down
   move with WinUI's focus ring and Space or Enter pick.
 
+## The network
+
+- **The network in use** is home, the office or neither: radio buttons
+  "Casa", "Ufficio" and "Né casa né ufficio" under "Rete" and its hint, "La
+  rete a cui sei connesso ora. Serve ai promemoria «a casa» e «in ufficio»:
+  Jiffin la riconosce, senza leggerne il nome." A reminder "a casa" or "in
+  ufficio" rings only on a network with that label
+  ([situations](situations.md#the-situations)). With no network connected, a
+  line says "Ora non sei connesso a nessuna rete." in place of the radios.
+- **A click puts the label on the network in use**, on every network
+  connected at once (`Networks.labelInUse`): the user knows where they are,
+  not which network is which, and Jiffin never reads a network's name. "Né
+  casa né ufficio" takes the label away. The check follows the label, never
+  the click: with networks of both labels connected, no radio is checked.
+- **Where a network takes its label**, chosen by the owner on #153's trial:
+  here, always, to correct one; and, while a reminder names a place no
+  network has, the creation window's info bar
+  ([creation](creation.md#the-situations)) and the tray list's line
+  ([tray](tray.md#a-place-no-network-has)), both with "Sono a casa adesso"
+  or "Sono in ufficio adesso".
+- **Known limit**: a label goes on every network connected at once. A network
+  connected in both places, as a VPN, keeps the label put last: back at home
+  with it, Jiffin is at home and in the office at once, and here no radio is
+  checked.
+
 ## The material
 
 - The four materials are radio buttons, each with its name and what it looks
@@ -93,9 +120,21 @@ setting, `{"creation": [x, y], ...}`, and gives them to `Interface.places` at
 the next start; an entry of another shape is left out, and that window opens at
 the centre.
 
+The networks' labels too: `ui/networks.py`, `Networks`, holds them for the
+three places that put one, and sends them all, at each change, to
+`keep_networks`. The worker keeps them as one `networks` setting,
+`{"<id>": "home"}` by the id Windows gives each network, never its name, and
+gives them to the capture, which counts a label on the network in use at once
+([context](context.md#the-networks-labels)). At the next start it gives them
+to the capture before it starts and, in `Kept`, to `Interface.networks`; a
+label other than `home` or `office` is left out, and that network has none.
+The capture tells the interface which networks are connected, by id, through
+`Interface.show_networks`.
+
 ## Trying it
 
 `uv run python -m jiffin.ui`, then Settings in the tray icon's menu, or
-Change in its list: a new pause or material is printed, and every window on
-screen takes the material. The unit tests drive the window on Qt's offscreen
-platform (`tests/unit/ui/test_preferences.py`).
+Change in its list: a new pause, material or label is printed, and every
+window on screen takes the material. A made-up network is in use, without a
+label (`--offline`: none). The unit tests drive the window on Qt's offscreen
+platform (`tests/unit/ui/test_preferences.py`, `test_networks.py`).

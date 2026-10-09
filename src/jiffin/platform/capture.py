@@ -14,7 +14,8 @@ asleep. An observation goes out only when the context changed.
 The situations are read on the same thread: Core Audio and the Network List Manager tell their
 changes on Windows' own threads, which only wake the loop; the states that cost little to read,
 or have no event, are read at each tick. Each situation goes out at start, and then only when
-its values changed.
+its values changed. The networks' labels come from the settings, on another thread, and wake the
+loop too; the ids of the networks connected go to the interface, for the settings to label them.
 
 Titles, addresses, sites and the networks' ids never reach the log.
 """
@@ -61,6 +62,7 @@ RETRY_MS = 60_000
 """A source of Windows that could not start, or failed a read, starts again this long after."""
 _AUDIO_CHANGED = win32.WM_APP + 1
 _NETWORKS_CHANGED = win32.WM_APP + 2
+_LABELS_CHANGED = win32.WM_APP + 3
 
 
 class Bars(Protocol):
@@ -362,6 +364,9 @@ class Situations:
     A source that fails gives its situations no value, None, until it reads again. Otherwise
     away, power, display and headphones always have one: the harness takes the end of one of
     them with nothing after it for the app's close (#155).
+
+    `on_networks` gets the ids of the networks connected, at start and when they change, on this
+    thread: none while the networks cannot be read.
     """
 
     def __init__(
@@ -374,16 +379,19 @@ class Situations:
         media: Callable[[], Players] = Media,
         networks: Callable[[Callable[[], None]], Connections] = Networks,
         labels: Mapping[str, str] | None = None,
+        on_networks: Callable[[frozenset[str]], None] | None = None,
     ) -> None:
         """`audio`, `media` and `networks` start each source, with what wakes the thread when
-        it changes; `labels` are the networks' labels, `HOME` or `OFFICE`, by their id: none
-        until the settings keep them (#153)."""
+        it changes; `labels` are the networks' labels, `HOME` or `OFFICE`, by their id, as the
+        settings keep them, until `label` gives new ones (#153)."""
         thread = threading.get_native_id()
         self._clock = clock
         self._on_observation = on_observation
+        self._on_networks = on_networks
         self._tabs = tabs
         self._audio_changed = _Wake(thread, _AUDIO_CHANGED)
         self._networks_changed = _Wake(thread, _NETWORKS_CHANGED)
+        self._labels_changed = _Wake(thread, _LABELS_CHANGED)
         self._audio = _Source("Core Audio", lambda: audio(self._audio_changed))
         self._media = _Source("the media controls", media)
         self._networks = _Source("the networks", lambda: networks(self._networks_changed))
@@ -401,6 +409,8 @@ class Situations:
         self._headphones: bool | None = None
         self._playing: frozenset[str] | None = None
         self._connected: frozenset[str] | None = None
+        self._told: frozenset[str] | None = None
+        """The ids the interface heard of last; None before the first read."""
         self._plugged: bool | None = None
         self._display: bool | None = None
         self._window: int | None = None
@@ -440,8 +450,15 @@ class Situations:
         except Exception:  # a timer's handler must not raise: ctypes would only print it
             log.exception("the situations could not be read")
 
+    def label(self, labels: Mapping[str, str]) -> None:
+        """New labels for the networks, from the settings, on any thread: a label put on the
+        network in use counts at once. Before the start they are only kept, and read then."""
+        self._labels = labels
+        if self._started:
+            self._labels_changed()
+
     def on_message(self, message: int) -> None:
-        """A message to the thread: Core Audio's wake, or the networks'."""
+        """A message to the thread: Core Audio's wake, the networks', or new labels."""
         if not self._started:
             return
         try:
@@ -452,6 +469,8 @@ class Situations:
             elif message == _NETWORKS_CHANGED:
                 self._networks_changed.taken()
                 self._read_networks(at)
+            elif message == _LABELS_CHANGED:
+                self._labels_changed.taken()
             else:
                 return
             self._send(at)
@@ -503,7 +522,13 @@ class Situations:
         self._read_tab()
 
     def _read_networks(self, at: int) -> None:
+        """The networks connected; the interface hears of their ids at the first read, then when
+        they change."""
         self._connected = self._networks.read(at, lambda networks: networks.connected())
+        told = self._connected or frozenset()
+        if told != self._told and self._on_networks is not None:
+            self._told = told
+            self._on_networks(told)
 
     def _read_ticked(self, at: int) -> None:
         """What plays, the power and the displays; the time since the last input is read with
@@ -604,9 +629,9 @@ def _each(*handlers: Callable[[win32.Notice], None]) -> Callable[[win32.Notice],
 class Capture:
     """The context thread: its message loop, its hooks, its timer and its COM apartment.
 
-    `on_observation` and `on_unreadable` are called on that thread: they should only queue
-    what they get. `start` returns once the first observations have gone out, the context's
-    and the situations'.
+    `on_observation`, `on_unreadable` and `on_networks` are called on that thread: they should
+    only queue what they get. `start` returns once the first observations have gone out, the
+    context's and the situations'.
     """
 
     def __init__(
@@ -614,14 +639,26 @@ class Capture:
         clock: Clock,
         on_observation: Callable[[Observation | SituationObservation], None],
         on_unreadable: Callable[[frozenset[str]], None],
+        on_networks: Callable[[frozenset[str]], None],
     ) -> None:
         self._clock = clock
         self._on_observation = on_observation
         self._on_unreadable = on_unreadable
+        self._on_networks = on_networks
         self._thread = threading.Thread(target=self._run, name="context", daemon=True)
         self._started = threading.Event()
         self._failure: Exception | None = None
         self._native_id: int | None = None
+        self._labels: Mapping[str, str] = {}
+        self._situations: Situations | None = None
+
+    def label(self, labels: Mapping[str, str]) -> None:
+        """The networks' labels, `HOME` or `OFFICE` by id, as the settings keep them: from any
+        thread, before the start or after it."""
+        self._labels = dict(labels)
+        situations = self._situations
+        if situations is not None:
+            situations.label(self._labels)
 
     def start(self) -> None:
         self._thread.start()
@@ -651,7 +688,15 @@ class Capture:
                 win32.make_queue()
                 self._native_id = threading.get_native_id()
                 bars = AddressBars()
-                situations = Situations(self._clock, self._on_observation, bars)
+                situations = Situations(
+                    self._clock,
+                    self._on_observation,
+                    bars,
+                    labels=self._labels,
+                    on_networks=self._on_networks,
+                )
+                self._situations = situations
+                situations.label(self._labels)  # any that came meanwhile
                 foreground = Foreground(
                     self._clock,
                     bars,
@@ -687,5 +732,5 @@ class Capture:
                 bars.close()
             # Every COM pointer must be gone before the apartment ends: the timer and the notices
             # hold the readers through their handlers.
-            timer = notices = hook = foreground = situations = bars = None
+            timer = notices = hook = foreground = situations = bars = self._situations = None
             comtypes.CoUninitialize()

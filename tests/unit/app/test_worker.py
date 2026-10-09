@@ -5,7 +5,7 @@ import sqlite3
 import sys
 import threading
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from concurrent.futures import Future
 from contextlib import closing
 from dataclasses import replace
@@ -58,6 +58,11 @@ class Contexts:
         self.observe = observe
         self.started = False
         self.closed = False
+        self.labels: list[tuple[dict[str, str], bool]] = []
+        """The networks' labels it was given, in order, each with whether it had started."""
+
+    def label(self, labels: Mapping[str, str]) -> None:
+        self.labels.append((dict(labels), self.started))
 
     def start(self) -> None:
         self.started = True
@@ -352,6 +357,36 @@ def test_a_return_pause_out_of_the_range_or_of_another_shape_is_the_default(
         store.set_setting("return_pause", kept)
     assert scene.worker.start().return_pause == return_pause // 1000
     assert scene.return_pause() == return_pause
+
+
+def test_the_networks_labels_go_to_the_capture_before_it_starts_and_at_once_when_changed(
+    make_scene: MakeScene,
+) -> None:
+    """#153: a label put on the network in use counts at once, and from the next start."""
+    first = make_scene()
+    assert first.worker.start().networks == {}
+    first.settle()
+    assert first.contexts.labels == [({}, False)]
+    first.worker.keep_networks({"6f1d2c3b-0000-4000-8000-000000000001": "home"})
+    first.settle()
+    assert first.contexts.labels[-1] == ({"6f1d2c3b-0000-4000-8000-000000000001": "home"}, True)
+    first.worker.close()
+    second = make_scene()
+    assert second.worker.start().networks == {"6f1d2c3b-0000-4000-8000-000000000001": "home"}
+    second.settle()
+    assert second.contexts.labels == [({"6f1d2c3b-0000-4000-8000-000000000001": "home"}, False)]
+
+
+def test_labels_of_another_shape_are_left_out(make_scene: MakeScene) -> None:
+    """From a later version, after a downgrade: that network has no label."""
+    scene = make_scene()
+    with closing(Store.open(scene.database)) as store:
+        store.set_setting("networks", {"a": "home", "b": "office", "c": "cafe", "d": 1})
+    assert scene.worker.start().networks == {"a": "home", "b": "office"}
+    scene.worker.close()
+    with closing(Store.open(scene.database)) as store:
+        store.set_setting("networks", ["a", "home"])
+    assert make_scene().worker.start().networks == {}
 
 
 def test_a_pause_is_kept_through_a_restart_until_riprendi(make_scene: MakeScene) -> None:

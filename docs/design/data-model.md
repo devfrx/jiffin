@@ -191,6 +191,10 @@ app.
 - **The harness's log** keeps every answer per place, in order, the
   requested alerts, which have no evaluation, the engine's sleeps, the
   stretches with nothing in front and those of the situations.
+- **The settings** gain `networks`, the networks' labels by the id Windows
+  gives each network, never its name
+  ([settings](settings.md#keeping-the-choices)): a key of `setting`, which
+  needs no migration.
 
 ## Keeping and deleting
 

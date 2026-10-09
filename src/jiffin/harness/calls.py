@@ -23,19 +23,12 @@ from typing import Any
 
 from jiffin.core.clock import Clock
 from jiffin.core.records import Evaluation
-from jiffin.core.situations import CALL_APPS, YES, CallApp, Situation, SituationStretch
+from jiffin.core.situations import CALL_APPS, YES, Situation, SituationStretch
 from jiffin.harness.errors import HarnessError
 
 FORMAT = 1
-
-
-def name(app: CallApp) -> str:
-    """The name the pages give a call app: "Microsoft Teams"."""
-    return max(app.names, key=len).title()
-
-
 APPS = {
-    app.executables[0] if app.executables else app.sites[0]: name(app) for app in CALL_APPS.values()
+    app.executables[0] if app.executables else app.sites[0]: app.title for app in CALL_APPS.values()
 }
 """The value an added call gets, by the app the owner picks, with the name the page shows: one
 `core` reads as a call on that app (`situations.holds`)."""

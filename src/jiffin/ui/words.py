@@ -1,14 +1,17 @@
-"""The user's words, as the interface shows them, and the words of a time.
+"""The user's words, as the interface shows them, and the words of a time and of the situations.
 
 `core` reads a time into a `Schedule`; the interface writes it when it shows it (ADR-0020), so
 "domani alle 21", written yesterday, reads "Oggi" today. The rules are #84's, with the forms of
 #91 and #92: hours with two digits; a date with its weekday, "Oggi", "Domani" or "Ieri" in front
 when it is one of them, and its year only when it is not the current one. Days count by the
 Jiffin day, as the meanings do, so hours before 04:00 are the night after their day, and say so.
-The words and phrases are the lexicon's (`jiffin.lang.time`, ADR-0026); which of them a time
-takes, and how they join, is written here.
+The situations `core` read are written back the same way (ADR-0028): "Alla fine della call", "A
+casa e in call da più di un'ora". The words and phrases are the lexicons' (`jiffin.lang.time`,
+`jiffin.lang.situations`, ADR-0026); which of them a time or a situation takes, and how they
+join, is written here.
 """
 
+from collections.abc import Sequence
 from datetime import date, datetime, time
 
 from jiffin.core.context import Context
@@ -28,6 +31,22 @@ from jiffin.core.schedule import (
     Weekdays,
     YearDay,
 )
+from jiffin.core.situations import (
+    BATTERY,
+    CALL_APPS,
+    HOME,
+    NO,
+    OFFICE,
+    OFFLINE,
+    PLUGGED,
+    YES,
+    Ends,
+    Holds,
+    Lasts,
+    Situation,
+    Term,
+)
+from jiffin.lang.situations import SITUATIONS
 from jiffin.lang.texts import TEXTS, listed
 from jiffin.lang.time import TIME
 
@@ -52,6 +71,31 @@ ONCE = {
 """How often, by unit: once in each, "una volta al mese", and once in a few, "una volta ogni
 due mesi"."""
 NEAR = {-1: WORDS.yesterday, 0: WORDS.today, 1: WORDS.tomorrow}
+SITUATION_WORDS = SITUATIONS.write
+HOLDS: dict[tuple[Situation, str | None], str] = {
+    (Situation.AWAY, YES): SITUATION_WORDS.away.holds,
+    (Situation.POWER, BATTERY): SITUATION_WORDS.power.battery,
+    (Situation.POWER, PLUGGED): SITUATION_WORDS.power.plugged,
+    (Situation.DISPLAY, YES): SITUATION_WORDS.display.connected,
+    (Situation.DISPLAY, NO): SITUATION_WORDS.display.disconnected,
+    (Situation.HEADPHONES, YES): SITUATION_WORDS.headphones.on,
+    (Situation.HEADPHONES, NO): SITUATION_WORDS.headphones.off,
+    (Situation.NETWORK, HOME): SITUATION_WORDS.network.home,
+    (Situation.NETWORK, OFFICE): SITUATION_WORDS.network.office,
+    (Situation.NETWORK, OFFLINE): SITUATION_WORDS.network.offline,
+}
+"""A situation that holds, by the situation and its value, as `core`'s grammar reads them; a
+call's words are apart, with the app it is on."""
+ENDS: dict[tuple[Situation, str | None], str] = {
+    (Situation.AWAY, YES): SITUATION_WORDS.away.ends,
+    (Situation.POWER, PLUGGED): SITUATION_WORDS.power.unplug,
+    (Situation.DISPLAY, YES): SITUATION_WORDS.display.disconnect,
+    (Situation.HEADPHONES, YES): SITUATION_WORDS.headphones.take_off,
+    (Situation.NETWORK, HOME): SITUATION_WORDS.network.leave_home,
+    (Situation.NETWORK, OFFICE): SITUATION_WORDS.network.leave_office,
+    (Situation.NETWORK, OFFLINE): SITUATION_WORDS.network.online,
+}
+"""The end of a situation, as `HOLDS`: "quando torno" is the end of away."""
 
 
 def sentence(text: str) -> str:
@@ -73,6 +117,81 @@ def place(context: Context) -> str:
     return title if site is None else TEXTS.format.parts.join((title, site))
 
 
+def untimed(remainder: str, situations: Sequence[Term]) -> str:
+    """The condition without its time, as a line shows it before the time or under the action
+    (ADR-0028): the words the judge checks, then the situations understood, "quando apro Steam ·
+    a casa"; the situations alone, "alla fine della call"; empty with only a time."""
+    return TEXTS.format.parts.join(
+        part for part in (remainder, listed_situations(situations)) if part
+    )
+
+
+def listed_situations(situations: Sequence[Term]) -> str:
+    """The situations understood, in the middle of a line, in the order written: "a casa e in
+    call da più di un'ora"; empty without any."""
+    return listed([situation(term) for term in situations])
+
+
+def situation_lines(situations: Sequence[Term]) -> list[dict[str, str]]:
+    """Each situation understood on a line of its own, in the order written, as the creation
+    window and the tray list show them beside their icons: the line, "Alla fine della call",
+    with the situation and the value its icon goes by; "" for the thing of the condition, and
+    for the value of any call."""
+    return [
+        {
+            "situation": "" if term.situation is None else term.situation.value,
+            "value": term.value or "",
+            "line": sentence(situation(term)),
+        }
+        for term in situations
+    ]
+
+
+def situation(term: Term) -> str:
+    """A situation understood, in the middle of a line: "in call su Zoom", "alla fine della
+    call", "lontano dal PC da più di 10 minuti"; how long the thing of the condition has lasted,
+    "da più di 20 minuti"."""
+    match term:
+        case Holds(kind, value):
+            return _holds(kind, value)
+        case Ends(Situation.CALL, app):
+            return _on_app(SITUATION_WORDS.call.ends, app)
+        case Ends(kind, value):
+            return ENDS[(kind, value)]
+        case Lasts(minutes, kind, value):
+            lasting = SITUATION_WORDS.lasting.format(duration=duration(minutes))
+            return lasting if kind is None else f"{_holds(kind, value)} {lasting}"
+
+
+def duration(minutes: int) -> str:
+    """How long, in minutes and hours: "un minuto", "20 minuti", "un'ora", "due ore e mezza",
+    "un'ora e 15 minuti"; counts up to ten in words, as the time writes them."""
+    words = SITUATION_WORDS.duration
+    hours, rest = divmod(minutes, 60)
+    rest_words = words.minute if rest == 1 else words.minutes.format(count=_count(rest))
+    if not hours:
+        return rest_words
+    hours_words = words.hour if hours == 1 else words.hours.format(count=_count(hours))
+    if not rest:
+        return hours_words
+    if rest == 30:
+        return words.half.format(hours=hours_words)
+    return words.hours_and_minutes.format(hours=hours_words, minutes=rest_words)
+
+
+def _holds(kind: Situation, value: str | None) -> str:
+    if kind is Situation.CALL:
+        return _on_app(SITUATION_WORDS.call.holds, value)
+    return HOLDS[(kind, value)]
+
+
+def _on_app(words: str, app: str | None) -> str:
+    """A call's words, then the app it is on, when the condition names one: "in call su Zoom"."""
+    if app is None:
+        return words
+    return f"{words} {SITUATION_WORDS.call.on.format(app=CALL_APPS[app].title)}"
+
+
 def when(schedule: Schedule, perennial: bool, today: date) -> str:
     """The time understood, on a line of its own: "Ogni giorno dalle 23:00 alle 04:00", "Oggi,
     venerdì 2 ottobre, alle 09:00". `today` is the Jiffin day it shows on. Every day goes unsaid
@@ -91,36 +210,38 @@ def passed(schedule: Schedule, today: date) -> str:
     return _on_day(schedule, schedule.days.day, today)
 
 
-def alert_line(remainder: str, schedule: Schedule | None, day: date | None, today: date) -> str:
-    """The one line of an alert, over what to do (#84): the condition without its time, then the
-    time understood, "Quando apro Claude · dalle 23:00 alle 04:00", where every day goes unsaid,
-    also for a perennial reminder, whose icon says it. With only a time, the day of the instance
-    that rings and its hours, short: "Oggi alle 15:00", "Ieri alle 15:00" when it rings late.
-    `day` is that instance's Jiffin day, if known; `today` the Jiffin day the alert shows on."""
+def alert_line(condition: str, schedule: Schedule | None, day: date | None, today: date) -> str:
+    """The one line of an alert, over what to do (#84): the condition without its time
+    (`untimed`), then the time understood, "Quando apro Claude · dalle 23:00 alle 04:00", where
+    every day goes unsaid, also for a perennial reminder, whose icon says it. With only a time,
+    the day of the instance that rings and its hours, short: "Oggi alle 15:00", "Ieri alle 15:00"
+    when it rings late. `day` is that instance's Jiffin day, if known; `today` the Jiffin day the
+    alert shows on."""
     if schedule is None:
-        return sentence(remainder)
-    if remainder:
-        return TEXTS.format.parts.join((sentence(remainder), _when(schedule, False, today)))
+        return sentence(condition)
+    if condition:
+        return TEXTS.format.parts.join((sentence(condition), _when(schedule, False, today)))
     return _on_day(schedule, day or today, today)
 
 
-def appeared(remainder: str, at: datetime, today: date) -> str:
-    """The line of an unseen alert in the tray list (#84): the condition without its time, then
-    when the alert appeared, "Quando apro Claude, ieri alle 23:12"; with only a time, only when
-    it appeared, "Ieri alle 23:12". `at` is local, and its day counts on the calendar."""
+def appeared(condition: str, at: datetime, today: date) -> str:
+    """The line of an unseen alert in the tray list (#84): the condition without its time
+    (`untimed`), then when the alert appeared, "Quando apro Claude, ieri alle 23:12"; with only a
+    time, only when it appeared, "Ieri alle 23:12". `at` is local, and its day counts on the
+    calendar."""
     days = (today - at.date()).days
     words = WORDS.hours.moment.format(time=f"{at:%H:%M}")
     if days == 1:
         words = f"{WORDS.yesterday} {words}"
     elif days > 1:
         words = f"{dated(at.date(), today)} {words}"
-    return f"{sentence(remainder)}, {words}" if remainder else sentence(words)
+    return f"{sentence(condition)}, {words}" if condition else sentence(words)
 
 
-def completed(remainder: str, at: datetime, today: date) -> str:
+def completed(condition: str, at: datetime, today: date) -> str:
     """The line of a completed reminder in the tray list (ADR-0030): the condition without its
-    time, then when it was completed, "Quando apro Claude · completato alle 11:52", "… ·
-    completato ieri", "… · completato il 20 ottobre"; with only a time, only when. `at` is
+    time (`untimed`), then when it was completed, "Quando apro Claude · completato alle 11:52",
+    "… · completato ieri", "… · completato il 20 ottobre"; with only a time, only when. `at` is
     local, and its day counts on the calendar, as for an unseen alert."""
     days = (today - at.date()).days
     if days < 1:
@@ -130,7 +251,7 @@ def completed(remainder: str, at: datetime, today: date) -> str:
     else:
         when = dated(at.date(), today)
     words = TEXTS.tray_list.completed_when.format(when=when)
-    return TEXTS.format.parts.join((sentence(remainder), words)) if remainder else sentence(words)
+    return TEXTS.format.parts.join((sentence(condition), words)) if condition else sentence(words)
 
 
 def dated(day: date, today: date) -> str:

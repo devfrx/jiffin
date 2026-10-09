@@ -256,7 +256,7 @@ def pages() -> Iterator[Pages]:
 @pytest.fixture
 def seen() -> Iterator[Seen]:
     seen = Seen()
-    capture = Capture(SystemClock(), seen.add, lambda apps: None)
+    capture = Capture(SystemClock(), seen.add, lambda apps: None, lambda networks: None)
     capture.start()
     yield seen
     capture.close()
@@ -389,7 +389,7 @@ def test_the_cpu_vivaldi_spends_on_the_reads(pages: Pages, tmp_path: Path) -> No
         time.sleep(10)
         without = measure(browser, BENCHMARK_SECONDS)
         seen = Seen()
-        capture = Capture(SystemClock(), seen.add, lambda apps: None)
+        capture = Capture(SystemClock(), seen.add, lambda apps: None, lambda networks: None)
         own = psutil.Process()
         before = own.cpu_times()
         capture.start()

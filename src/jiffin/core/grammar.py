@@ -1161,15 +1161,16 @@ NETWORK = SITUATION_WORDS.network
 DISPLAY_WORD = rf"(?:{alternatives(DISPLAY.words)})"
 HEADPHONES_WORD = rf"(?:{alternatives(HEADPHONES.words)})"
 
-# Tried in order; a match may not overlap an earlier one: "torno a casa" before "torno".
+# Tried in order; a match may not overlap an earlier one: "esco da casa" before "da casa",
+# "torno a casa" before "torno".
 SITUATION_PATTERNS: list[tuple[str, SituationHandler]] = [
     (rf"(?:{alternatives(SITUATION_WORDS.lasting)})\s+{SPAN_OF_MINUTES}", on_lasting),
-    (led(NETWORK.verbs, alternatives(NETWORK.home)), said(Holds(Situation.NETWORK, HOME))),
-    (led(NETWORK.verbs, alternatives(NETWORK.office)), said(Holds(Situation.NETWORK, OFFICE))),
-    (led(NETWORK.verbs, alternatives(NETWORK.offline)), said(Holds(Situation.NETWORK, OFFLINE))),
     (alternatives(NETWORK.leave_home), said(Ends(Situation.NETWORK, HOME))),
     (alternatives(NETWORK.leave_office), said(Ends(Situation.NETWORK, OFFICE))),
     (alternatives(NETWORK.online), said(Ends(Situation.NETWORK, OFFLINE))),
+    (led(NETWORK.verbs, alternatives(NETWORK.home)), said(Holds(Situation.NETWORK, HOME))),
+    (led(NETWORK.verbs, alternatives(NETWORK.office)), said(Holds(Situation.NETWORK, OFFICE))),
+    (led(NETWORK.verbs, alternatives(NETWORK.offline)), said(Holds(Situation.NETWORK, OFFLINE))),
     (led(CALL.holds_verbs, templates(CALL.holds, call=CALL_WORD)) + ON_APP, on_call(Holds)),
     (rf"(?:{templates(CALL.ends, call=CALL_WORD)}){ON_APP}", on_call(Ends)),
     (

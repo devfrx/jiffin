@@ -24,11 +24,12 @@ and the stretches ([data model](data-model.md)).
 | `power` | `battery`, `plugged` | |
 | `display` | `yes`, `no` | an external display is connected |
 | `headphones` | `yes`, `no` | the default output is headphones or a headset |
-| `network` | `home`, `office`, by the labels of the settings; `offline`; none on a network without a label | |
+| `network` | `home`, `office`, by the labels of the [settings](settings.md#the-network); `offline`; none on a network without a label | |
 | `playback` | the ids Windows' media controls give the apps that play, in lower case: `spotify.exe`, `vivaldi.<id>` | no words name it: it keeps `away` off in front of a video |
 
-- **The call apps** are a closed list in `core`, `CALL_APPS`, each with the
-  names a condition gives it, its executables and its sites: Discord, Meet
+- **The call apps** are a closed list in `core`, `CALL_APPS`, each with its
+  title, the name the interface writes with its capitals, the names a
+  condition gives it, its executables and its sites: Discord, Meet
   ("Google Meet"), Slack, Teams ("Microsoft Teams"; since January 2026 its
   calls run in `ms-teams_modulehost.exe`), Telegram, WhatsApp and Zoom. A site
   is one of its domains or under one. A supported browser whose tab that
@@ -42,7 +43,9 @@ and the stretches ([data model](data-model.md)).
 `read` reads the situations first, with the technique of the time
 ([time.md](time.md)): a closed list of phrases, built from the lexicon, tried
 in order; a match may not overlap an earlier one ("torno a casa" before
-"torno"). Each phrase may take the verb that leads into it: "sono in call",
+"torno"), and the ends of home and the office come before what holds there:
+"quando esco da casa" is an end, where "da casa" alone would leave "esco"
+over. Each phrase may take the verb that leads into it: "sono in call",
 "esco di casa". Names are no situations, as they are no time, but the names of
 the call apps are: "su Zoom", "al PC". Then the situations are set aside, as
 names are, and the time is read on the rest: their words are no time, and
@@ -90,8 +93,44 @@ Situations not understood leave the condition as it reads without them: its
 time, if understood, and the remainder with their words, which go to the
 judge as before 0.3. A time not understood leaves the whole condition, byte
 for byte, and no situations: the line under "Quando" names its words, and
-the user writes it again. Work is no office ("al lavoro"), and what plays
-("musica", "video") stays with the judge, which sees the window.
+the user writes it again. `Reading.time_unclear` tells the two apart: with
+words of the time among those not understood, the reminder rings at any
+time; with only the situations', the time stands, and the creation window
+names those words on a line of their own
+([creation](creation.md#the-situations)). Work is no office ("al lavoro"),
+and what plays ("musica", "video") stays with the judge, which sees the
+window.
+
+## Writing them
+
+`ui/words.py` writes the terms back, from the lexicon's `write` section, in
+the words the owner chose on [#153](https://github.com/devfrx/jiffin/issues/153)'s
+trial:
+
+- **What holds** as it reads: "In call", "In call su Zoom", "Lontano dal PC",
+  "A batteria", "Con il caricatore", "Con il monitor esterno", "Senza monitor
+  esterno", "Con le cuffie", "Senza cuffie", "A casa", "In ufficio", "Senza
+  rete".
+- **An end** without a person, so it never clashes with the user's own first
+  person ("Quando apro Outlook · alla fine della call"): "Alla fine della
+  call", "Al ritorno al PC", "Quando si stacca il caricatore", "Quando si
+  stacca il monitor esterno", "Quando si tolgono le cuffie", "All'uscita di
+  casa", "All'uscita dall'ufficio", "Quando torna la rete".
+- **A duration** after its situation, or alone for the thing: "in call da più
+  di un'ora", "Da più di 20 minuti"; up to ten in words, as the time writes
+  its counts, and half hours as "un'ora e mezza".
+- **A call app** by its title: "su Google Meet", "su WhatsApp".
+
+`situation(term)` writes one term, `listed_situations(terms)` joins them ("a
+casa e in call"), `untimed(remainder, terms)` writes the condition without
+its time, the remainder then its situations after a dot, or the situations
+alone, and `situation_lines(terms)` gives one line per situation, with the
+situation and value its icon goes by. Under "Quando" and in the tray list's
+active rows each situation has a line beside its icon
+([creation](creation.md#the-situations), [tray](tray.md)); the alert, the
+unseen and completed rows and the card of Remind here write the condition on
+one line ([overlay](overlay.md)). The harness's `statements` page writes the
+same words ([harness](harness.md)).
 
 ## Over time
 
@@ -169,15 +208,14 @@ The words are data, the rules are code
 and after a phrase, the words left over, the leads of a duration, and for each
 situation its phrases, a placeholder standing for its words ("in {call}",
 "tolgo {headphones}"), with the verbs that may lead into them. The section
-`write`, the words under "Quando" and on the alert, comes with
-[#153](https://github.com/devfrx/jiffin/issues/153): the owner picks them
-from a list. The names of the call apps are names, not Italian: they live in
-`core`.
+`write` holds the words the interface writes ([above](#writing-them)), by
+situation and form, with a duration's. The names of the call apps are names,
+not Italian: they live in `core`.
 
 ## The tests
 
 `tests/unit/core/test_meanings.py` reads every phrase of ADR-0028, understood
 or not; `tests/unit/core/test_situations.py` follows the situations over time;
 `tests/unit/core/test_reminders.py` rings them, a test for each row of the
-table above. Conditions without situations read as before: the time's case
-files pass unchanged.
+table above; `tests/unit/ui/test_words.py` writes them. Conditions without
+situations read as before: the time's case files pass unchanged.

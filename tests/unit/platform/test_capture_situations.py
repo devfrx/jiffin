@@ -117,6 +117,8 @@ class Scene:
         self.posted: list[int] = []
         """The messages posted to the thread, not taken yet."""
         self.observations: list[SituationObservation] = []
+        self.heard: list[frozenset[str]] = []
+        """The ids of the networks connected, as the interface heard of them."""
         monkeypatch.setattr(
             win32, "idle_ms", lambda: self._machine("idle", self.clock.now() - self.last_input)
         )
@@ -135,6 +137,7 @@ class Scene:
             media=lambda: FakeMedia(self),
             networks=self._networks,
             labels={HOME_ID: HOME, OFFICE_ID: OFFICE},
+            on_networks=self.heard.append,
         )
 
     def check(self, what: str) -> None:
@@ -452,6 +455,54 @@ def test_the_networks_give_their_labels(
     scene.connected = connected
     scene.networks_change()
     assert scene.value(Situation.NETWORK) == frozenset(network)
+
+
+def test_a_label_put_on_the_network_in_use_counts_at_once(scene: Scene) -> None:
+    """#153: the settings label a network on the interface's thread; the capture's own thread
+    wakes, and the network goes out again with its new value."""
+    scene.start()
+    scene.connected = {CAFE_ID}
+    scene.networks_change()
+    assert scene.value(Situation.NETWORK) == frozenset()
+    scene.situations.label({HOME_ID: HOME, CAFE_ID: OFFICE})
+    assert scene.value(Situation.NETWORK) == frozenset()  # not until the thread takes it
+    scene.deliver()
+    assert scene.value(Situation.NETWORK) == frozenset({OFFICE})
+    # A label taken away, the network has none.
+    scene.situations.label({HOME_ID: HOME})
+    scene.deliver()
+    assert scene.value(Situation.NETWORK) == frozenset()
+
+
+def test_labels_given_before_the_start_are_read_at_the_start(scene: Scene) -> None:
+    scene.situations.label({HOME_ID: OFFICE})
+    assert scene.posted == []
+    scene.start()
+    assert scene.value(Situation.NETWORK) == frozenset({OFFICE})
+
+
+def test_the_interface_hears_the_ids_of_the_networks_connected_when_they_change(
+    scene: Scene,
+) -> None:
+    scene.start()
+    assert scene.heard == [frozenset({HOME_ID})]
+    scene.networks_change()  # the same networks: nothing to hear
+    scene.connected = {HOME_ID, CAFE_ID}
+    scene.networks_change()
+    scene.connected = set()
+    scene.networks_change()
+    assert scene.heard == [
+        frozenset({HOME_ID}),
+        frozenset({HOME_ID, CAFE_ID}),
+        frozenset(),
+    ]
+
+
+def test_networks_that_cannot_be_read_are_heard_as_none(scene: Scene) -> None:
+    scene.start()
+    scene.failing["networks"] = COM_FAILURE
+    scene.networks_change()
+    assert scene.heard == [frozenset({HOME_ID}), frozenset()]
 
 
 def test_a_burst_of_changes_wakes_the_thread_once(scene: Scene) -> None:

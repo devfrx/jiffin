@@ -11,7 +11,9 @@ How Jiffin lives in the tray, in `jiffin.ui`. `ui/tray.py` draws the icon,
 [ADR-0024](../adr/0024-hold-and-hide-alerts.md), Remind here and what the
 reminders learned from [ADR-0029](../adr/0029-learn-from-answers-per-place.md),
 Undo and the completed reminders from
-[ADR-0030](../adr/0030-undo-and-reopen.md), the look from
+[ADR-0030](../adr/0030-undo-and-reopen.md), the situations from
+[ADR-0028](../adr/0028-read-the-situations-in-core.md) and
+[#153](https://github.com/devfrx/jiffin/issues/153), the look from
 [ADR-0010](../adr/0010-windows-11-look-own-components.md); the
 [mockup](mockups/tray.html) shows the list in light and dark.
 
@@ -97,10 +99,14 @@ stateDiagram-v2
     problem and Details ([first run](first-run.md)); the engine (below); and
     the browsers whose address cannot be read. The owner chose the line on
     screen, over WinUI's yellow box and a neutral card;
+  - while an active reminder names home or the office and no network has
+    that label, a warning line with a button
+    ([below](#a-place-no-network-has));
   - **Unseen**: the alerts that vanished unanswered, newest first, one per
     reminder ([ADR-0021](../adr/0021-one-alert-per-unit.md)), each with its
-    condition without the time and when it appeared ("Quando apro Claude, ieri
-    alle 23:12"; with only a time, only when: "Ieri alle 15:00"), Done and
+    condition without the time, its situations after it, and when it appeared
+    ("Quando apro Outlook · alla fine della call, ieri alle 23:12"; with only
+    a time, only when: "Ieri alle 15:00"), Done and
     Snooze, which opens the alert's menu (below). Their answer waits 5 s on
     the card with **Undo**, as on the alert: the answer's name and Undo take the
     place of the buttons, and a bar of 5 s runs on the card's lower edge, clear
@@ -117,12 +123,15 @@ stateDiagram-v2
     instead, RepeatAll, an icon and not a button, since it never completes. The
     pencil opens the creation window on the reminder; the trash asks first,
     "Eliminare il promemoria per sempre?", with Cancel before Delete. Under
-    the action, its condition without the time; then the time understood, by
+    the action, its condition without the time and the situations; then each
+    situation on its line, beside its icon at the caption's size, as under
+    "Quando" ([creation](creation.md#the-situations)): "Alla fine della call";
+    then the time understood, by
     a clock, written for today's Jiffin day ("Ogni giorno dalle 23:00 alle
     04:00", "Oggi, giovedì 1 ottobre, alle 15:00",
     [ADR-0020](../adr/0020-read-the-time-in-core.md)): a reminder with only a
-    time has only that line, one whose time was not understood only its
-    condition, whole. Then, when useful: "Periodo finito il 30 settembre", once
+    time or situations has only those lines, one whose time was not understood
+    only its condition, whole. Then, when useful: "Periodo finito il 30 settembre", once
     its period is over (`units.ended`), and its snooze ("torna tra 12 min").
     The owner chose the rows on screen. Last, what it learned, never as a
     number ([ADR-0029](../adr/0029-learn-from-answers-per-place.md)): "Taciuto
@@ -138,7 +147,8 @@ stateDiagram-v2
     list opens; open, the completed reminders, the most recently completed
     first. Each has the full circle in the accent colour (CompletedSolid),
     **Reopen**; the action struck through and grey, the owner's choice; under
-    it the condition without its time and when it was completed, on the
+    it the condition without its time, its situations after it, and when it
+    was completed, on the
     calendar ("Quando apro la posta · completato alle 09:40", "… · completato
     ieri", "… · completato il 26 settembre"; with only a time, only when); and
     the trash, which asks first, as among the active. They stay until deleted
@@ -183,6 +193,19 @@ one for the first time, and those keep a dot in their card until the list
 closes. Once no alert waits and every vanished one is seen, the tray's dot
 goes.
 
+## A place no network has
+
+While an active reminder names home or the office ("a casa", "quando esco
+dall'ufficio") and no network has that label, a warning line under the
+browsers' says why it will not ring: "Non so ancora qual è la rete di casa: i
+promemoria «a casa» non suonano." While the network in use has no label of
+its own, the line has a button, "Sono a casa adesso" or "Sono in ufficio
+adesso", which puts that label on it ([settings](settings.md#the-network)):
+once it is on, the line goes. It names the first such place among the active
+reminders. The owner chose it on #153's trial, with the creation window's info
+bar and the settings' section: a reminder that can never ring would otherwise
+fail in silence.
+
 ## The engine
 
 `show_engine` takes one of six states, which the app will map from the
@@ -202,7 +225,8 @@ engine's supervisor ([#44](https://github.com/devfrx/jiffin/issues/44)):
 `uv run python -m jiffin.ui --unreadable chrome.exe --engine failures` puts
 the icon in the tray with its "!", and its list with both lines, reminders
 with a time, a perennial one and a period over, one silenced in two places,
-and three completed ones; an alert left to vanish comes into the list after
+reminders on situations, one of them at home, so the line of a place no
+network has shows, and three completed ones; an alert left to vanish comes into the list after
 10 s, with its menu, and Done on a one-off alert puts its reminder among the
 completed. Retry brings the engine back, Pause in the icon's menu shows the
 pause on the icon and in the list until Resume, a pick on the card of Remind

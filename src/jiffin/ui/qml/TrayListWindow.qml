@@ -21,6 +21,7 @@ Window {
     required property RemindHere remindHere
     required property FirstRun firstRun
     required property Preferences preferences
+    required property Networks networks
     // Snooze's menu, for the list to show and hide: a QtObject, since PySide has no converter
     // for the Window type of QML.
     readonly property QtObject menu: snoozeMenu
@@ -303,6 +304,18 @@ Window {
                     visible: window.trayList.unreadable.length > 0
                     message: Texts.unreadable(window.trayList.unreadable)
                 }
+                // A place an active reminder names that no network is labelled for yet
+                // (ADR-0028): its button labels the network in use, when it has no label of its
+                // own.
+                FluentInfoBar {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 8
+                    Layout.rightMargin: 8
+                    visible: window.trayList.unknownPlace.length > 0
+                    message: visible ? Texts.waitingNetwork[window.trayList.unknownPlace] : ""
+                    action: visible && window.networks.connected && window.networks.label === "" ? Texts.networkInUse[window.trayList.unknownPlace] : ""
+                    onTriggered: window.networks.labelInUse(window.trayList.unknownPlace)
+                }
 
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -481,6 +494,8 @@ Window {
                             required property int reminderId
                             required property string action
                             required property string remainder
+                            // Its situations, each on its line: [{situation, value, line}].
+                            required property var situations
                             required property string when
                             required property bool perennial
                             required property string endedOn
@@ -566,11 +581,36 @@ Window {
                                     BodyText {
                                         text: row.action
                                     }
-                                    // The condition without its time: a reminder with only a time
-                                    // has none.
+                                    // The condition without its time and its situations: a reminder
+                                    // with only a time or situations has none.
                                     CaptionText {
                                         visible: !row.confirming && row.remainder.length > 0
                                         text: row.remainder
+                                    }
+                                    // Each situation understood, beside its icon (ADR-0028).
+                                    Repeater {
+                                        model: row.confirming ? [] : row.situations
+
+                                        RowLayout {
+                                            id: situationRow
+
+                                            required property var modelData
+
+                                            Layout.fillWidth: true
+                                            spacing: 6
+
+                                            SituationIcon {
+                                                Layout.alignment: Qt.AlignTop
+                                                Layout.topMargin: 2
+                                                situation: situationRow.modelData.situation
+                                                value: situationRow.modelData.value
+                                                color: Colors.textSecondary
+                                                font.pixelSize: Typography.caption
+                                            }
+                                            CaptionText {
+                                                text: situationRow.modelData.line
+                                            }
+                                        }
                                     }
                                     // The time understood, written for today (ADR-0020).
                                     RowLayout {

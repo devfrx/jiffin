@@ -63,6 +63,7 @@ def alert(
         schedule=reading.schedule,
         written_at=ms(FRIDAY),
         perennial=perennial,
+        situations=reading.situations,
     )
     context = Context("figma.exe", "Icone - Figma", None)
     return Alert(alert_id, alert_id, revision, None, context, None, ms(rings), ms(rings))
@@ -108,6 +109,14 @@ def test_the_line_has_the_condition_without_its_time_and_the_time_apart(scene: S
     scene.present(alert(condition="quando apro Claude dopo le 23", perennial=True))
     assert scene.qml("line") == "Quando apro Claude · dalle 23:00 alle 04:00"
     assert scene.qml("perennial")
+
+
+def test_the_line_has_the_situations_understood_after_the_words_the_judge_checks(
+    scene: Scene,
+) -> None:
+    """ADR-0028: they are the condition too, and say why the alert came."""
+    scene.present(alert(condition="quando sono a casa e apro Steam"))
+    assert scene.qml("line") == "Quando apro Steam · a casa"
 
 
 def test_an_alert_with_only_a_time_names_the_day_it_rings_for(scene: Scene) -> None:

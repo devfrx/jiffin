@@ -31,7 +31,7 @@ from jiffin.core.reminders import (
     Reminders,
     RemindersView,
 )
-from jiffin.core.situations import Situation, SituationObservation
+from jiffin.core.situations import HOME, OFFICE, Situation, SituationObservation
 from jiffin.store.store import Json, Store
 
 log = logging.getLogger(__name__)
@@ -51,6 +51,9 @@ RETURN_PAUSE = "return_pause"
 PAUSED_UNTIL = "paused_until"
 """The setting that keeps when the pause from the tray ends, in UTC milliseconds; null once
 Resume ends it (ADR-0024)."""
+NETWORKS = "networks"
+"""The setting that keeps the networks' labels, by the id Windows gives each network:
+`{"<id>": "home"}`, never its name (ADR-0028)."""
 
 type Command = Callable[[], object]
 """What it returns is dropped."""
@@ -65,10 +68,16 @@ class Kept:
     places: dict[str, tuple[int, int]]
     return_pause: int
     """In seconds: the one kept, or the default."""
+    networks: dict[str, str]
+    """The networks' labels, by id."""
 
 
 class Source(Protocol):
     """The adapter of the context port: `platform.capture.Capture` in the app."""
+
+    def label(self, labels: Mapping[str, str]) -> None:
+        """The networks' labels, by id: before the start, and at every change."""
+        ...
 
     def start(self) -> None: ...
     def close(self) -> None: ...
@@ -99,6 +108,14 @@ def _return_pause(kept: Json) -> int:
     if isinstance(kept, int) and SHORTEST_RETURN_PAUSE_MS <= kept * 1000 <= LONGEST_RETURN_PAUSE_MS:
         return kept * 1000
     return RETURN_PAUSE_MS
+
+
+def _networks(kept: Json) -> dict[str, str]:
+    """The labels as `keep_networks` kept them; anything else, from a later version after a
+    downgrade, is left out: that network has no label."""
+    if not isinstance(kept, dict):
+        return {}
+    return {network: label for network, label in kept.items() if label in (HOME, OFFICE)}
 
 
 def _paused_until(kept: Json, now: int) -> int | None:
@@ -204,6 +221,18 @@ class Worker:
 
         self._queue.put(keep)
 
+    def keep_networks(self, labels: Mapping[str, str]) -> None:
+        """The networks' labels the user chose, by id: kept for the next start, and in force at
+        once in the capture (ADR-0028)."""
+        in_force = dict(labels)
+        kept: dict[str, Json] = dict(in_force)
+
+        def keep() -> None:
+            self._store.set_setting(NETWORKS, kept)
+            self._capture.label(in_force)
+
+        self._queue.put(keep)
+
     def pause(self, pause: Pause) -> None:
         """Pause, from the tray: in force at once, and kept until it ends, through a restart
         (ADR-0024)."""
@@ -228,6 +257,7 @@ class Worker:
             return
         self._opened.set_result(kept)
         try:
+            self._capture.label(kept.networks)
             self._capture.start()
         except Exception:
             log.exception("the context capture cannot start")
@@ -258,11 +288,15 @@ class Worker:
             )
             material = self._store.setting(MATERIAL)
             places = self._store.setting(PLACES)
+            networks = self._store.setting(NETWORKS)
         except BaseException:
             self._store.close()
             raise
         return Kept(
-            material if isinstance(material, str) else None, _places(places), return_pause // 1000
+            material if isinstance(material, str) else None,
+            _places(places),
+            return_pause // 1000,
+            _networks(networks),
         )
 
     def _turn(self, command: Command) -> None:

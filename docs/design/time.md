@@ -56,6 +56,7 @@ flowchart LR
 | `schedule` | The time, in real dates; none without a time, or with one not understood |
 | `remainder` | What the engine rewrites: the condition without its time words, and its situations' ([situations.md](situations.md#reading-them)), and without what they leave hanging, that is connectors, commas, empty brackets and a preposition that led into the time ("il report di domani"). Without a time or situations, or with a time not understood, the condition byte for byte, so its statement stays as in 0.1 |
 | `unclear` | Where the words not understood are, as phrases, for the line under "Quando" to name them |
+| `time_unclear` | Words of the time are among them: the reminder rings at any time. Otherwise they are the situations' only, and the time stands ([creation](creation.md#the-situations)) |
 | `past` | The time has no instance left when written: Save turns off |
 | `recurring` | Words that tick "Ogni volta" by themselves: "ogni…", "tutti i…", "un lunedì sì e uno no", a recurrence of the month or of the year |
 | `situations` | The situations of the condition, as terms ([situations.md](situations.md)); none without, when they are not understood, or with a time not understood |
